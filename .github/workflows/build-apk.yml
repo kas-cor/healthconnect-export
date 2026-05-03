@@ -25,33 +25,33 @@ jobs:
       with:
         gradle-version: 8.5
 
-    - name: Create local.properties
+    - name: Diagnose
       run: |
+        which gradle
+        gradle --version
+        echo "ANDROID_HOME=$ANDROID_HOME"
+        ls -la $ANDROID_HOME/
+        echo "---"
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
         cat local.properties
 
-    - name: Build Debug APK
-      run: |
-        gradle assembleDebug --stacktrace --info 2>&1 | tee build.log
-        echo "=== BUILD EXIT CODE: $? ==="
+    - name: Test Gradle
+      run: gradle tasks --all 2>&1 | head -50
       continue-on-error: true
-      env:
-        ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-    - name: Show Build Errors
+    - name: Build Debug
+      run: gradle assembleDebug --stacktrace 2>&1 | tee build.log
+      continue-on-error: true
+
+    - name: Show Results
       if: always()
       run: |
-        echo "=== LAST 50 LINES OF BUILD LOG ==="
-        tail -n 50 build.log
-        echo "=== END OF LOG ==="
+        echo "=== LAST 30 LINES ==="
+        tail -n 30 build.log 2>/dev/null || echo "No log"
+        echo "=== APK SEARCH ==="
+        find . -name "*.apk" 2>/dev/null || echo "No APK"
 
-    - name: Check for APK
-      if: always()
-      run: |
-        find . -name "*.apk" -type f
-        ls -la app/build/outputs/apk/debug/ 2>/dev/null || echo "No debug output"
-
-    - name: Upload Build Log
+    - name: Upload Log
       uses: actions/upload-artifact@v4
       if: always()
       with:
