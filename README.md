@@ -1,53 +1,50 @@
-# Health Connect Export
+# HealthConnect Export 📱
 
-Android-приложение для экспорта данных из Google Health Connect в Google Drive в формате JSON.
+Android-приложение для экспорта данных Health Connect в JSON формат.
 
-## Возможности
+## Возможности ✨
 
-- Чтение данных Health Connect: шаги, пульс, сон, калории
-- Выбор периода: 7, 30, 90 дней
-- Экспорт в JSON с метаданными
-- Загрузка файла в Google Drive
-- Jetpack Compose UI
+- **Ежедневный экспорт** — один день = один JSON файл (`health_YYYY-MM-DD.json`)
+- **Локальное хранилище** — файлы сохраняются на устройстве
+- **Автоматический экспорт** — по расписанию раз в день/неделю
+- **Google Drive синхронизация** — опциональная, только при подключении
+- **Выбор типов данных** — шаги, пульс, сон, калории
+- **Выбор периода** — последние 7/30 дней или произвольный диапазон
 
-## Требования
+## Архитектура 🏗️
 
-- Android 8.0+ (API 26)
-- Установленное приложение Health Connect
-- Google-аккаунт для Drive
+```
+app/
+├── data/           # Data models (DailyHealthRecord, ExportConfig)
+├── repository/     # HealthConnect, LocalExport, GoogleDrive
+├── worker/         # DailyExportWorker (WorkManager)
+├── viewmodel/      # ExportViewModel
+├── ui/             # Jetpack Compose screens
+└── theme/          # Material3 theme
+```
 
-## Настройка
+## CI/CD 🚀
 
-1. Создай проект в Google Cloud Console
-2. Включи Google Drive API
-3. Добавь OAuth 2.0 credentials
-4. Обнови `AndroidManifest.xml` — добавь свой `client_id` для Google Sign-In
+- Автоматическая сборка APK на каждый push
+- Debug и Release APK в артефактах GitHub Actions
 
-## Сборка
+## Сборка локально 🔧
 
 ```bash
-./gradlew assembleDebug
+# Через Gradle CLI
+gradle assembleDebug
+
+# Через Android Studio
+# File → Open → Выбрать папку проекта → Build → Make Project
 ```
 
-## Структура проекта
+## Настройка Google Drive 🔐
 
-```
-app/src/main/java/com/healthconnect/export/
-├── MainActivity.kt              # Точка входа
-├── data/
-│   └── DataModels.kt            # Модели данных
-├── repository/
-│   ├── HealthConnectRepository.kt  # Чтение Health Connect
-│   └── GoogleDriveRepository.kt    # Запись в Drive
-├── ui/
-│   ├── ExportScreen.kt          # Compose UI
-│   └── theme/AppTheme.kt        # Тема
-└── viewmodel/
-    └── ExportViewModel.kt       # Логика экспорта
-```
+1. [Google Cloud Console](https://console.cloud.google.com/)
+2. Создать OAuth 2.0 Client ID (Android)
+3. Добавить `google-services.json` в `app/`
+4. Включить Google Drive API
 
-## Разрешения
+## Лицензия 📄
 
-- `android.permission.INTERNET`
-- Health Connect permissions (запрашиваются в runtime)
-- Google Drive OAuth scope `drive.file`
+MIT
