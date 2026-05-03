@@ -1,0 +1,153 @@
+package com.healthconnect.export.repository
+
+import android.content.Context
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential
+import com.google.api.client.http.FileContent
+import com.google.api.client.http.javanet.NetHttpTransport
+import com.google.api.client.json.gson.GsonFactory
+import com.google.api.services.drive.Drive
+import com.google.api.services.drive.DriveScopes
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
+
+class GoogleDriveRepository(private val context: Context) {
+
+    private val gsonFactory = GsonFactory.getDefaultInstance()
+    private val httpTransport = NetHttpTransport()
+
+    /**
+     * Check if user is signed in to Google
+     */
+    fun isSignedIn(): Boolean {
+        return GoogleSignIn.getLastSignedInAccount(context) != null
+    }
+
+    /**
+     * Get last signed in account
+     */
+    fun getLastAccount(): GoogleSignInAccount? {
+        return GoogleSignIn.getLastSignedInAccount(context)
+    }
+
+    /**
+     * Build Google Sign-In options
+     */
+    fun getSignInOptions(): GoogleSignInOptions {
+        return GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestEmail()
+            .requestScopes(com.google.android.gms.common.api.Scope(DriveScopes.DRIVE_FILE))
+            .build()
+    }
+
+    /**
+     * Get Drive service for the signed-in account
+     */
+    private fun getDriveService(account: GoogleSignInAccount): Drive {
+        val credential = GoogleAccountCredential.usingOAuth2(
+            context,
+            listOf(DriveScopes.DRIVE_FILE)
+        )
+        credential.selectedAccount = account.account
+
+        return Drive.Builder(httpTransport, gsonFactory, credential)
+            .setApplicationName("HealthConnect Export")
+            .build()
+    }
+
+    /**
+     * Upload a file to Google Drive at the specified path
+     */
+    suspend fun uploadFile(
+        localFile: File,
+        drivePath: String
+    ): String? = withContext(Dispatchers.IO) {
+        try {
+            val account = getLastAccount() ?: return@withContext null
+            val drive = getDriveService(account)
+
+            // Get or create the folder structure
+            val folderId = getOrCreateFolder(drive, "HealthConnectExport")
+                ?: return@withContext null
+
+            val fileMetadata = com.google.api.services.drive.model.File().apply {
+                name = localFile.name
+                parents = listOf(folderId)
+                mimeType = "application/json"
+            }
+
+            val mediaContent = FileContent("application/json", localFile)
+
+            // Check if file already exists
+            val existingFiles = drive.files().list()
+                .setQ("name='${localFile.name}' and '$folderId' in parents and trashed=false")
+                .setSpaces("drive")
+                .execute()
+                .files
+
+            val driveFile = if (existingFiles.isNotEmpty()) {
+                // Update existing
+                drive.files().update(existingFiles[0].id, fileMetadata, mediaContent).execute()
+            } else {
+                // Create new
+                drive.files().create(fileMetadata, mediaContent).execute()
+            }
+
+            driveFile.id
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    /**
+     * Sync multiple local files to Drive
+     */
+    suspend fun syncFiles(files: List<File>): List<String?> {
+        return files.map { uploadFile(it, "HealthConnectExport/${it.name}") }
+    }
+
+    /**
+     * List files already on Drive
+     */
+    suspend fun listDriveFiles(): List<String> = withContext(Dispatchers.IO) {
+        try {
+            val account = getLastAccount() ?: return@withContext emptyList()
+            val drive = getDriveService(account)
+
+            val folderId = findFolder(drive, "HealthConnectExport") ?: return@withContext emptyList()
+
+            drive.files().list()
+                .setQ("'$folderId' in parents and trashed=false")
+                .setSpaces("drive")
+                .execute()
+                .files
+                .map { it.name }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun findFolder(drive: Drive, name: String): String? {
+        val result = drive.files().list()
+            .setQ("mimeType='application/vnd.google-apps.folder' and name='$name' and trashed=false")
+            .setSpaces("drive")
+            .execute()
+        return result.files.firstOrNull()?.id
+    }
+
+    private fun getOrCreateFolder(drive: Drive, name: String): String? {
+        val existing = findFolder(drive, name)
+        if (existing != null) return existing
+
+        val metadata = com.google.api.services.drive.model.File().apply {
+            this.name = name
+            mimeType = "application/vnd.google-apps.folder"
+        }
+
+        return drive.files().create(metadata).execute().id
+    }
+}

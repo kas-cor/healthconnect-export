@@ -1,0 +1,18 @@
+<resources>
+    <string name="app_name">HealthConnect Export</string>
+    <string name="export_title">Экспорт Health Connect</string>
+    <string name="select_data_types">Выберите типы данных</string>
+    <string name="select_period">Выберите период</string>
+    <string name="days_count">%d дней</string>
+    <string name="export_button">Экспортировать</string>
+    <string name="sync_drive">Синхронизировать с Google Drive</string>
+    <string name="auto_sync">Автоматическая синхронизация</string>
+    <string name="drive_connected">Google Drive подключён</string>
+    <string name="drive_not_connected">Google Drive не подключён</string>
+    <string name="schedule_daily">Раз в день</string>
+    <string name="schedule_weekly">Раз в неделю</string>
+    <string name="schedule_manual">Вручную</string>
+    <string name="export_progress">Экспорт: %s</string>
+    <string name="export_complete">Экспорт завершён: %d файлов</string>
+    <string name="files_exported">Файлов экспортировано: %d</string>
+</resources>
