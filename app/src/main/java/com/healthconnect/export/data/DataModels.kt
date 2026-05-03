@@ -65,6 +65,8 @@ data class ExportConfig(
     val enabledTypes: Set<HealthDataType>,
     val frequency: ExportFrequency,
     val autoSyncDrive: Boolean,
+    val webhookUrl: String = "",
+    val autoSendWebhook: Boolean = false,
     val outputDirectory: String = "HealthConnectExport"
 )
 

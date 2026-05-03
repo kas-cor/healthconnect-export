@@ -1,0 +1,21 @@
+# Android
+*.iml
+.gradle/
+build/
+app/build/
+local.properties
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# Secrets
+client_secret_*.json
+google-services.json
+*.jks
+*.keystore
+
+# OS
+.DS_Store
+Thumbs.db

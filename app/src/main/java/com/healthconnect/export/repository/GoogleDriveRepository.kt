@@ -39,6 +39,7 @@ class GoogleDriveRepository(private val context: Context) {
     fun getSignInOptions(): GoogleSignInOptions {
         return GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestEmail()
+            .requestIdToken("730530422387-dveo97h089iesh4etmj74q9dn8j221f1.apps.googleusercontent.com")
             .requestScopes(com.google.android.gms.common.api.Scope(DriveScopes.DRIVE_FILE))
             .build()
     }

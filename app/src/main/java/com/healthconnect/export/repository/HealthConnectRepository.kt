@@ -1,7 +1,10 @@
 package com.healthconnect.export.repository
 
 import android.content.Context
+import androidx.activity.result.contract.ActivityResultContract
 import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.PermissionController
+import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
@@ -18,11 +21,61 @@ import java.time.temporal.ChronoUnit
 
 class HealthConnectRepository(private val context: Context) {
 
-    private val client by lazy { HealthConnectClient.getOrCreate(context) }
+    private val client by lazy {
+        try {
+            HealthConnectClient.getOrCreate(context)
+        } catch (e: Exception) {
+            null
+        }
+    }
 
-    suspend fun checkPermissions(): Boolean {
-        // Requires user to grant permissions in Health Connect app
-        return true // Simplified - actual check uses requestPermissionActivityContract
+    suspend fun isHealthConnectAvailable(): Boolean {
+        return try {
+            client != null || HealthConnectClient.getOrCreate(context) != null
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Возвращает набор Health Connect разрешений для указанных типов данных
+     */
+    fun getPermissionsForTypes(types: Set<HealthDataType>): Set<String> {
+        val permissions = mutableSetOf<String>()
+        types.forEach { type ->
+            when (type) {
+                HealthDataType.STEPS -> permissions.add(HealthPermission.getReadPermission(StepsRecord::class))
+                HealthDataType.HEART_RATE -> permissions.add(HealthPermission.getReadPermission(HeartRateRecord::class))
+                HealthDataType.SLEEP -> permissions.add(HealthPermission.getReadPermission(SleepSessionRecord::class))
+                HealthDataType.CALORIES -> permissions.add(HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class))
+            }
+        }
+        return permissions
+    }
+
+    /**
+     * Проверяет, какие разрешения уже предоставлены
+     */
+    suspend fun getGrantedPermissions(): Set<String> {
+        val c = client ?: return emptySet()
+        return c.permissionController.getGrantedPermissions()
+    }
+
+    /**
+     * Проверяет, предоставлены ли все необходимые разрешения
+     */
+    suspend fun checkPermissions(types: Set<HealthDataType>): Boolean {
+        val c = client ?: return false
+        val required = getPermissionsForTypes(types)
+        val granted = c.permissionController.getGrantedPermissions()
+        return granted.containsAll(required)
+    }
+
+    /**
+     * Возвращает ActivityResultContract для запроса разрешений Health Connect
+     */
+    fun createPermissionRequestContract(): ActivityResultContract<Set<String>, Set<String>> {
+        return PermissionController.createRequestPermissionResultContract(context.packageName)
     }
 
     /**
@@ -73,14 +126,16 @@ class HealthConnectRepository(private val context: Context) {
     // ===== Private readers =====
 
     private suspend fun readSteps(filter: TimeRangeFilter): StepsData? {
-        val response = client.readRecords(ReadRecordsRequest(StepsRecord::class, timeRangeFilter = filter))
+        val c = client ?: return null
+        val response = c.readRecords(ReadRecordsRequest(StepsRecord::class, timeRangeFilter = filter))
         if (response.records.isEmpty()) return null
         val total = response.records.sumOf { it.count }
         return StepsData(totalSteps = total, recordsCount = response.records.size)
     }
 
     private suspend fun readHeartRate(filter: TimeRangeFilter): HeartRateData? {
-        val response = client.readRecords(ReadRecordsRequest(HeartRateRecord::class, timeRangeFilter = filter))
+        val c = client ?: return null
+        val response = c.readRecords(ReadRecordsRequest(HeartRateRecord::class, timeRangeFilter = filter))
         if (response.records.isEmpty()) return null
         val samples = response.records.flatMap { it.samples }
         if (samples.isEmpty()) return null
@@ -94,28 +149,22 @@ class HealthConnectRepository(private val context: Context) {
     }
 
     private suspend fun readSleep(filter: TimeRangeFilter): SleepData? {
-        val response = client.readRecords(ReadRecordsRequest(SleepSessionRecord::class, timeRangeFilter = filter))
+        val c = client ?: return null
+        val response = c.readRecords(ReadRecordsRequest(SleepSessionRecord::class, timeRangeFilter = filter))
         if (response.records.isEmpty()) return null
         val totalMinutes = response.records.sumOf {
             ChronoUnit.MINUTES.between(it.startTime, it.endTime)
         }
-        val stages = mutableMapOf<String, Long>()
-        response.records.forEach { record ->
-            record.stages?.forEach { stage ->
-                val key = stage.type.toString()
-                val minutes = ChronoUnit.MINUTES.between(stage.startTime, stage.endTime)
-                stages[key] = (stages[key] ?: 0) + minutes
-            }
-        }
         return SleepData(
             totalDurationMinutes = totalMinutes,
-            sleepStages = stages,
+            sleepStages = emptyMap(),
             recordsCount = response.records.size
         )
     }
 
     private suspend fun readCalories(filter: TimeRangeFilter): CaloriesData? {
-        val response = client.readRecords(ReadRecordsRequest(TotalCaloriesBurnedRecord::class, timeRangeFilter = filter))
+        val c = client ?: return null
+        val response = c.readRecords(ReadRecordsRequest(TotalCaloriesBurnedRecord::class, timeRangeFilter = filter))
         if (response.records.isEmpty()) return null
         val total = response.records.sumOf { it.energy.inKilocalories }
         return CaloriesData(totalCalories = total, recordsCount = response.records.size)

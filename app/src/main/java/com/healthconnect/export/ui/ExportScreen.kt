@@ -4,9 +4,11 @@ import android.app.DatePickerDialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Http
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Save
@@ -15,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.healthconnect.export.data.ExportFrequency
 import com.healthconnect.export.data.HealthDataType
@@ -25,12 +28,33 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Calendar
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ExportScreen(viewModel: ExportViewModel) {
+fun ExportScreen(
+    viewModel: ExportViewModel,
+    onSignInClick: () -> Unit,
+    onRequestHealthPermissions: (Set<String>) -> Unit
+) {
     val uiState by viewModel.uiState.collectAsState()
-    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Показываем сообщения через Snackbar
+    uiState.message?.let { message ->
+        LaunchedEffect(message) {
+            snackbarHostState.showSnackbar(message)
+            viewModel.clearMessage()
+        }
+    }
+
+    // Запускаем запрос Health Connect permissions, если есть ожидающий набор
+    LaunchedEffect(viewModel.pendingPermissions) {
+        viewModel.pendingPermissions?.let { permissions ->
+            onRequestHealthPermissions(permissions)
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("HealthConnect Export") },
@@ -51,7 +75,19 @@ fun ExportScreen(viewModel: ExportViewModel) {
             item {
                 DriveStatusCard(
                     status = uiState.driveStatus,
-                    onSync = { viewModel.syncToDrive() }
+                    onSync = { viewModel.syncToDrive() },
+                    onSignInClick = onSignInClick,
+                    onSignOutClick = { viewModel.signOut() }
+                )
+            }
+
+            // Webhook Card
+            item {
+                WebhookCard(
+                    webhookUrl = uiState.webhookUrl,
+                    autoSendWebhook = uiState.autoSendWebhook,
+                    onUrlChange = { viewModel.setWebhookUrl(it) },
+                    onToggle = { viewModel.setAutoSendWebhook(it) }
                 )
             }
 
@@ -162,17 +198,10 @@ fun ExportScreen(viewModel: ExportViewModel) {
             item { Spacer(modifier = Modifier.height(32.dp)) }
         }
     }
-
-    // Snackbar for messages
-    uiState.message?.let { message ->
-        LaunchedEffect(message) {
-            // Could use a real SnackbarHost here
-        }
-    }
 }
 
 @Composable
-fun DriveStatusCard(status: DriveStatus, onSync: () -> Unit) {
+fun DriveStatusCard(status: DriveStatus, onSync: () -> Unit, onSignInClick: () -> Unit, onSignOutClick: () -> Unit) {
     val (icon, title, color) = when (status) {
         is DriveStatus.NotConnected ->
             Triple(Icons.Default.CloudOff, "Google Drive не подключён", MaterialTheme.colorScheme.error)
@@ -202,9 +231,22 @@ fun DriveStatusCard(status: DriveStatus, onSync: () -> Unit) {
                 modifier = Modifier.weight(1f),
                 color = color
             )
-            if (status is DriveStatus.Connected || status is DriveStatus.Synced) {
-                TextButton(onClick = onSync) {
-                    Text("Синхронизировать")
+            when (status) {
+                is DriveStatus.NotConnected, is DriveStatus.Error -> {
+                    TextButton(onClick = onSignInClick) {
+                        Text("Войти в Google")
+                    }
+                }
+                is DriveStatus.Connected, is DriveStatus.Synced -> {
+                    TextButton(onClick = onSync) {
+                        Text("Синхронизировать")
+                    }
+                    TextButton(onClick = onSignOutClick) {
+                        Text("Выйти")
+                    }
+                }
+                is DriveStatus.Syncing -> {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                 }
             }
         }
@@ -372,5 +414,59 @@ fun DatePickerButton(label: String, date: LocalDate, onDateSelected: (LocalDate)
         ).show()
     }) {
         Text("$label: ${date.format(DateTimeFormatter.ISO_LOCAL_DATE)}")
+    }
+}
+
+@Composable
+fun WebhookCard(
+    webhookUrl: String,
+    autoSendWebhook: Boolean,
+    onUrlChange: (String) -> Unit,
+    onToggle: (Boolean) -> Unit
+) {
+    Card {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Http, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    "Webhook",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = webhookUrl,
+                onValueChange = onUrlChange,
+                label = { Text("URL вебхука") },
+                placeholder = { Text("https://example.com/api/health-data") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Checkbox(
+                    checked = autoSendWebhook,
+                    onCheckedChange = onToggle,
+                    enabled = webhookUrl.isNotBlank()
+                )
+                Text(
+                    if (webhookUrl.isBlank()) "Укажите URL для отправки"
+                    else "Отправлять JSON на вебхук после экспорта"
+                )
+            }
+        }
     }
 }

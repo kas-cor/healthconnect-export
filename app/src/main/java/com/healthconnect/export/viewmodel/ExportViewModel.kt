@@ -1,12 +1,19 @@
 package com.healthconnect.export.viewmodel
 
 import android.content.Context
+import androidx.activity.result.ActivityResult
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.common.api.ApiException
 import com.healthconnect.export.data.*
 import com.healthconnect.export.repository.HealthConnectRepository
 import com.healthconnect.export.repository.LocalExportRepository
 import com.healthconnect.export.repository.GoogleDriveRepository
+import com.healthconnect.export.repository.WebhookRepository
+import com.healthconnect.export.repository.WebhookResult
 import com.healthconnect.export.worker.DailyExportWorker
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -25,6 +32,8 @@ data class ExportUiState(
     val endDate: LocalDate = LocalDate.now().minusDays(1),
     val frequency: ExportFrequency = ExportFrequency.MANUAL,
     val autoSyncDrive: Boolean = true,
+    val webhookUrl: String = "",
+    val autoSendWebhook: Boolean = false,
     val message: String? = null
 )
 
@@ -47,13 +56,61 @@ class ExportViewModel(private val context: Context) : ViewModel() {
     private val healthRepo = HealthConnectRepository(context)
     private val localRepo = LocalExportRepository(context)
     private val driveRepo = GoogleDriveRepository(context)
+    private val webhookRepo = WebhookRepository()
+
+    val googleSignInClient: GoogleSignInClient =
+        GoogleSignIn.getClient(context, driveRepo.getSignInOptions())
 
     private val _uiState = MutableStateFlow(ExportUiState())
     val uiState = _uiState.asStateFlow()
 
+    // Набор разрешений для запроса Health Connect (заполняется перед экспортом)
+    var pendingPermissions: Set<String>? = null
+        private set
+
     init {
         refreshDriveStatus()
         refreshLocalFiles()
+    }
+
+    /**
+     * Обработка результата Google Sign-In
+     */
+    fun handleSignInResult(result: ActivityResult) {
+        try {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            val account = task.getResult(ApiException::class.java)
+            if (account != null) {
+                _uiState.update {
+                    it.copy(
+                        driveStatus = DriveStatus.Connected,
+                        message = "Google аккаунт подключён: ${account.email}"
+                    )
+                }
+                refreshDriveStatus()
+            }
+        } catch (e: ApiException) {
+            _uiState.update {
+                it.copy(
+                    driveStatus = DriveStatus.Error("Ошибка входа: ${e.statusCode}"),
+                    message = "Не удалось войти: ${e.statusCode}"
+                )
+            }
+        }
+    }
+
+    /**
+     * Выход из Google аккаунта
+     */
+    fun signOut() {
+        googleSignInClient.signOut().addOnCompleteListener {
+            _uiState.update {
+                it.copy(
+                    driveStatus = DriveStatus.NotConnected,
+                    message = "Google аккаунт отключён"
+                )
+            }
+        }
     }
 
     fun selectTypes(types: Set<HealthDataType>) {
@@ -72,6 +129,14 @@ class ExportViewModel(private val context: Context) : ViewModel() {
         _uiState.update { it.copy(autoSyncDrive = enabled) }
     }
 
+    fun setWebhookUrl(url: String) {
+        _uiState.update { it.copy(webhookUrl = url) }
+    }
+
+    fun setAutoSendWebhook(enabled: Boolean) {
+        _uiState.update { it.copy(autoSendWebhook = enabled) }
+    }
+
     fun scheduleExport() {
         val config = ExportConfig(
             enabledTypes = _uiState.value.selectedTypes,
@@ -82,7 +147,7 @@ class ExportViewModel(private val context: Context) : ViewModel() {
         _uiState.update {
             it.copy(
                 scheduleStatus = ScheduleStatus.Scheduled("Следующий запуск: через 24ч"),
-                message = "Автоэкспорт настроен: ${freq.displayName}"
+                message = "Автоэкспорт настроен: ${_uiState.value.frequency.displayName}"
             )
         }
     }
@@ -99,7 +164,7 @@ class ExportViewModel(private val context: Context) : ViewModel() {
 
     fun exportNow() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, exportProgress = "Чтение данных...") }
+            _uiState.update { it.copy(isLoading = true, exportProgress = "Проверка разрешений...") }
 
             val state = _uiState.value
             val config = ExportConfig(
@@ -107,6 +172,22 @@ class ExportViewModel(private val context: Context) : ViewModel() {
                 frequency = com.healthconnect.export.data.ExportFrequency.DAILY,
                 autoSyncDrive = true
             )
+
+            // Проверяем разрешения Health Connect
+            val hasPermissions = healthRepo.checkPermissions(state.selectedTypes)
+            if (!hasPermissions) {
+                val permissions = healthRepo.getPermissionsForTypes(state.selectedTypes)
+                pendingPermissions = permissions
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        message = "Требуются разрешения Health Connect. Подтвердите в открывшемся окне."
+                    )
+                }
+                return@launch
+            }
+
+            _uiState.update { it.copy(exportProgress = "Чтение данных...") }
 
             try {
                 val records = healthRepo.readPeriod(state.startDate, state.endDate, state.selectedTypes)
@@ -129,6 +210,11 @@ class ExportViewModel(private val context: Context) : ViewModel() {
                     syncToDrive(files)
                 }
 
+                // Try webhook if enabled
+                if (state.autoSendWebhook && state.webhookUrl.isNotBlank()) {
+                    sendToWebhook(state.webhookUrl, records)
+                }
+
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
@@ -141,6 +227,25 @@ class ExportViewModel(private val context: Context) : ViewModel() {
         }
     }
 
+    /**
+     * Вызывается после возврата из Health Connect permission screen
+     */
+    fun onPermissionsResult(grantedPermissions: Set<String>) {
+        pendingPermissions = null
+        viewModelScope.launch {
+            val state = _uiState.value
+            val required = healthRepo.getPermissionsForTypes(state.selectedTypes)
+            if (grantedPermissions.containsAll(required)) {
+                _uiState.update { it.copy(message = "Разрешения получены. Начинаю экспорт...") }
+                exportNow()
+            } else {
+                _uiState.update {
+                    it.copy(message = "Разрешения Health Connect не предоставлены. Экспорт невозможен.")
+                }
+            }
+        }
+    }
+
     fun syncToDrive(files: List<File> = _uiState.value.exportedFiles) {
         if (!driveRepo.isSignedIn()) {
             _uiState.update { it.copy(driveStatus = DriveStatus.NotConnected, message = "Google Drive не подключён") }
@@ -148,7 +253,7 @@ class ExportViewModel(private val context: Context) : ViewModel() {
         }
 
         viewModelScope.launch {
-            _uiState.update { it.copy(driveStatus = DriveStatus.Running) }
+            _uiState.update { it.copy(driveStatus = DriveStatus.Syncing) }
             try {
                 val results = driveRepo.syncFiles(files)
                 val syncedCount = results.count { it != null }
@@ -184,6 +289,31 @@ class ExportViewModel(private val context: Context) : ViewModel() {
         )
         val files = localRepo.listExportedFiles(config).map { it.second }
         _uiState.update { it.copy(exportedFiles = files) }
+    }
+
+    /**
+     * Отправляет записи на webhook URL
+     */
+    private fun sendToWebhook(url: String, records: List<DailyHealthRecord>) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(exportProgress = "Отправка на webhook...") }
+            when (val result = webhookRepo.sendRecords(url, records)) {
+                is WebhookResult.Success -> {
+                    _uiState.update {
+                        it.copy(
+                            message = "Webhook: успешно (${result.statusCode})"
+                        )
+                    }
+                }
+                is WebhookResult.Error -> {
+                    _uiState.update {
+                        it.copy(
+                            message = "Webhook: ошибка ${result.statusCode} — ${result.message}"
+                        )
+                    }
+                }
+            }
+        }
     }
 
     fun clearMessage() {
