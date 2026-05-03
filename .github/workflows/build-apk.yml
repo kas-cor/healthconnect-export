@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-13
     steps:
     - uses: actions/checkout@v4
 
@@ -17,44 +17,45 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
+    - name: Install Android SDK
+      run: |
+        ANDROID_HOME=$HOME/android-sdk
+        mkdir -p $ANDROID_HOME/cmdline-tools
+        curl -L https://dl.google.com/android/repository/commandlinetools-mac-11076708_latest.zip -o cmdline-tools.zip
+        unzip -q cmdline-tools.zip -d $ANDROID_HOME/cmdline-tools/
+        mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+        export ANDROID_HOME=$ANDROID_HOME
+        export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
+        echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+        echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
+        echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+        yes | sdkmanager --licenses
+        sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+
+    - name: Create local.properties
+      run: echo "sdk.dir=${ANDROID_HOME}" > local.properties
+
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
       with:
         gradle-version: 8.5
 
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-      with:
-        cmdline-tools-version: 11076708
-
-    - name: Create local.properties
-      run: |
-        echo "sdk.dir=${ANDROID_HOME}" > local.properties
-        cat local.properties
-
     - name: Build Debug APK
-      run: gradle assembleDebug --stacktrace --info | tee build.log
-      continue-on-error: true
+      run: gradle assembleDebug
 
-    - name: Find APK files
-      run: |
-        find . -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
-        find . -name "app-debug.apk" -type f 2>/dev/null || echo "No debug APK"
-        ls -la app/build/outputs/apk/debug/ 2>/dev/null || echo "No debug dir"
-
-    - name: Upload Build Log
+    - name: Upload Debug APK
       uses: actions/upload-artifact@v4
-      if: always()
       with:
-        name: build-log
-        path: build.log
-        retention-days: 7
+        name: debug-apk
+        path: app/build/outputs/apk/debug/app-debug.apk
+        retention-days: 30
 
-    - name: Upload All APKs
+    - name: Build Release APK
+      run: gradle assembleRelease
+
+    - name: Upload Release APK
       uses: actions/upload-artifact@v4
-      if: always()
       with:
-        name: all-apks
-        path: |
-          **/*.apk
+        name: release-apk-unsigned
+        path: app/build/outputs/apk/release/app-release-unsigned.apk
         retention-days: 30
