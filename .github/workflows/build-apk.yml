@@ -25,31 +25,28 @@ jobs:
       with:
         gradle-version: 8.5
 
-    - name: Diagnose
-      run: |
-        which gradle
-        gradle --version
-        echo "ANDROID_HOME=$ANDROID_HOME"
-        ls -la $ANDROID_HOME/
-        echo "---"
-        echo "sdk.dir=${ANDROID_HOME}" > local.properties
-        cat local.properties
-
-    - name: Test Gradle
-      run: gradle tasks --all 2>&1 | head -50
-      continue-on-error: true
+    - name: Create local.properties
+      run: echo "sdk.dir=${ANDROID_HOME}" > local.properties
 
     - name: Build Debug
       run: gradle assembleDebug --stacktrace 2>&1 | tee build.log
       continue-on-error: true
 
-    - name: Show Results
+    - name: List all files
       if: always()
       run: |
-        echo "=== LAST 30 LINES ==="
-        tail -n 30 build.log 2>/dev/null || echo "No log"
         echo "=== APK SEARCH ==="
-        find . -name "*.apk" 2>/dev/null || echo "No APK"
+        find . -name "*.apk" -o -name "*.aab" 2>/dev/null
+        echo "=== BUILD STRUCTURE ==="
+        ls -R app/build/ 2>/dev/null | head -60 || echo "No build dir"
+
+    - name: Upload Build Outputs
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: build-outputs
+        path: app/build/
+        retention-days: 7
 
     - name: Upload Log
       uses: actions/upload-artifact@v4
