@@ -1,6 +1,7 @@
 package com.healthconnect.export.viewmodel
 
 import android.content.Context
+import android.util.Log
 import androidx.activity.result.ActivityResult
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -64,7 +65,7 @@ class ExportViewModel(private val context: Context) : ViewModel() {
     private val _uiState = MutableStateFlow(ExportUiState())
     val uiState = _uiState.asStateFlow()
 
-    // Набор разрешений для запроса Health Connect (заполняется перед экспортом)
+    // Набор разрешений для запроса Health Connect
     var pendingPermissions: Set<String>? = null
         private set
 
@@ -163,20 +164,40 @@ class ExportViewModel(private val context: Context) : ViewModel() {
     }
 
     fun exportNow() {
+        Log.d("ExportViewModel", "exportNow() called")
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, exportProgress = "Проверка разрешений...") }
 
             val state = _uiState.value
-            val config = ExportConfig(
-                enabledTypes = HealthDataType.values().toSet(),
-                frequency = com.healthconnect.export.data.ExportFrequency.DAILY,
-                autoSyncDrive = true
-            )
+
+            // Проверяем доступность Health Connect на устройстве
+            val healthAvailable = healthRepo.isHealthConnectAvailable()
+            Log.d("ExportViewModel", "HealthConnect available: $healthAvailable")
+            if (!healthAvailable) {
+                if (healthRepo.isHealthConnectInstalled()) {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            message = "Не удалось подключиться к Health Connect. Попробуйте перезапустить приложение."
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            message = "Health Connect не установлен. Установите приложение Health Connect из Google Play."
+                        )
+                    }
+                }
+                return@launch
+            }
 
             // Проверяем разрешения Health Connect
             val hasPermissions = healthRepo.checkPermissions(state.selectedTypes)
+            Log.d("ExportViewModel", "Has permissions: $hasPermissions")
             if (!hasPermissions) {
                 val permissions = healthRepo.getPermissionsForTypes(state.selectedTypes)
+                Log.d("ExportViewModel", "Requesting permissions: $permissions")
                 pendingPermissions = permissions
                 _uiState.update {
                     it.copy(
@@ -186,6 +207,12 @@ class ExportViewModel(private val context: Context) : ViewModel() {
                 }
                 return@launch
             }
+
+            val config = ExportConfig(
+                enabledTypes = state.selectedTypes,
+                frequency = state.frequency,
+                autoSyncDrive = state.autoSyncDrive
+            )
 
             _uiState.update { it.copy(exportProgress = "Чтение данных...") }
 
@@ -229,6 +256,7 @@ class ExportViewModel(private val context: Context) : ViewModel() {
 
     /**
      * Вызывается после возврата из Health Connect permission screen
+     * @param grantedPermissions набор разрешений, предоставленных пользователем
      */
     fun onPermissionsResult(grantedPermissions: Set<String>) {
         pendingPermissions = null
@@ -239,8 +267,21 @@ class ExportViewModel(private val context: Context) : ViewModel() {
                 _uiState.update { it.copy(message = "Разрешения получены. Начинаю экспорт...") }
                 exportNow()
             } else {
+                val missing = required - grantedPermissions
+                val missingNames = missing.mapNotNull { perm ->
+                    when {
+                        perm.contains("READ_STEPS") -> "шаги"
+                        perm.contains("READ_HEART_RATE") -> "пульс"
+                        perm.contains("READ_SLEEP") -> "сон"
+                        perm.contains("READ_TOTAL_CALORIES_BURNED") -> "калории"
+                        else -> null
+                    }
+                }
                 _uiState.update {
-                    it.copy(message = "Разрешения Health Connect не предоставлены. Экспорт невозможен.")
+                    it.copy(
+                        message = "Разрешения Health Connect не предоставлены для: ${missingNames.joinToString(", ")}. " +
+                                "Экспорт невозможен. Проверьте настройки Health Connect."
+                    )
                 }
             }
         }

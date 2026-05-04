@@ -1,6 +1,7 @@
 package com.healthconnect.export
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -10,8 +11,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.healthconnect.export.repository.HealthConnectRepository
 import com.healthconnect.export.ui.ExportScreen
 import com.healthconnect.export.ui.theme.AppTheme
 import com.healthconnect.export.viewmodel.ExportViewModel
@@ -39,13 +40,11 @@ class MainActivity : ComponentActivity() {
                     }
 
                     // Launcher для Health Connect permissions
-                    val permissionContract = remember {
-                        HealthConnectRepository(applicationContext).createPermissionRequestContract()
-                    }
                     val healthPermissionLauncher = rememberLauncherForActivityResult(
-                        contract = permissionContract
-                    ) { granted ->
-                        viewModel.onPermissionsResult(granted)
+                        contract = PermissionController.createRequestPermissionResultContract()
+                    ) { grantedPermissions: Set<String> ->
+                        Log.d("MainActivity", "Permission results: $grantedPermissions")
+                        viewModel.onPermissionsResult(grantedPermissions)
                     }
 
                     ExportScreen(
@@ -55,7 +54,13 @@ class MainActivity : ComponentActivity() {
                             signInLauncher.launch(signIntent)
                         },
                         onRequestHealthPermissions = { permissions ->
-                            healthPermissionLauncher.launch(permissions)
+                            Log.d("MainActivity", "Launching permissions: $permissions")
+                            try {
+                                healthPermissionLauncher.launch(permissions)
+                            } catch (e: Exception) {
+                                Log.e("MainActivity", "Failed to launch permissions", e)
+                                viewModel.onPermissionsResult(emptySet())
+                            }
                         }
                     )
                 }

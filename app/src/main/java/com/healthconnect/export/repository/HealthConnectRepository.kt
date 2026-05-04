@@ -1,6 +1,8 @@
 package com.healthconnect.export.repository
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
@@ -21,20 +23,57 @@ import java.time.temporal.ChronoUnit
 
 class HealthConnectRepository(private val context: Context) {
 
-    private val client by lazy {
-        try {
-            HealthConnectClient.getOrCreate(context)
-        } catch (e: Exception) {
-            null
-        }
+    companion object {
+        private const val HEALTH_CONNECT_PACKAGE = "com.google.android.apps.healthdata"
     }
 
+    private var client: HealthConnectClient? = null
+        get() {
+            if (field == null) {
+                try {
+                    field = HealthConnectClient.getOrCreate(context)
+                } catch (e: Exception) {
+                    field = null
+                }
+            }
+            return field
+        }
+
     suspend fun isHealthConnectAvailable(): Boolean {
+        return client != null
+    }
+
+    /**
+     * Проверяет, установлено ли приложение Health Connect на устройстве
+     */
+    fun isHealthConnectInstalled(): Boolean {
         return try {
-            client != null || HealthConnectClient.getOrCreate(context) != null
+            context.packageManager.getPackageInfo(HEALTH_CONNECT_PACKAGE, 0)
+            true
         } catch (e: Exception) {
             false
         }
+    }
+
+    /**
+     * Создаёт Intent для открытия экрана разрешений Health Connect
+     * через ACTION_REQUEST_PERMISSIONS с разрешениями в extra
+     */
+    fun createHealthPermissionsIntent(permissions: Set<String>): Intent {
+        return Intent("androidx.health.ACTION_REQUEST_PERMISSIONS").apply {
+            `package` = HEALTH_CONNECT_PACKAGE
+            putStringArrayListExtra(
+                "androidx.health.extra.PERMISSION_NAMES",
+                ArrayList(permissions)
+            )
+        }
+    }
+
+    /**
+     * Возвращает ActivityResultContract для запроса разрешений Health Connect
+     */
+    fun createPermissionRequestContract(): ActivityResultContract<Set<String>, Set<String>> {
+        return PermissionController.createRequestPermissionResultContract(context.packageName)
     }
 
     /**
@@ -69,13 +108,6 @@ class HealthConnectRepository(private val context: Context) {
         val required = getPermissionsForTypes(types)
         val granted = c.permissionController.getGrantedPermissions()
         return granted.containsAll(required)
-    }
-
-    /**
-     * Возвращает ActivityResultContract для запроса разрешений Health Connect
-     */
-    fun createPermissionRequestContract(): ActivityResultContract<Set<String>, Set<String>> {
-        return PermissionController.createRequestPermissionResultContract(context.packageName)
     }
 
     /**

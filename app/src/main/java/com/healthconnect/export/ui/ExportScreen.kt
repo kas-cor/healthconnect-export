@@ -46,7 +46,7 @@ fun ExportScreen(
         }
     }
 
-    // Запускаем запрос Health Connect permissions, если есть ожидающий набор
+    // Запускаем запрос Health Connect permissions, если есть ожидающий набор разрешений
     LaunchedEffect(viewModel.pendingPermissions) {
         viewModel.pendingPermissions?.let { permissions ->
             onRequestHealthPermissions(permissions)

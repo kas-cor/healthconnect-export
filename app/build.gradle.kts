@@ -1,18 +1,17 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization") version "1.9.22"
 }
 
 android {
     namespace = "com.healthconnect.export"
-    compileSdk = 34
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.healthconnect.export"
         minSdk = 28
-        targetSdk = 34
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0.0"
     }
@@ -21,8 +20,9 @@ android {
         compose = true
     }
 
-    kotlinOptions {
-        jvmTarget = "1.8"
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     buildTypes {
@@ -58,7 +58,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
 
     // Health Connect
-    implementation("androidx.health.connect:connect-client:1.1.0-alpha06")
+    implementation("androidx.health.connect:connect-client:1.2.0-alpha04")
 
     // Google Sign-In & Drive API
     implementation("com.google.android.gms:play-services-auth:21.0.0")
