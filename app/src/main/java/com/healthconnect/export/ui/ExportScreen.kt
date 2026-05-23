@@ -25,6 +25,7 @@ import com.healthconnect.export.viewmodel.DriveStatus
 import com.healthconnect.export.viewmodel.ExportViewModel
 import com.healthconnect.export.viewmodel.ScheduleStatus
 import java.time.LocalDate
+import java.util.Locale
 import java.time.format.DateTimeFormatter
 import java.util.Calendar
 
@@ -85,8 +86,11 @@ fun ExportScreen(
             item {
                 WebhookCard(
                     webhookUrl = uiState.webhookUrl,
+                    webhookUrlError = uiState.webhookUrlError,
+                    webhookAuthToken = uiState.webhookAuthToken,
                     autoSendWebhook = uiState.autoSendWebhook,
                     onUrlChange = { viewModel.setWebhookUrl(it) },
+                    onTokenChange = { viewModel.setWebhookAuthToken(it) },
                     onToggle = { viewModel.setAutoSendWebhook(it) }
                 )
             }
@@ -137,7 +141,7 @@ fun ExportScreen(
                         checked = uiState.autoSyncDrive,
                         onCheckedChange = { viewModel.setAutoSyncDrive(it) }
                     )
-                    Text("Автоматически синхронизировать с Google Drive")
+                    Text("Auto-sync with Google Drive")
                 }
             }
 
@@ -158,7 +162,7 @@ fun ExportScreen(
                     } else {
                         Icon(Icons.Default.Save, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Экспортировать ${uiState.selectedTypes.size} типов данных")
+                        Text("Export ${uiState.selectedTypes.size} data types")
                     }
                 }
             }
@@ -167,7 +171,7 @@ fun ExportScreen(
             if (uiState.exportedFiles.isNotEmpty()) {
                 item {
                     Text(
-                        "Экспортированные файлы (${uiState.exportedFiles.size}):",
+                        "Exported files (${uiState.exportedFiles.size}):",
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
@@ -188,7 +192,10 @@ fun ExportScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(file.name, style = MaterialTheme.typography.bodyMedium)
-                                Text("${file.length() / 1024} KB", style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    formatFileSize(file.length()),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
                             }
                         }
                     }
@@ -200,19 +207,27 @@ fun ExportScreen(
     }
 }
 
+private fun formatFileSize(bytes: Long): String {
+    return when {
+        bytes < 1024 -> "$bytes B"
+        bytes < 1024 * 1024 -> "${bytes / 1024} KB"
+        else -> String.format(Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0))
+    }
+}
+
 @Composable
 fun DriveStatusCard(status: DriveStatus, onSync: () -> Unit, onSignInClick: () -> Unit, onSignOutClick: () -> Unit) {
     val (icon, title, color) = when (status) {
         is DriveStatus.NotConnected ->
-            Triple(Icons.Default.CloudOff, "Google Drive не подключён", MaterialTheme.colorScheme.error)
+            Triple(Icons.Default.CloudOff, "Google Drive not connected", MaterialTheme.colorScheme.error)
         is DriveStatus.Connected ->
-            Triple(Icons.Default.Cloud, "Google Drive подключён", MaterialTheme.colorScheme.primary)
+            Triple(Icons.Default.Cloud, "Google Drive connected", MaterialTheme.colorScheme.primary)
         is DriveStatus.Syncing ->
-            Triple(Icons.Default.Refresh, "Синхронизация...", MaterialTheme.colorScheme.tertiary)
+            Triple(Icons.Default.Refresh, "Syncing...", MaterialTheme.colorScheme.tertiary)
         is DriveStatus.Synced ->
-            Triple(Icons.Default.Cloud, "Синхронизировано: ${status.filesCount} файлов", MaterialTheme.colorScheme.primary)
+            Triple(Icons.Default.Cloud, "Synced: ${status.filesCount} files", MaterialTheme.colorScheme.primary)
         is DriveStatus.Error ->
-            Triple(Icons.Default.CloudOff, "Ошибка: ${status.error}", MaterialTheme.colorScheme.error)
+            Triple(Icons.Default.CloudOff, "Error: ${status.error}", MaterialTheme.colorScheme.error)
     }
 
     Card(
@@ -234,15 +249,15 @@ fun DriveStatusCard(status: DriveStatus, onSync: () -> Unit, onSignInClick: () -
             when (status) {
                 is DriveStatus.NotConnected, is DriveStatus.Error -> {
                     TextButton(onClick = onSignInClick) {
-                        Text("Войти в Google")
+                        Text("Sign in to Google")
                     }
                 }
                 is DriveStatus.Connected, is DriveStatus.Synced -> {
                     TextButton(onClick = onSync) {
-                        Text("Синхронизировать")
+                        Text("Sync")
                     }
                     TextButton(onClick = onSignOutClick) {
-                        Text("Выйти")
+                        Text("Sign out")
                     }
                 }
                 is DriveStatus.Syncing -> {
@@ -269,8 +284,7 @@ fun ScheduleCard(
             ) {
                 Icon(Icons.Default.Schedule, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    "Автоматический экспорт",
+                    Text("Scheduled Export",
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f)
                 )
@@ -299,7 +313,7 @@ fun ScheduleCard(
                 is ScheduleStatus.NotScheduled -> {
                     if (frequency != ExportFrequency.MANUAL) {
                         Button(onClick = onSchedule, modifier = Modifier.fillMaxWidth()) {
-                            Text("Включить расписание")
+                            Text("Enable Schedule")
                         }
                     }
                 }
@@ -307,7 +321,7 @@ fun ScheduleCard(
                     Text(scheduleStatus.nextRun, style = MaterialTheme.typography.bodySmall)
                     Spacer(modifier = Modifier.height(4.dp))
                     OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
-                        Text("Отключить")
+                            Text("Disable")
                     }
                 }
                 is ScheduleStatus.Running -> {
@@ -325,7 +339,7 @@ fun DataTypeCard(
 ) {
     Card {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("Типы данных", style = MaterialTheme.typography.titleMedium)
+                    Text("Data Types", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
 
             HealthDataType.entries.forEach { type ->
@@ -355,7 +369,7 @@ fun DateRangeCard(
 
     Card {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("Период экспорта", style = MaterialTheme.typography.titleMedium)
+            Text("Export Period", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
 
             // Quick period buttons
@@ -364,13 +378,13 @@ fun DateRangeCard(
                     onStartDateChange(LocalDate.now().minusDays(7))
                     onEndDateChange(LocalDate.now().minusDays(1))
                 }) {
-                    Text("7 дней")
+                    Text("7 days")
                 }
                 OutlinedButton(onClick = {
                     onStartDateChange(LocalDate.now().minusDays(30))
                     onEndDateChange(LocalDate.now().minusDays(1))
                 }) {
-                    Text("30 дней")
+                    Text("30 days")
                 }
             }
 
@@ -382,12 +396,12 @@ fun DateRangeCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 DatePickerButton(
-                    label = "С",
+                    label = "From",
                     date = startDate,
                     onDateSelected = onStartDateChange
                 )
                 DatePickerButton(
-                    label = "По",
+                    label = "To",
                     date = endDate,
                     onDateSelected = onEndDateChange
                 )
@@ -420,10 +434,15 @@ fun DatePickerButton(label: String, date: LocalDate, onDateSelected: (LocalDate)
 @Composable
 fun WebhookCard(
     webhookUrl: String,
+    webhookUrlError: String?,
+    webhookAuthToken: String,
     autoSendWebhook: Boolean,
     onUrlChange: (String) -> Unit,
+    onTokenChange: (String) -> Unit,
     onToggle: (Boolean) -> Unit
 ) {
+    val urlHasError = webhookUrl.isNotBlank() && webhookUrlError != null
+
     Card {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -444,11 +463,27 @@ fun WebhookCard(
             OutlinedTextField(
                 value = webhookUrl,
                 onValueChange = onUrlChange,
-                label = { Text("URL вебхука") },
+                label = { Text("Webhook URL") },
                 placeholder = { Text("https://example.com/api/health-data") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
+                isError = urlHasError,
+                supportingText = if (urlHasError) {
+                    { Text(webhookUrlError ?: "", color = MaterialTheme.colorScheme.error) }
+                } else null,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = webhookAuthToken,
+                onValueChange = onTokenChange,
+                label = { Text("Bearer Token (optional)") },
+                placeholder = { Text("sk-...") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -463,8 +498,8 @@ fun WebhookCard(
                     enabled = webhookUrl.isNotBlank()
                 )
                 Text(
-                    if (webhookUrl.isBlank()) "Укажите URL для отправки"
-                    else "Отправлять JSON на вебхук после экспорта"
+                    if (webhookUrl.isBlank()) "Enter a webhook URL first"
+                    else "Send JSON to webhook after export"
                 )
             }
         }

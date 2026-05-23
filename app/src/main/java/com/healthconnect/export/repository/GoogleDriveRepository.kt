@@ -1,6 +1,7 @@
 package com.healthconnect.export.repository
 
 import android.content.Context
+import android.util.Log
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -14,7 +15,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
-class GoogleDriveRepository(private val context: Context, private val webClientId: String = "") {
+class GoogleDriveRepository(private val context: Context) {
+
+    companion object {
+        private const val TAG = "GoogleDriveRepo"
+    }
 
     private val gsonFactory = GsonFactory.getDefaultInstance()
     private val httpTransport = NetHttpTransport()
@@ -38,8 +43,6 @@ class GoogleDriveRepository(private val context: Context, private val webClientI
      */
     fun getSignInOptions(): GoogleSignInOptions {
         return GoogleSignInOptions.Builder()
-            .requestIdToken(webClientId)
-            .requestServerAuthCode(webClientId, false)
             .requestEmail()
             .requestIdToken("730530422387-dveo97h089iesh4etmj74q9dn8j221f1.apps.googleusercontent.com")
             .requestScopes(com.google.android.gms.common.api.Scope(DriveScopes.DRIVE_FILE))
@@ -69,12 +72,18 @@ class GoogleDriveRepository(private val context: Context, private val webClientI
         drivePath: String
     ): String? = withContext(Dispatchers.IO) {
         try {
-            val account = getLastAccount() ?: return@withContext null
+            val account = getLastAccount() ?: run {
+                Log.w(TAG, "uploadFile: no account signed in")
+                return@withContext null
+            }
             val drive = getDriveService(account)
 
             // Get or create the folder structure
             val folderId = getOrCreateFolder(drive, "HealthConnectExport")
-                ?: return@withContext null
+            if (folderId == null) {
+                Log.w(TAG, "uploadFile: failed to get or create folder")
+                return@withContext null
+            }
 
             val fileMetadata = com.google.api.services.drive.model.File().apply {
                 name = localFile.name
@@ -99,9 +108,10 @@ class GoogleDriveRepository(private val context: Context, private val webClientI
                 drive.files().create(fileMetadata, mediaContent).execute()
             }
 
+            Log.i(TAG, "uploadFile: success - ${driveFile.id}")
             driveFile.id
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "uploadFile: error uploading ${localFile.name}", e)
             null
         }
     }

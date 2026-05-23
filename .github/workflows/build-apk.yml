@@ -3,57 +3,170 @@ name: Build APK
 on:
   push:
     branches: [ main, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.daemon=false
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
-    - name: Set up JDK 17
+    - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
-        java-version: '17'
+        java-version: '21'
         distribution: 'temurin'
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
 
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v3
+    - name: Cache Gradle
+      uses: actions/cache@v4
       with:
-        gradle-version: 8.5
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
 
     - name: Create local.properties
       run: echo "sdk.dir=${ANDROID_HOME}" > local.properties
 
-    - name: Gradle Environment
-      run: gradle buildEnvironment 2>&1 | head -30
-      continue-on-error: true
-
-    - name: List Tasks
-      run: gradle tasks --group build 2>&1
-      continue-on-error: true
-
-    - name: Build Debug
-      run: gradle assembleDebug --stacktrace 2>&1 | tee build.log
-      continue-on-error: true
-
-    - name: Show Results
-      if: always()
+    - name: Bump version (tag push only)
+      if: startsWith(github.ref, 'refs/tags/v')
       run: |
-        echo "=== LAST 40 LINES ==="
-        tail -n 40 build.log 2>/dev/null || echo "No log"
-        echo "=== APK SEARCH ==="
-        find . -name "*.apk" -o -name "*.aab" 2>/dev/null || echo "No APK"
-        echo "=== BUILD DIR ==="
-        ls -la app/build/ 2>/dev/null || echo "No build dir"
+        TAG_VERSION="${GITHUB_REF_NAME#v}"
+        echo "Bumping to version: $TAG_VERSION"
+        sed -i "s/versionName = \".*\"/versionName = \"$TAG_VERSION\"/" app/build.gradle.kts
+        CURRENT_CODE=$(grep 'versionCode =' app/build.gradle.kts | grep -oP '\d+')
+        NEW_CODE=$((CURRENT_CODE + 1))
+        sed -i "s/versionCode = $CURRENT_CODE/versionCode = $NEW_CODE/" app/build.gradle.kts
+        echo "VERSION_NAME=$TAG_VERSION" >> $GITHUB_ENV
+        echo "VERSION_CODE=$NEW_CODE" >> $GITHUB_ENV
 
-    - name: Upload Log
-      uses: actions/upload-artifact@v4
+    - name: Commit version bump
+      if: startsWith(github.ref, 'refs/tags/v')
+      run: |
+        git config user.name 'github-actions[bot]'
+        git config user.email 'github-actions[bot]@users.noreply.github.com'
+        git add app/build.gradle.kts
+        git commit -m "chore: bump version to ${VERSION_NAME} (${VERSION_CODE})"
+        git push origin HEAD:main
+
+    - name: Lint
+      run: ./gradlew lintRelease 2>&1 | tail -30
+
+    - name: Unit tests
+      run: ./gradlew testDebugUnitTest 2>&1 | tail -30
+
+    - name: JaCoCo coverage
+      run: ./gradlew jacocoTestReport 2>&1 | tail -20
+      continue-on-error: true
+
+    - name: Upload coverage report
       if: always()
+      uses: actions/upload-artifact@v4
       with:
-        name: build-log
-        path: build.log
+        name: coverage-report
+        path: app/build/reports/jacoco/jacocoTestReport/html/
         retention-days: 7
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: app/build/reports/tests/
+        retention-days: 7
+
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug 2>&1 | tail -20
+
+    - name: Decode keystore
+      if: startsWith(github.ref, 'refs/tags/v')
+      env:
+        KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      run: |
+        echo "$KEYSTORE_BASE64" | base64 -d > healthconnect-release.jks 2>/dev/null || true
+
+    - name: Build Release APK
+      if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
+      env:
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      run: ./gradlew assembleRelease 2>&1 | tail -20
+      continue-on-error: true
+
+    - name: Rename APKs
+      run: |
+        VERSION="${VERSION_NAME:-$(grep versionName app/build.gradle.kts | grep -oP '\d[\d.]*')}"
+        # Debug
+        if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+          cp app/build/outputs/apk/debug/app-debug.apk "HealthConnectExport-${VERSION}-debug.apk"
+        fi
+        # Release signed
+        if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+          cp app/build/outputs/apk/release/app-release.apk "HealthConnectExport-${VERSION}.apk"
+        fi
+        # Release unsigned
+        if [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
+          cp app/build/outputs/apk/release/app-release-unsigned.apk "HealthConnectExport-${VERSION}-unsigned.apk"
+        fi
+
+    - name: Upload Debug APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: HealthConnectExport-debug
+        path: HealthConnectExport-*-debug.apk
+        retention-days: 7
+
+    - name: Upload Release APK
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: actions/upload-artifact@v4
+      with:
+        name: HealthConnectExport-release
+        path: HealthConnectExport-*.apk
+        retention-days: 30
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Get version
+      run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+
+    - name: Download Release APK
+      uses: actions/download-artifact@v4
+      with:
+        name: HealthConnectExport-release
+        path: release-artifacts
+
+    - name: Generate changelog
+      run: |
+        echo "# HealthConnect Export v${{ env.VERSION }}" > CHANGELOG.md
+        echo "" >> CHANGELOG.md
+        git log --oneline $(git tag --sort=-version:refname | head -2 | tail -1 || git rev-list --max-parents=0 HEAD)..HEAD --no-merges >> CHANGELOG.md 2>/dev/null || echo "- Initial release" >> CHANGELOG.md
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        name: v${{ env.VERSION }}
+        body_path: CHANGELOG.md
+        files: |
+          release-artifacts/HealthConnectExport-*.apk
+        fail_on_unmatched_files: false

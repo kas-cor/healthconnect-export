@@ -10,12 +10,27 @@ local.properties
 *.swp
 *.swo
 
+# QWEN context
+.qwen/
+
 # Secrets
 client_secret_*.json
 google-services.json
 *.jks
 *.keystore
+*.base64
+.keystore_password.txt
+KEYSTORE_PASSWORD.txt
+
+# Build artifacts
+*.apk
+*.aab
+*.ap_
+*.dex
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log

@@ -31,10 +31,12 @@ data class ExportUiState(
     val selectedTypes: Set<HealthDataType> = HealthDataType.entries.toSet(),
     val startDate: LocalDate = LocalDate.now().minusDays(7),
     val endDate: LocalDate = LocalDate.now().minusDays(1),
-    val frequency: ExportFrequency = ExportFrequency.MANUAL,
+    val frequency: ExportFrequency = ExportFrequency.DAILY,
     val autoSyncDrive: Boolean = true,
     val webhookUrl: String = "",
+    val webhookAuthToken: String = "",
     val autoSendWebhook: Boolean = false,
+    val webhookUrlError: String? = null,
     val message: String? = null
 )
 
@@ -72,6 +74,7 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
     init {
         refreshDriveStatus()
         refreshLocalFiles()
+        scheduleExport()
     }
 
     /**
@@ -131,7 +134,14 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun setWebhookUrl(url: String) {
-        _uiState.update { it.copy(webhookUrl = url) }
+        val error = if (url.isNotBlank() && !webhookRepo.isValidWebhookUrl(url)) {
+            "Invalid URL format. Must be http:// or https://"
+        } else null
+        _uiState.update { it.copy(webhookUrl = url, webhookUrlError = error) }
+    }
+
+    fun setWebhookAuthToken(token: String) {
+        _uiState.update { it.copy(webhookAuthToken = token) }
     }
 
     fun setAutoSendWebhook(enabled: Boolean) {
@@ -139,16 +149,20 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun scheduleExport() {
+        val state = _uiState.value
         val config = ExportConfig(
-            enabledTypes = _uiState.value.selectedTypes,
-            frequency = _uiState.value.frequency,
-            autoSyncDrive = _uiState.value.autoSyncDrive
+            enabledTypes = state.selectedTypes,
+            frequency = state.frequency,
+            autoSyncDrive = state.autoSyncDrive,
+            webhookUrl = state.webhookUrl,
+            webhookAuthToken = state.webhookAuthToken,
+            autoSendWebhook = state.autoSendWebhook
         )
         DailyExportWorker.schedule(getApplication(), config)
         _uiState.update {
             it.copy(
-                scheduleStatus = ScheduleStatus.Scheduled("Следующий запуск: через 24ч"),
-                message = "Автоэкспорт настроен: ${config.frequency.displayName}"
+                scheduleStatus = ScheduleStatus.Scheduled("Next run: in 24h"),
+                message = "Scheduled export set: ${config.frequency.displayName}"
             )
         }
     }
@@ -158,7 +172,7 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.update {
             it.copy(
                 scheduleStatus = ScheduleStatus.NotScheduled,
-                message = "Автоэкспорт отменён"
+                message = "Scheduled export cancelled"
             )
         }
     }
@@ -239,7 +253,7 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
 
                 // Try webhook if enabled
                 if (state.autoSendWebhook && state.webhookUrl.isNotBlank()) {
-                    sendToWebhook(state.webhookUrl, records)
+                    sendToWebhook(state.webhookUrl, state.webhookAuthToken, records)
                 }
 
             } catch (e: Exception) {
@@ -274,6 +288,23 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
                         perm.contains("READ_HEART_RATE") -> "пульс"
                         perm.contains("READ_SLEEP") -> "сон"
                         perm.contains("READ_TOTAL_CALORIES_BURNED") -> "калории"
+                        perm.contains("READ_DISTANCE") -> "дистанция"
+                        perm.contains("READ_FLOORS_CLIMBED") -> "этажи"
+                        perm.contains("READ_ACTIVE_CALORIES_BURNED") -> "активные калории"
+                        perm.contains("READ_WEIGHT") -> "вес"
+                        perm.contains("READ_BODY_FAT") -> "жир"
+                        perm.contains("READ_BLOOD_PRESSURE") -> "давление"
+                        perm.contains("READ_BLOOD_GLUCOSE") -> "глюкоза"
+                        perm.contains("READ_OXYGEN_SATURATION") -> "сатурация"
+                        perm.contains("READ_BODY_TEMPERATURE") -> "температура"
+                        perm.contains("READ_RESPIRATORY_RATE") -> "дыхание"
+                        perm.contains("READ_HYDRATION") -> "гидратация"
+                        perm.contains("READ_RESTING_HEART_RATE") -> "пульс покоя"
+                        perm.contains("READ_EXERCISE") -> "тренировки"
+                        perm.contains("READ_NUTRITION") -> "питание"
+                        perm.contains("READ_MENSTRUATION") -> "цикл"
+                        perm.contains("READ_HEART_RATE_VARIABILITY_RMSSD") -> "ВСР"
+                        perm.contains("READ_SPEED") -> "скорость ходьбы/бега"
                         else -> null
                     }
                 }
@@ -335,10 +366,10 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
     /**
      * Отправляет записи на webhook URL
      */
-    private fun sendToWebhook(url: String, records: List<DailyHealthRecord>) {
+    private fun sendToWebhook(url: String, authToken: String, records: List<DailyHealthRecord>) {
         viewModelScope.launch {
             _uiState.update { it.copy(exportProgress = "Отправка на webhook...") }
-            when (val result = webhookRepo.sendRecords(url, records)) {
+            when (val result = webhookRepo.sendRecords(url, records, authToken)) {
                 is WebhookResult.Success -> {
                     _uiState.update {
                         it.copy(

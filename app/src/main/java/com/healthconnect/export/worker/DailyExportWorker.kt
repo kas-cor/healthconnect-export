@@ -7,6 +7,7 @@ import com.healthconnect.export.data.HealthDataType
 import com.healthconnect.export.repository.HealthConnectRepository
 import com.healthconnect.export.repository.LocalExportRepository
 import com.healthconnect.export.repository.GoogleDriveRepository
+import com.healthconnect.export.repository.WebhookRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -69,6 +70,7 @@ class DailyExportWorker(
     private val healthRepo = HealthConnectRepository(applicationContext)
     private val localRepo = LocalExportRepository(applicationContext)
     private val driveRepo = GoogleDriveRepository(applicationContext)
+    private val webhookRepo = WebhookRepository()
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
@@ -110,6 +112,11 @@ class DailyExportWorker(
                 files.forEach { file ->
                     driveRepo.uploadFile(file, "HealthConnectExport/${file.name}")
                 }
+            }
+
+            // Send to webhook if enabled
+            if (config.autoSendWebhook && config.webhookUrl.isNotBlank()) {
+                webhookRepo.sendRecords(config.webhookUrl, records, config.webhookAuthToken)
             }
 
             Result.success()

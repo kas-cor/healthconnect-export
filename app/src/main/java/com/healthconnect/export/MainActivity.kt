@@ -12,6 +12,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.health.connect.client.PermissionController
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.healthconnect.export.ui.ExportScreen
 import com.healthconnect.export.ui.theme.AppTheme
@@ -27,7 +29,14 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    val viewModel: ExportViewModel = viewModel()
+                    val viewModel: ExportViewModel = viewModel(
+                        factory = object : ViewModelProvider.Factory {
+                            @Suppress("UNCHECKED_CAST")
+                            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                                return ExportViewModel(this@MainActivity.application) as T
+                            }
+                        }
+                    )
 
                     // Launcher для Google Sign-In
                     val signInLauncher = rememberLauncherForActivityResult(

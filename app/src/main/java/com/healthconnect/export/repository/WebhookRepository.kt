@@ -22,7 +22,8 @@ class WebhookRepository {
      */
     suspend fun sendRecords(
         webhookUrl: String,
-        records: List<DailyHealthRecord>
+        records: List<DailyHealthRecord>,
+        authToken: String? = null
     ): WebhookResult = withContext(Dispatchers.IO) {
         try {
             val url = URL(webhookUrl)
@@ -30,6 +31,9 @@ class WebhookRepository {
             connection.requestMethod = "POST"
             connection.setRequestProperty("Content-Type", "application/json")
             connection.setRequestProperty("Accept", "application/json")
+            if (!authToken.isNullOrBlank()) {
+                connection.setRequestProperty("Authorization", "Bearer $authToken")
+            }
             connection.doOutput = true
             connection.connectTimeout = 15_000
             connection.readTimeout = 15_000
