@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization") version "2.1.20"
+    id("org.jetbrains.kotlin.android")
 }
 
 android {
@@ -71,16 +72,16 @@ tasks.matching { it.name == "packageDebug" }.configureEach {
     doLast {
         val aapt2 = android.additionalParameters?.find { it.startsWith("aapt2") }
             ?: "${android.sdkDirectory}/build-tools/${android.buildToolsVersion}/aapt2"
-        
+
         val apkPath = "${layout.buildDirectory.get()}/outputs/apk/debug/app-debug.apk"
         val manifestPath = "${layout.buildDirectory.get()}/intermediates/merged_manifest/debug/processDebugMainManifest/AndroidManifest.xml"
-        
+
         if (file(manifestPath).exists() && file(apkPath).exists()) {
             // Извлекаем манифест из APK
             exec {
                 commandLine("unzip", "-o", apkPath, "AndroidManifest.xml", "-d", "${temporaryDir}")
             }
-            
+
             // Проверяем, есть ли уже property
             val extractedManifest = file("${temporaryDir}/AndroidManifest.xml")
             if (extractedManifest.exists()) {

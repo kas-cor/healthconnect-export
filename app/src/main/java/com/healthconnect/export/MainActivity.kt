@@ -16,7 +16,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.healthconnect.export.ui.ExportScreen
 import com.healthconnect.export.ui.theme.AppTheme
 import com.healthconnect.export.viewmodel.ExportViewModel
-import com.healthconnect.export.viewmodel.ExportViewModelFactory
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -28,9 +27,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    val viewModel: ExportViewModel = viewModel(
-                        factory = ExportViewModelFactory(applicationContext)
-                    )
+                    val viewModel: ExportViewModel = viewModel()
 
                     // Launcher для Google Sign-In
                     val signInLauncher = rememberLauncherForActivityResult(

@@ -14,7 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
-class GoogleDriveRepository(private val context: Context) {
+class GoogleDriveRepository(private val context: Context, private val webClientId: String = "") {
 
     private val gsonFactory = GsonFactory.getDefaultInstance()
     private val httpTransport = NetHttpTransport()
@@ -37,7 +37,9 @@ class GoogleDriveRepository(private val context: Context) {
      * Build Google Sign-In options
      */
     fun getSignInOptions(): GoogleSignInOptions {
-        return GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+        return GoogleSignInOptions.Builder()
+            .requestIdToken(webClientId)
+            .requestServerAuthCode(webClientId, false)
             .requestEmail()
             .requestIdToken("730530422387-dveo97h089iesh4etmj74q9dn8j221f1.apps.googleusercontent.com")
             .requestScopes(com.google.android.gms.common.api.Scope(DriveScopes.DRIVE_FILE))

@@ -39,8 +39,8 @@ fun ExportScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Показываем сообщения через Snackbar
-    uiState.message?.let { message ->
-        LaunchedEffect(message) {
+    LaunchedEffect(uiState.message) {
+        uiState.message?.let { message ->
             snackbarHostState.showSnackbar(message)
             viewModel.clearMessage()
         }
@@ -279,7 +279,7 @@ fun ScheduleCard(
             Spacer(modifier = Modifier.height(8.dp))
 
             // Frequency selector
-            ExportFrequency.values().forEach { freq ->
+            ExportFrequency.entries.forEach { freq ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()

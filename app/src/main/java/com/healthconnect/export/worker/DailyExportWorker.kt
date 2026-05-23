@@ -9,6 +9,9 @@ import com.healthconnect.export.repository.LocalExportRepository
 import com.healthconnect.export.repository.GoogleDriveRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
@@ -24,6 +27,7 @@ class DailyExportWorker(
     companion object {
         const val WORK_NAME = "daily_health_export"
         const val KEY_CONFIG = "export_config"
+        private val json = Json { ignoreUnknownKeys = true }
 
         fun schedule(context: Context, config: ExportConfig) {
             if (config.frequency == com.healthconnect.export.data.ExportFrequency.MANUAL) {
@@ -36,7 +40,7 @@ class DailyExportWorker(
                 .build()
 
             val inputData = workDataOf(
-                KEY_CONFIG to config.toString() // Serialize config
+                KEY_CONFIG to json.encodeToString(config)
             )
 
             val request = PeriodicWorkRequestBuilder<DailyExportWorker>(
@@ -68,12 +72,16 @@ class DailyExportWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
-            // Default config: all types, export to local, try Drive sync
-            val config = ExportConfig(
-                enabledTypes = HealthDataType.values().toSet(),
-                frequency = com.healthconnect.export.data.ExportFrequency.DAILY,
-                autoSyncDrive = true
-            )
+            val configJson = inputData.getString(KEY_CONFIG)
+            val config = if (configJson != null) {
+                Json.decodeFromString<ExportConfig>(configJson)
+            } else {
+                ExportConfig(
+                    enabledTypes = HealthDataType.entries.toSet(),
+                    frequency = com.healthconnect.export.data.ExportFrequency.DAILY,
+                    autoSyncDrive = true
+                )
+            }
 
             // Export yesterday by default (complete day)
             val yesterday = LocalDate.now().minusDays(1)
@@ -105,6 +113,10 @@ class DailyExportWorker(
             }
 
             Result.success()
+        } catch (e: SecurityException) {
+            Result.failure()
+        } catch (e: IllegalStateException) {
+            Result.failure()
         } catch (e: Exception) {
             Result.retry()
         }

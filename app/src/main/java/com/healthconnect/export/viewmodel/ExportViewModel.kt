@@ -1,9 +1,9 @@
 package com.healthconnect.export.viewmodel
 
-import android.content.Context
+import android.app.Application
 import android.util.Log
 import androidx.activity.result.ActivityResult
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
@@ -28,7 +28,7 @@ data class ExportUiState(
     val exportedFiles: List<File> = emptyList(),
     val driveStatus: DriveStatus = DriveStatus.NotConnected,
     val scheduleStatus: ScheduleStatus = ScheduleStatus.NotScheduled,
-    val selectedTypes: Set<HealthDataType> = HealthDataType.values().toSet(),
+    val selectedTypes: Set<HealthDataType> = HealthDataType.entries.toSet(),
     val startDate: LocalDate = LocalDate.now().minusDays(7),
     val endDate: LocalDate = LocalDate.now().minusDays(1),
     val frequency: ExportFrequency = ExportFrequency.MANUAL,
@@ -52,15 +52,15 @@ sealed class ScheduleStatus {
     object Running : ScheduleStatus()
 }
 
-class ExportViewModel(private val context: Context) : ViewModel() {
+class ExportViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val healthRepo = HealthConnectRepository(context)
-    private val localRepo = LocalExportRepository(context)
-    private val driveRepo = GoogleDriveRepository(context)
+    private val healthRepo = HealthConnectRepository(getApplication())
+    private val localRepo = LocalExportRepository(getApplication())
+    private val driveRepo = GoogleDriveRepository(getApplication())
     private val webhookRepo = WebhookRepository()
 
     val googleSignInClient: GoogleSignInClient =
-        GoogleSignIn.getClient(context, driveRepo.getSignInOptions())
+        GoogleSignIn.getClient(getApplication(), driveRepo.getSignInOptions())
 
     private val _uiState = MutableStateFlow(ExportUiState())
     val uiState = _uiState.asStateFlow()
@@ -144,17 +144,17 @@ class ExportViewModel(private val context: Context) : ViewModel() {
             frequency = _uiState.value.frequency,
             autoSyncDrive = _uiState.value.autoSyncDrive
         )
-        DailyExportWorker.schedule(context, config)
+        DailyExportWorker.schedule(getApplication(), config)
         _uiState.update {
             it.copy(
                 scheduleStatus = ScheduleStatus.Scheduled("Следующий запуск: через 24ч"),
-                message = "Автоэкспорт настроен: ${_uiState.value.frequency.displayName}"
+                message = "Автоэкспорт настроен: ${config.frequency.displayName}"
             )
         }
     }
 
     fun cancelSchedule() {
-        DailyExportWorker.cancel(context)
+        DailyExportWorker.cancel(getApplication())
         _uiState.update {
             it.copy(
                 scheduleStatus = ScheduleStatus.NotScheduled,

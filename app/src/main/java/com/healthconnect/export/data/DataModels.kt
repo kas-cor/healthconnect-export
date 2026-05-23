@@ -55,12 +55,14 @@ data class ExportMetadata(
 
 // ===== Export Configuration =====
 
+@Serializable
 enum class ExportFrequency(val displayName: String, val hours: Long) {
     MANUAL("Вручную", 0),
     DAILY("Раз в день", 24),
     WEEKLY("Раз в неделю", 168)
 }
 
+@Serializable
 data class ExportConfig(
     val enabledTypes: Set<HealthDataType>,
     val frequency: ExportFrequency,
@@ -70,6 +72,7 @@ data class ExportConfig(
     val outputDirectory: String = "HealthConnectExport"
 )
 
+@Serializable
 enum class HealthDataType(val displayName: String) {
     STEPS("Шаги"),
     HEART_RATE("Пульс"),

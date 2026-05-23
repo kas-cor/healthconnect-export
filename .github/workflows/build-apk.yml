@@ -28,25 +28,27 @@ jobs:
     - name: Create local.properties
       run: echo "sdk.dir=${ANDROID_HOME}" > local.properties
 
+    - name: Gradle Environment
+      run: gradle buildEnvironment 2>&1 | head -30
+      continue-on-error: true
+
+    - name: List Tasks
+      run: gradle tasks --group build 2>&1
+      continue-on-error: true
+
     - name: Build Debug
       run: gradle assembleDebug --stacktrace 2>&1 | tee build.log
       continue-on-error: true
 
-    - name: List all files
+    - name: Show Results
       if: always()
       run: |
+        echo "=== LAST 40 LINES ==="
+        tail -n 40 build.log 2>/dev/null || echo "No log"
         echo "=== APK SEARCH ==="
-        find . -name "*.apk" -o -name "*.aab" 2>/dev/null
-        echo "=== BUILD STRUCTURE ==="
-        ls -R app/build/ 2>/dev/null | head -60 || echo "No build dir"
-
-    - name: Upload Build Outputs
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: build-outputs
-        path: app/build/
-        retention-days: 7
+        find . -name "*.apk" -o -name "*.aab" 2>/dev/null || echo "No APK"
+        echo "=== BUILD DIR ==="
+        ls -la app/build/ 2>/dev/null || echo "No build dir"
 
     - name: Upload Log
       uses: actions/upload-artifact@v4

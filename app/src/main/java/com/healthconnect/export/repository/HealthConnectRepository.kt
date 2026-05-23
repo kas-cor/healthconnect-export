@@ -31,8 +31,11 @@ class HealthConnectRepository(private val context: Context) {
         get() {
             if (field == null) {
                 try {
-                    field = HealthConnectClient.getOrCreate(context)
-                } catch (e: Exception) {
+                    val status = HealthConnectClient.checkAvailability(context)
+                    if (status == HealthConnectClient.SDK_AVAILABLE) {
+                        field = HealthConnectClient.getOrCreate(context)
+                    }
+                } catch (_: Exception) {
                     field = null
                 }
             }
@@ -50,7 +53,7 @@ class HealthConnectRepository(private val context: Context) {
         return try {
             context.packageManager.getPackageInfo(HEALTH_CONNECT_PACKAGE, 0)
             true
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
     }
@@ -101,7 +104,7 @@ class HealthConnectRepository(private val context: Context) {
     }
 
     /**
-     * Проверяет, предоставлены ли все необходимые разрешения
+     * Проверяет, предоставлены ли все необходимые разрешения для указанных типов
      */
     suspend fun checkPermissions(types: Set<HealthDataType>): Boolean {
         val c = client ?: return false
