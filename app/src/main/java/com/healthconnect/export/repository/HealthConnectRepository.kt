@@ -8,6 +8,7 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.*
+import androidx.health.connect.client.records.metadata.DataOrigin
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import com.healthconnect.export.data.*
@@ -219,11 +220,14 @@ class HealthConnectRepository(private val context: Context) {
         val allRecords = mutableListOf<T>()
         var pageToken: String? = null
         do {
-            val pageRequest = if (pageToken != null) {
-                request.copy(pageToken = pageToken)
-            } else {
-                request
-            }
+            val pageRequest = ReadRecordsRequest(
+                recordType = request.recordType,
+                timeRangeFilter = request.timeRangeFilter,
+                dataOriginFilter = request.dataOriginFilter,
+                ascendingOrder = request.ascendingOrder,
+                pageSize = PAGE_SIZE,
+                pageToken = pageToken
+            )
             val response = c.readRecords(pageRequest)
             allRecords.addAll(response.records)
             pageToken = response.pageToken
@@ -246,7 +250,7 @@ class HealthConnectRepository(private val context: Context) {
         val total = deduped.sumOf { it.count }
 
         Log.d(TAG, "readSteps: raw=${allRecords.size}, filtered=${filtered.size}, deduped=${deduped.size}, totalSteps=$total")
-        return StepsData(totalSteps = total, recordsCount = filtered.size)
+        return StepsData(totalSteps = total, recordsCount = deduped.size)
     }
 
     /**
@@ -295,13 +299,8 @@ class HealthConnectRepository(private val context: Context) {
         if (records.isEmpty()) return records
 
         val groupedByOrigin = records.groupBy { record ->
-            try {
-                val method = record.javaClass.getMethod("getDataOrigin")
-                val origin = method.invoke(record)
-                if (origin != null) origin.toString() else "unknown"
-            } catch (_: Exception) {
-                "unknown"
-            }
+            val origin = (record as? androidx.health.connect.client.records.Record)?.metadata?.dataOrigin
+            origin?.packageName ?: "unknown"
         }
 
         Log.d(TAG, "filterByPreferredOrigin: sources=${groupedByOrigin.keys}")
@@ -398,7 +397,7 @@ class HealthConnectRepository(private val context: Context) {
 
     private suspend fun readWeight(filter: TimeRangeFilter): WeightData? {
         val c = client ?: return null
-        val response = c.readRecords(ReadRecordsRequest(WeightRecord::class, timeRangeFilter = filter))
+        val allRecords = readAllPages(ReadRecordsRequest(WeightRecord::class, timeRangeFilter = filter))
         if (allRecords.isEmpty()) return null
         // WeightRecord stores weight in kilograms
         val avg = allRecords.map { it.weight.inKilograms }.average()
