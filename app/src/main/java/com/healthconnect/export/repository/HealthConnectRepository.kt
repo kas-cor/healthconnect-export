@@ -13,6 +13,7 @@ import androidx.health.connect.client.time.TimeRangeFilter
 import com.healthconnect.export.data.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -23,6 +24,23 @@ class HealthConnectRepository(private val context: Context) {
     companion object {
         private const val TAG = "HealthConnectRepo"
         private const val HEALTH_CONNECT_PACKAGE = "com.google.android.apps.healthdata"
+        private const val PAGE_SIZE = 10000
+
+        /**
+         * Пакеты приложений для фильтрации dataOrigin, упорядоченные по приоритету.
+         * Если данные есть от нескольких источников, берётся первый из списка.
+         */
+        val PREFERRED_PACKAGES = listOf(
+            "com.mi.health",              // Xiaomi Mi Fitness
+            "com.xiaomi.hm.health",       // Xiaomi Wear / Mi Band
+            "com.google.android.apps.fitness", // Google Fit
+            "com.samsung.android.wearable.health", // Samsung Health
+            "com.huawei.health",          // Huawei Health
+            "com.hmdm.wearable.health",   // Nokia Health
+            "com.sec.android.app.shealth", // Samsung S Health
+            "com.htc.fitness",            // HTC
+            "com.sonymobile.advancedwidget.health" // Sony
+        )
     }
 
     private var client: HealthConnectClient? = null
@@ -190,40 +208,141 @@ class HealthConnectRepository(private val context: Context) {
         return records
     }
 
+    // ===== Pagination helper =====
+
+    /**
+     * Вычитывает ВСЕ записи для указанного типа, используя пагинацию.
+     * Стандартный readRecords без pageToken возвращает до 10 000 записей,
+     * а на некоторых прошивках (MIUI/HyperOS) может быть меньше (напр. 1000).
+     * Чтобы гарантированно получить всё, используем pageToken из ответа.
+     */
+    private suspend fun <T> readAllPages(request: ReadRecordsRequest<T>): List<T> {
+        val c = client ?: return emptyList()
+        val allRecords = mutableListOf<T>()
+        var pageToken: String? = null
+        do {
+            val pageRequest = if (pageToken != null) {
+                request.copy(pageToken = pageToken)
+            } else {
+                request
+            }
+            val response = c.readRecords(pageRequest)
+            allRecords.addAll(response.records)
+            pageToken = response.pageToken
+            Log.d(TAG, "readAllPages: got ${allRecords.size} records, pageToken=$pageToken")
+        } while (pageToken != null)
+        return allRecords
+    }
+
     // ===== Private readers =====
 
     private suspend fun readSteps(filter: TimeRangeFilter): StepsData? {
         val c = client ?: return null
-        val response = c.readRecords(ReadRecordsRequest(StepsRecord::class, timeRangeFilter = filter))
-        if (response.records.isEmpty()) return null
-        val total = response.records.sumOf { it.count }
-        return StepsData(totalSteps = total, recordsCount = response.records.size)
+        val allRecords = readAllPages(ReadRecordsRequest(StepsRecord::class, timeRangeFilter = filter))
+        if (allRecords.isEmpty()) return null
+
+        val filtered = filterByPreferredOrigin(allRecords)
+        if (filtered.isEmpty()) return null
+
+        val deduped = mergeOverlappingIntervals(filtered)
+        val total = deduped.sumOf { it.count }
+
+        Log.d(TAG, "readSteps: raw=${allRecords.size}, filtered=${filtered.size}, deduped=${deduped.size}, totalSteps=$total")
+        return StepsData(totalSteps = total, recordsCount = filtered.size)
+    }
+
+    /**
+     * Объединяет StepsRecord с близкими/перекрывающимися временными интервалами.
+     */
+    private fun mergeOverlappingIntervals(records: List<StepsRecord>): List<StepsRecord> {
+        if (records.size <= 1) return records
+
+        val sorted = records.sortedBy { it.startTime }
+        val result = mutableListOf<StepsRecord>()
+
+        var current = sorted.first()
+        for (i in 1 until sorted.size) {
+            val next = sorted[i]
+            val gap = Duration.between(current.endTime, next.startTime)
+
+            if (!gap.isNegative && gap.seconds <= 3) {
+                val extendedEnd = if (next.endTime > current.endTime) next.endTime else current.endTime
+                current = StepsRecord(
+                    count = current.count + next.count,
+                    startTime = current.startTime,
+                    endTime = extendedEnd
+                )
+            } else if (gap.isNegative) {
+                val extendedEnd = if (next.endTime > current.endTime) next.endTime else current.endTime
+                current = StepsRecord(
+                    count = current.count + next.count,
+                    startTime = current.startTime,
+                    endTime = extendedEnd
+                )
+            } else {
+                result.add(current)
+                current = next
+            }
+        }
+        result.add(current)
+
+        return result
+    }
+
+    /**
+     * Фильтрует записи по предпочитаемому пакету-источнику данных.
+     * Необходимо, чтобы одни и те же шаги не суммировались от Mi Fitness и Google Fit одновременно.
+     */
+    private fun <T> filterByPreferredOrigin(records: List<T>): List<T> {
+        if (records.isEmpty()) return records
+
+        val groupedByOrigin = records.groupBy { record ->
+            try {
+                val method = record.javaClass.getMethod("getDataOrigin")
+                val origin = method.invoke(record)
+                if (origin != null) origin.toString() else "unknown"
+            } catch (_: Exception) {
+                "unknown"
+            }
+        }
+
+        Log.d(TAG, "filterByPreferredOrigin: sources=${groupedByOrigin.keys}")
+
+        for (preferred in PREFERRED_PACKAGES) {
+            if (groupedByOrigin.containsKey(preferred)) {
+                Log.d(TAG, "filterByPreferredOrigin: using '$preferred', ignoring ${groupedByOrigin.keys - preferred}")
+                return groupedByOrigin[preferred]!!
+            }
+        }
+
+        Log.d(TAG, "filterByPreferredOrigin: no preferred source, using all (${records.size} records from ${groupedByOrigin.keys})")
+        return records
     }
 
     private suspend fun readHeartRate(filter: TimeRangeFilter): HeartRateData? {
         val c = client ?: return null
-        val response = c.readRecords(ReadRecordsRequest(HeartRateRecord::class, timeRangeFilter = filter))
-        if (response.records.isEmpty()) return null
-        val samples = response.records.flatMap { it.samples }
+        val allRecords = readAllPages(ReadRecordsRequest(HeartRateRecord::class, timeRangeFilter = filter))
+        if (allRecords.isEmpty()) return null
+        val samples = allRecords.flatMap { it.samples }
         if (samples.isEmpty()) return null
         val beats = samples.map { it.beatsPerMinute }
         return HeartRateData(
             avgBpm = beats.average(),
             minBpm = beats.min().toInt(),
             maxBpm = beats.max().toInt(),
-            recordsCount = response.records.size
+            recordsCount = allRecords.size
         )
     }
 
     private suspend fun readSleep(filter: TimeRangeFilter): SleepData? {
         val c = client ?: return null
-        val response = c.readRecords(ReadRecordsRequest(SleepSessionRecord::class, timeRangeFilter = filter))
-        if (response.records.isEmpty()) return null
-        val totalMinutes = response.records.sumOf {
+        val allRecords = readAllPages(ReadRecordsRequest(SleepSessionRecord::class, timeRangeFilter = filter))
+        if (allRecords.isEmpty()) return null
+        val totalMinutes = allRecords.sumOf {
             ChronoUnit.MINUTES.between(it.startTime, it.endTime)
         }
         val stageDurations = mutableMapOf<String, Long>()
-        response.records.forEach { record ->
+        allRecords.forEach { record ->
             record.stages.forEach { stage ->
                 val name = sleepStageToString(stage.stage) ?: "Неизвестно"
                 val duration = ChronoUnit.MINUTES.between(stage.startTime, stage.endTime)
@@ -235,144 +354,152 @@ class HealthConnectRepository(private val context: Context) {
         return SleepData(
             totalDurationMinutes = totalMinutes,
             sleepStages = stageDurations,
-            recordsCount = response.records.size
+            recordsCount = allRecords.size
         )
     }
 
     private suspend fun readCalories(filter: TimeRangeFilter): CaloriesData? {
         val c = client ?: return null
-        val response = c.readRecords(ReadRecordsRequest(TotalCaloriesBurnedRecord::class, timeRangeFilter = filter))
-        if (response.records.isEmpty()) return null
-        val total = response.records.sumOf { it.energy.inKilocalories }
-        return CaloriesData(totalCalories = total, recordsCount = response.records.size)
+        val allRecords = readAllPages(ReadRecordsRequest(TotalCaloriesBurnedRecord::class, timeRangeFilter = filter))
+        if (allRecords.isEmpty()) return null
+        val filtered = filterByPreferredOrigin(allRecords)
+        if (filtered.isEmpty()) return null
+        val total = filtered.sumOf { it.energy.inKilocalories }
+        return CaloriesData(totalCalories = total, recordsCount = filtered.size)
     }
 
     private suspend fun readDistance(filter: TimeRangeFilter): DistanceData? {
         val c = client ?: return null
-        val response = c.readRecords(ReadRecordsRequest(DistanceRecord::class, timeRangeFilter = filter))
-        if (response.records.isEmpty()) return null
-        val total = response.records.sumOf { it.distance.inMeters }
-        return DistanceData(totalDistanceMeters = total, recordsCount = response.records.size)
+        val allRecords = readAllPages(ReadRecordsRequest(DistanceRecord::class, timeRangeFilter = filter))
+        if (allRecords.isEmpty()) return null
+        val filtered = filterByPreferredOrigin(allRecords)
+        if (filtered.isEmpty()) return null
+        val total = filtered.sumOf { it.distance.inMeters }
+        return DistanceData(totalDistanceMeters = total, recordsCount = filtered.size)
     }
 
     private suspend fun readFloorsClimbed(filter: TimeRangeFilter): FloorsClimbedData? {
         val c = client ?: return null
-        val response = c.readRecords(ReadRecordsRequest(FloorsClimbedRecord::class, timeRangeFilter = filter))
-        if (response.records.isEmpty()) return null
-        val total = response.records.sumOf { it.floors }
-        return FloorsClimbedData(totalFloors = total, recordsCount = response.records.size)
+        val allRecords = readAllPages(ReadRecordsRequest(FloorsClimbedRecord::class, timeRangeFilter = filter))
+        if (allRecords.isEmpty()) return null
+        val filtered = filterByPreferredOrigin(allRecords)
+        if (filtered.isEmpty()) return null
+        val total = filtered.sumOf { it.floors }
+        return FloorsClimbedData(totalFloors = total, recordsCount = filtered.size)
     }
 
     private suspend fun readActiveCalories(filter: TimeRangeFilter): ActiveCaloriesData? {
         val c = client ?: return null
-        val response = c.readRecords(ReadRecordsRequest(ActiveCaloriesBurnedRecord::class, timeRangeFilter = filter))
-        if (response.records.isEmpty()) return null
-        val total = response.records.sumOf { it.energy.inKilocalories }
-        return ActiveCaloriesData(totalCalories = total, recordsCount = response.records.size)
+        val allRecords = readAllPages(ReadRecordsRequest(ActiveCaloriesBurnedRecord::class, timeRangeFilter = filter))
+        if (allRecords.isEmpty()) return null
+        val filtered = filterByPreferredOrigin(allRecords)
+        if (filtered.isEmpty()) return null
+        val total = filtered.sumOf { it.energy.inKilocalories }
+        return ActiveCaloriesData(totalCalories = total, recordsCount = filtered.size)
     }
 
     private suspend fun readWeight(filter: TimeRangeFilter): WeightData? {
         val c = client ?: return null
         val response = c.readRecords(ReadRecordsRequest(WeightRecord::class, timeRangeFilter = filter))
-        if (response.records.isEmpty()) return null
+        if (allRecords.isEmpty()) return null
         // WeightRecord stores weight in kilograms
-        val avg = response.records.map { it.weight.inKilograms }.average()
-        return WeightData(weightKg = avg, recordsCount = response.records.size)
+        val avg = allRecords.map { it.weight.inKilograms }.average()
+        return WeightData(weightKg = avg, recordsCount = allRecords.size)
     }
 
     private suspend fun readBodyFat(filter: TimeRangeFilter): BodyFatData? {
         val c = client ?: return null
-        val response = c.readRecords(ReadRecordsRequest(BodyFatRecord::class, timeRangeFilter = filter))
-        if (response.records.isEmpty()) return null
-        val avg = response.records.map { it.percentage.value }.average()
-        return BodyFatData(percentage = avg, recordsCount = response.records.size)
+        val allRecords = readAllPages(ReadRecordsRequest(BodyFatRecord::class, timeRangeFilter = filter))
+        if (allRecords.isEmpty()) return null
+        val avg = allRecords.map { it.percentage.value }.average()
+        return BodyFatData(percentage = avg, recordsCount = allRecords.size)
     }
 
     private suspend fun readBloodPressure(filter: TimeRangeFilter): BloodPressureData? {
         val c = client ?: return null
-        val response = c.readRecords(ReadRecordsRequest(BloodPressureRecord::class, timeRangeFilter = filter))
-        if (response.records.isEmpty()) return null
-        val systolicAvg = response.records.map { it.systolic.inMillimetersOfMercury }.average()
-        val diastolicAvg = response.records.map { it.diastolic.inMillimetersOfMercury }.average()
-        val position = bodyPositionToString(response.records.firstOrNull()?.bodyPosition)
+        val allRecords = readAllPages(ReadRecordsRequest(BloodPressureRecord::class, timeRangeFilter = filter))
+        if (allRecords.isEmpty()) return null
+        val systolicAvg = allRecords.map { it.systolic.inMillimetersOfMercury }.average()
+        val diastolicAvg = allRecords.map { it.diastolic.inMillimetersOfMercury }.average()
+        val position = bodyPositionToString(allRecords.firstOrNull()?.bodyPosition)
         return BloodPressureData(
             systolicMmHg = systolicAvg,
             diastolicMmHg = diastolicAvg,
             bodyPosition = position,
-            recordsCount = response.records.size
+            recordsCount = allRecords.size
         )
     }
 
     private suspend fun readBloodGlucose(filter: TimeRangeFilter): BloodGlucoseData? {
         val c = client ?: return null
-        val response = c.readRecords(ReadRecordsRequest(BloodGlucoseRecord::class, timeRangeFilter = filter))
-        if (response.records.isEmpty()) return null
-        val avg = response.records.map { it.level.inMillimolesPerLiter }.average()
-        val source = specimenSourceToString(response.records.firstOrNull()?.specimenSource)
-        val mealType = mealTypeToString(response.records.firstOrNull()?.mealType)
+        val allRecords = readAllPages(ReadRecordsRequest(BloodGlucoseRecord::class, timeRangeFilter = filter))
+        if (allRecords.isEmpty()) return null
+        val avg = allRecords.map { it.level.inMillimolesPerLiter }.average()
+        val source = specimenSourceToString(allRecords.firstOrNull()?.specimenSource)
+        val mealType = mealTypeToString(allRecords.firstOrNull()?.mealType)
         return BloodGlucoseData(
             level = avg,
             specimenSource = source,
             mealType = mealType,
-            recordsCount = response.records.size
+            recordsCount = allRecords.size
         )
     }
 
     private suspend fun readOxygenSaturation(filter: TimeRangeFilter): OxygenSaturationData? {
         val c = client ?: return null
-        val response = c.readRecords(ReadRecordsRequest(OxygenSaturationRecord::class, timeRangeFilter = filter))
-        if (response.records.isEmpty()) return null
-        val avg = response.records.map { it.percentage.value }.average()
-        return OxygenSaturationData(percentage = avg, recordsCount = response.records.size)
+        val allRecords = readAllPages(ReadRecordsRequest(OxygenSaturationRecord::class, timeRangeFilter = filter))
+        if (allRecords.isEmpty()) return null
+        val avg = allRecords.map { it.percentage.value }.average()
+        return OxygenSaturationData(percentage = avg, recordsCount = allRecords.size)
     }
 
     private suspend fun readBodyTemperature(filter: TimeRangeFilter): BodyTemperatureData? {
         val c = client ?: return null
-        val response = c.readRecords(ReadRecordsRequest(BodyTemperatureRecord::class, timeRangeFilter = filter))
-        if (response.records.isEmpty()) return null
-        val avg = response.records.map { it.temperature.inCelsius }.average()
-        val location = measurementLocationToString(response.records.firstOrNull()?.measurementLocation)
+        val allRecords = readAllPages(ReadRecordsRequest(BodyTemperatureRecord::class, timeRangeFilter = filter))
+        if (allRecords.isEmpty()) return null
+        val avg = allRecords.map { it.temperature.inCelsius }.average()
+        val location = measurementLocationToString(allRecords.firstOrNull()?.measurementLocation)
         return BodyTemperatureData(
             temperatureCelsius = avg,
             measurementLocation = location,
-            recordsCount = response.records.size
+            recordsCount = allRecords.size
         )
     }
 
     private suspend fun readRespiratoryRate(filter: TimeRangeFilter): RespiratoryRateData? {
         val c = client ?: return null
-        val response = c.readRecords(ReadRecordsRequest(RespiratoryRateRecord::class, timeRangeFilter = filter))
-        if (response.records.isEmpty()) return null
-        val avg = response.records.map { it.rate }.average()
-        return RespiratoryRateData(rate = avg, recordsCount = response.records.size)
+        val allRecords = readAllPages(ReadRecordsRequest(RespiratoryRateRecord::class, timeRangeFilter = filter))
+        if (allRecords.isEmpty()) return null
+        val avg = allRecords.map { it.rate }.average()
+        return RespiratoryRateData(rate = avg, recordsCount = allRecords.size)
     }
 
     private suspend fun readHydration(filter: TimeRangeFilter): HydrationData? {
         val c = client ?: return null
-        val response = c.readRecords(ReadRecordsRequest(HydrationRecord::class, timeRangeFilter = filter))
-        if (response.records.isEmpty()) return null
-        val total = response.records.sumOf { it.volume.inLiters }
-        return HydrationData(totalVolumeLiters = total, recordsCount = response.records.size)
+        val allRecords = readAllPages(ReadRecordsRequest(HydrationRecord::class, timeRangeFilter = filter))
+        if (allRecords.isEmpty()) return null
+        val total = allRecords.sumOf { it.volume.inLiters }
+        return HydrationData(totalVolumeLiters = total, recordsCount = allRecords.size)
     }
 
     private suspend fun readRestingHeartRate(filter: TimeRangeFilter): RestingHeartRateData? {
         val c = client ?: return null
-        val response = c.readRecords(ReadRecordsRequest(RestingHeartRateRecord::class, timeRangeFilter = filter))
-        if (response.records.isEmpty()) return null
-        val bpmValues = response.records.map { it.beatsPerMinute }
+        val allRecords = readAllPages(ReadRecordsRequest(RestingHeartRateRecord::class, timeRangeFilter = filter))
+        if (allRecords.isEmpty()) return null
+        val bpmValues = allRecords.map { it.beatsPerMinute }
         return RestingHeartRateData(
             avgBpm = bpmValues.average(),
             minBpm = bpmValues.min(),
             maxBpm = bpmValues.max(),
-            recordsCount = response.records.size
+            recordsCount = allRecords.size
         )
     }
 
     private suspend fun readExercises(filter: TimeRangeFilter): List<ExerciseData>? {
         val c = client ?: return null
-        val response = c.readRecords(ReadRecordsRequest(ExerciseSessionRecord::class, timeRangeFilter = filter))
-        if (response.records.isEmpty()) return null
-        return response.records.map { record ->
+        val allRecords = readAllPages(ReadRecordsRequest(ExerciseSessionRecord::class, timeRangeFilter = filter))
+        if (allRecords.isEmpty()) return null
+        return allRecords.map { record ->
             ExerciseData(
                 exerciseType = exerciseTypeToString(record.exerciseType) ?: "Неизвестно",
                 startTime = record.startTime.toDateTimeString(),
@@ -386,9 +513,9 @@ class HealthConnectRepository(private val context: Context) {
 
     private suspend fun readNutrition(filter: TimeRangeFilter): List<NutritionData>? {
         val c = client ?: return null
-        val response = c.readRecords(ReadRecordsRequest(NutritionRecord::class, timeRangeFilter = filter))
-        if (response.records.isEmpty()) return null
-        return response.records.map { record ->
+        val allRecords = readAllPages(ReadRecordsRequest(NutritionRecord::class, timeRangeFilter = filter))
+        if (allRecords.isEmpty()) return null
+        return allRecords.map { record ->
             NutritionData(
                 name = record.name,
                 mealType = nutritionMealTypeToString(record.mealType),
@@ -416,32 +543,32 @@ class HealthConnectRepository(private val context: Context) {
     private suspend fun readCardiovascular(filter: TimeRangeFilter): CardiovascularData? {
         val c = client ?: return null
         val response = c.readRecords(ReadRecordsRequest(HeartRateVariabilityRmssdRecord::class, timeRangeFilter = filter))
-        if (response.records.isEmpty()) return null
-        val avgHrv = response.records.map { it.heartRateVariabilityMillis }.average()
+        if (allRecords.isEmpty()) return null
+        val avgHrv = allRecords.map { it.heartRateVariabilityMillis }.average()
         return CardiovascularData(
             hrvRmssdMs = avgHrv,
-            recordsCount = response.records.size
+            recordsCount = allRecords.size
         )
     }
 
     private suspend fun readSpeed(filter: TimeRangeFilter): SpeedData? {
         val c = client ?: return null
-        val response = c.readRecords(ReadRecordsRequest(SpeedRecord::class, timeRangeFilter = filter))
-        if (response.records.isEmpty()) return null
-        val allSamples = response.records.flatMap { it.samples }
+        val allRecords = readAllPages(ReadRecordsRequest(SpeedRecord::class, timeRangeFilter = filter))
+        if (allRecords.isEmpty()) return null
+        val allSamples = allRecords.flatMap { it.samples }
         if (allSamples.isEmpty()) return null
         val avgSpeed = allSamples.map { it.speed.inMetersPerSecond }.average()
         return SpeedData(
             avgSpeedMetersPerSecond = avgSpeed,
-            recordsCount = response.records.size
+            recordsCount = allRecords.size
         )
     }
 
     private suspend fun readMenstruation(filter: TimeRangeFilter): MenstruationData? {
         val c = client ?: return null
-        val response = c.readRecords(ReadRecordsRequest(MenstruationFlowRecord::class, timeRangeFilter = filter))
-        if (response.records.isEmpty()) return null
-        val record = response.records.first()
+        val allRecords = readAllPages(ReadRecordsRequest(MenstruationFlowRecord::class, timeRangeFilter = filter))
+        if (allRecords.isEmpty()) return null
+        val record = allRecords.first()
         return MenstruationData(
             flowType = menstruationFlowToString(record.flow),
             time = record.time.toDateTimeString()
