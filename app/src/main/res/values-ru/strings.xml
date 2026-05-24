@@ -1,0 +1,123 @@
+<resources>
+    <!-- App -->
+    <string name="app_name">HealthConnect Export</string>
+    <string name="app_title">HealthConnect Export</string>
+
+    <!-- Theme toggle -->
+    <string name="theme_follow_system">Как в системе</string>
+    <string name="theme_switch_light">Светлая тема</string>
+    <string name="theme_switch_dark">Тёмная тема</string>
+
+    <!-- Drive Status -->
+    <string name="drive_not_connected">Google Drive не подключён</string>
+    <string name="drive_connected">Google Drive подключён</string>
+    <string name="drive_syncing">Синхронизация…</string>
+    <string name="drive_synced">Синхронизировано: %d файлов</string>
+    <string name="drive_error">Ошибка: %s</string>
+    <string name="sign_in">Войти в Google</string>
+    <string name="sync_now">Синхр.</string>
+    <string name="sign_out">Выйти</string>
+
+    <!-- Scheduled Export -->
+    <string name="scheduled_export">Запланированный экспорт</string>
+    <string name="enable_schedule">Включить расписание</string>
+    <string name="disable">Отключить</string>
+    <string name="next_run">Следующий запуск: через 24ч</string>
+    <string name="schedule_set">Экспорт запланирован: %s</string>
+    <string name="schedule_cancelled">Экспорт отменён</string>
+
+    <!-- Data Types -->
+    <string name="data_types">Типы данных</string>
+    <string name="select_all">Выбрать все</string>
+    <string name="deselect_all">Снять все</string>
+    <string name="expand_section">Развернуть раздел</string>
+    <string name="collapse_section">Свернуть раздел</string>
+    <string name="expand_all">Развернуть все</string>
+    <string name="collapse_all">Свернуть все</string>
+    <string name="category_activity">Активность</string>
+    <string name="category_vitals">Жизн. показатели</string>
+    <string name="category_body">Тело</string>
+
+    <!-- Data type names -->
+    <string name="data_type_STEPS">Шаги</string>
+    <string name="data_type_HEART_RATE">Пульс</string>
+    <string name="data_type_SLEEP">Сон</string>
+    <string name="data_type_CALORIES">Калории</string>
+    <string name="data_type_DISTANCE">Дистанция</string>
+    <string name="data_type_FLOORS_CLIMBED">Этажи</string>
+    <string name="data_type_ACTIVE_CALORIES">Активные калории</string>
+    <string name="data_type_WEIGHT">Вес</string>
+    <string name="data_type_BODY_FAT">Жир</string>
+    <string name="data_type_BLOOD_PRESSURE">Давление</string>
+    <string name="data_type_BLOOD_GLUCOSE">Глюкоза</string>
+    <string name="data_type_OXYGEN_SATURATION">Сатурация</string>
+    <string name="data_type_BODY_TEMPERATURE">Температура</string>
+    <string name="data_type_RESPIRATORY_RATE">Дыхание</string>
+    <string name="data_type_HYDRATION">Гидратация</string>
+    <string name="data_type_RESTING_HEART_RATE">Пульс покоя</string>
+    <string name="data_type_EXERCISE">Тренировки</string>
+    <string name="data_type_NUTRITION">Питание</string>
+    <string name="data_type_SPEED">Скорость</string>
+    <string name="data_type_MENSTRUATION">Цикл</string>
+
+    <!-- Export Period -->
+    <string name="export_period">Период экспорта</string>
+    <string name="days_7">7 дней</string>
+    <string name="days_30">30 дней</string>
+    <string name="from_label">С</string>
+    <string name="to_label">По</string>
+
+    <!-- Auto-sync -->
+    <string name="auto_sync_drive">Автосинхронизация с Google Drive</string>
+
+    <!-- Export Button -->
+    <string name="export_data_types">Экспорт %d типов данных</string>
+    <string name="exported_files_title">Экспортировано файлов (%d):</string>
+
+    <!-- File sizes -->
+    <string name="file_size_bytes">%d Б</string>
+    <string name="file_size_kb">%d КБ</string>
+    <string name="file_size_mb">%.1f МБ</string>
+
+    <!-- Webhook -->
+    <string name="webhook">Webhook</string>
+    <string name="webhook_url_label">Webhook URL</string>
+    <string name="webhook_url_placeholder">https://example.com/api/health-data</string>
+    <string name="bearer_token_label">Bearer Token (необязательно)</string>
+    <string name="bearer_token_placeholder">sk-…</string>
+    <string name="enter_url_first">Сначала введите URL webhook</string>
+    <string name="send_json">Отправлять JSON на webhook после экспорта</string>
+
+    <!-- Locale selector -->
+    <string name="locale_switch">Язык</string>
+    <string name="locale_system">Системный</string>
+    <string name="locale_en">English</string>
+    <string name="locale_ru">Русский</string>
+
+    <!-- Frequency -->
+    <string name="freq_manual">Вручную</string>
+    <string name="freq_daily">Ежедневно</string>
+    <string name="freq_weekly">Еженедельно</string>
+
+    <!-- ViewModel messages -->
+    <string name="vm_check_permissions">Проверка разрешений…</string>
+    <string name="vm_permissions_required">Требуются разрешения Health Connect. Подтвердите в открывшемся окне.</string>
+    <string name="vm_reading_data">Чтение данных…</string>
+    <string name="vm_saving_days">Сохранение %d дней…</string>
+    <string name="vm_saved_files">Сохранено %d файлов</string>
+    <string name="vm_export_complete">Экспорт завершён: %d файлов</string>
+    <string name="vm_export_error">Ошибка экспорта: %s</string>
+    <string name="vm_sending_webhook">Отправка на webhook…</string>
+    <string name="vm_webhook_success">Webhook: успешно (%d)</string>
+    <string name="vm_webhook_error">Webhook: ошибка %d — %s</string>
+    <string name="vm_permissions_granted">Разрешения получены. Начинаю экспорт…</string>
+    <string name="vm_permissions_missing">Разрешения Health Connect не предоставлены для: %s. Экспорт невозможен. Откройте приложение Health Connect и разрешите доступ к этим типам данных.</string>
+    <string name="vm_drive_connected">Google аккаунт подключён: %s</string>
+    <string name="vm_drive_signin_error">Не удалось войти: %d</string>
+    <string name="vm_drive_signed_out">Google аккаунт отключён</string>
+    <string name="vm_drive_not_connected">Google Drive не подключён</string>
+    <string name="vm_drive_synced">Синхронизировано с Drive: %d файлов</string>
+    <string name="vm_invalid_url">Неверный формат URL. Должен начинаться с http:// или https://</string>
+    <string name="vm_health_not_available">Не удалось подключиться к Health Connect. Попробуйте перезапустить приложение.</string>
+    <string name="vm_health_not_installed">Health Connect не установлен. Установите приложение Health Connect из Google Play.</string>
+</resources>

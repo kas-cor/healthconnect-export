@@ -29,7 +29,6 @@ data class DailyHealthRecord(
     @SerialName("resting_heart_rate") val restingHeartRate: RestingHeartRateData? = null,
     @SerialName("exercises") val exercises: List<ExerciseData>? = null,
     @SerialName("nutrition") val nutrition: List<NutritionData>? = null,
-    @SerialName("cardiovascular") val cardiovascular: CardiovascularData? = null,
     @SerialName("speed") val speed: SpeedData? = null,
     @SerialName("menstruation") val menstruation: MenstruationData? = null,
     @SerialName("metadata") val metadata: ExportMetadata
@@ -181,12 +180,6 @@ data class MenstruationData(
 )
 
 @Serializable
-data class CardiovascularData(
-    @SerialName("hrv_rmssd_ms") val hrvRmssdMs: Double? = null,
-    @SerialName("records_count") val recordsCount: Int = 0
-)
-
-@Serializable
 data class SpeedData(
     @SerialName("avg_speed_meters_per_second") val avgSpeedMetersPerSecond: Double? = null,
     @SerialName("records_count") val recordsCount: Int = 0
@@ -240,7 +233,6 @@ enum class HealthDataType(val displayName: String) {
     RESTING_HEART_RATE("Resting Heart Rate"),
     EXERCISE("Exercise"),
     NUTRITION("Nutrition"),
-    CARDIOVASCULAR("Cardiovascular"),
     SPEED("Speed"),
     MENSTRUATION("Menstruation")
 }

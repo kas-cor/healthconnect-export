@@ -1,18 +1,123 @@
 <resources>
+    <!-- App -->
     <string name="app_name">HealthConnect Export</string>
-    <string name="export_title">Экспорт Health Connect</string>
-    <string name="select_data_types">Выберите типы данных</string>
-    <string name="select_period">Выберите период</string>
-    <string name="days_count">%d дней</string>
-    <string name="export_button">Экспортировать</string>
-    <string name="sync_drive">Синхронизировать с Google Drive</string>
-    <string name="auto_sync">Автоматическая синхронизация</string>
-    <string name="drive_connected">Google Drive подключён</string>
-    <string name="drive_not_connected">Google Drive не подключён</string>
-    <string name="schedule_daily">Раз в день</string>
-    <string name="schedule_weekly">Раз в неделю</string>
-    <string name="schedule_manual">Вручную</string>
-    <string name="export_progress">Экспорт: %s</string>
-    <string name="export_complete">Экспорт завершён: %d файлов</string>
-    <string name="files_exported">Файлов экспортировано: %d</string>
+    <string name="app_title">HealthConnect Export</string>
+
+    <!-- Theme toggle -->
+    <string name="theme_follow_system">Follow system</string>
+    <string name="theme_switch_light">Switch to light</string>
+    <string name="theme_switch_dark">Switch to dark</string>
+
+    <!-- Drive Status -->
+    <string name="drive_not_connected">Google Drive not connected</string>
+    <string name="drive_connected">Google Drive connected</string>
+    <string name="drive_syncing">Syncing…</string>
+    <string name="drive_synced">Synced: %d files</string>
+    <string name="drive_error">Error: %s</string>
+    <string name="sign_in">Sign in to Google</string>
+    <string name="sync_now">Sync</string>
+    <string name="sign_out">Sign out</string>
+
+    <!-- Scheduled Export -->
+    <string name="scheduled_export">Scheduled Export</string>
+    <string name="enable_schedule">Enable Schedule</string>
+    <string name="disable">Disable</string>
+    <string name="next_run">Next run: in 24h</string>
+    <string name="schedule_set">Scheduled export set: %s</string>
+    <string name="schedule_cancelled">Scheduled export cancelled</string>
+
+    <!-- Data Types -->
+    <string name="data_types">Data Types</string>
+    <string name="select_all">Select all</string>
+    <string name="deselect_all">Deselect all</string>
+    <string name="expand_section">Expand section</string>
+    <string name="collapse_section">Collapse section</string>
+    <string name="expand_all">Expand all</string>
+    <string name="collapse_all">Collapse all</string>
+    <string name="category_activity">Activity</string>
+    <string name="category_vitals">Vital Signs</string>
+    <string name="category_body">Body</string>
+
+    <!-- Data type names -->
+    <string name="data_type_STEPS">Steps</string>
+    <string name="data_type_HEART_RATE">Heart Rate</string>
+    <string name="data_type_SLEEP">Sleep</string>
+    <string name="data_type_CALORIES">Calories</string>
+    <string name="data_type_DISTANCE">Distance</string>
+    <string name="data_type_FLOORS_CLIMBED">Floors Climbed</string>
+    <string name="data_type_ACTIVE_CALORIES">Active Calories</string>
+    <string name="data_type_WEIGHT">Weight</string>
+    <string name="data_type_BODY_FAT">Body Fat</string>
+    <string name="data_type_BLOOD_PRESSURE">Blood Pressure</string>
+    <string name="data_type_BLOOD_GLUCOSE">Blood Glucose</string>
+    <string name="data_type_OXYGEN_SATURATION">Oxygen Saturation</string>
+    <string name="data_type_BODY_TEMPERATURE">Body Temperature</string>
+    <string name="data_type_RESPIRATORY_RATE">Respiratory Rate</string>
+    <string name="data_type_HYDRATION">Hydration</string>
+    <string name="data_type_RESTING_HEART_RATE">Resting Heart Rate</string>
+    <string name="data_type_EXERCISE">Exercise</string>
+    <string name="data_type_NUTRITION">Nutrition</string>
+    <string name="data_type_SPEED">Speed</string>
+    <string name="data_type_MENSTRUATION">Menstruation</string>
+
+    <!-- Export Period -->
+    <string name="export_period">Export Period</string>
+    <string name="days_7">7 days</string>
+    <string name="days_30">30 days</string>
+    <string name="from_label">From</string>
+    <string name="to_label">To</string>
+
+    <!-- Auto-sync -->
+    <string name="auto_sync_drive">Auto-sync with Google Drive</string>
+
+    <!-- Export Button -->
+    <string name="export_data_types">Export %d data types</string>
+    <string name="exported_files_title">Exported files (%d):</string>
+
+    <!-- File sizes -->
+    <string name="file_size_bytes">%d B</string>
+    <string name="file_size_kb">%d KB</string>
+    <string name="file_size_mb">%.1f MB</string>
+
+    <!-- Webhook -->
+    <string name="webhook">Webhook</string>
+    <string name="webhook_url_label">Webhook URL</string>
+    <string name="webhook_url_placeholder">https://example.com/api/health-data</string>
+    <string name="bearer_token_label">Bearer Token (optional)</string>
+    <string name="bearer_token_placeholder">sk-…</string>
+    <string name="enter_url_first">Enter a webhook URL first</string>
+    <string name="send_json">Send JSON to webhook after export</string>
+
+    <!-- Locale selector -->
+    <string name="locale_switch">Language</string>
+    <string name="locale_system">System</string>
+    <string name="locale_en">English</string>
+    <string name="locale_ru">Русский</string>
+
+    <!-- Frequency -->
+    <string name="freq_manual">Manual</string>
+    <string name="freq_daily">Daily</string>
+    <string name="freq_weekly">Weekly</string>
+
+    <!-- ViewModel messages -->
+    <string name="vm_check_permissions">Checking permissions…</string>
+    <string name="vm_permissions_required">Health Connect permissions required. Please confirm in the opened window.</string>
+    <string name="vm_reading_data">Reading data…</string>
+    <string name="vm_saving_days">Saving %d days…</string>
+    <string name="vm_saved_files">Saved %d files</string>
+    <string name="vm_export_complete">Export complete: %d files</string>
+    <string name="vm_export_error">Export error: %s</string>
+    <string name="vm_sending_webhook">Sending to webhook…</string>
+    <string name="vm_webhook_success">Webhook: success (%d)</string>
+    <string name="vm_webhook_error">Webhook: error %d — %s</string>
+    <string name="vm_permissions_granted">Permissions granted. Starting export…</string>
+    <string name="vm_permissions_missing">Health Connect permissions not granted for: %s. Export is not possible. Open Health Connect app and grant access to these data types.</string>
+    <string name="vm_drive_connected">Google account connected: %s</string>
+    <string name="vm_drive_signin_error">Sign-in failed: %d</string>
+    <string name="vm_drive_signed_out">Google account signed out</string>
+    <string name="vm_drive_not_connected">Google Drive not connected</string>
+    <string name="vm_drive_synced">Synced with Drive: %d files</string>
+    <string name="vm_invalid_url">Invalid URL format. Must be http:// or https://</string>
+    <string name="vm_health_not_available">Could not connect to Health Connect. Please restart the app.</string>
+    <string name="vm_health_not_installed">Health Connect is not installed. Please install Health Connect from Google Play.</string>
 </resources>

@@ -13,10 +13,14 @@ android {
         applicationId = "com.healthconnect.export"
         minSdk = 28
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.0"
+        versionCode = 1
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    aaptOptions {
+        noCompress += ".arsc"
     }
 
     buildFeatures {
@@ -26,6 +30,15 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = rootProject.file("healthconnect-release.jks")
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
+            keyAlias = System.getenv("KEY_ALIAS") ?: "healthconnect"
+            keyPassword = System.getenv("KEY_PASSWORD") ?: System.getenv("KEYSTORE_PASSWORD") ?: ""
+        }
     }
 
     buildTypes {
@@ -38,13 +51,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = if (rootProject.file("healthconnect-release.jks").exists()) {
-                signingConfigs.create("release") {
-                    storeFile = rootProject.file("healthconnect-release.jks")
-                    storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
-                    keyAlias = System.getenv("KEY_ALIAS") ?: "healthconnect"
-                    keyPassword = System.getenv("KEY_PASSWORD") ?: System.getenv("KEYSTORE_PASSWORD") ?: ""
-                }
+            val keystoreExists = rootProject.file("healthconnect-release.jks").exists()
+            println("DEBUG SIGNING: keystore exists=$keystoreExists, KEYSTORE_PASSWORD set=${System.getenv("KEYSTORE_PASSWORD") != null}")
+            signingConfig = if (keystoreExists) {
+                signingConfigs.getByName("release")
             } else null
         }
     }

@@ -1,31 +1,71 @@
 package com.healthconnect.export.ui
 
 import android.app.DatePickerDialog
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Air
+import androidx.compose.material.icons.filled.Bloodtype
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.DeviceThermostat
+import androidx.compose.material.icons.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Http
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.MonitorWeight
+import androidx.compose.material.icons.filled.Nightlight
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Scale
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Stairs
+import androidx.compose.material.icons.filled.Straighten
+import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.healthconnect.export.R
 import com.healthconnect.export.data.ExportFrequency
 import com.healthconnect.export.data.HealthDataType
+import kotlinx.coroutines.delay
 import com.healthconnect.export.viewmodel.DriveStatus
 import com.healthconnect.export.viewmodel.ExportViewModel
 import com.healthconnect.export.viewmodel.ScheduleStatus
 import java.time.LocalDate
-import java.util.Locale
 import java.time.format.DateTimeFormatter
 import java.util.Calendar
 
@@ -39,7 +79,6 @@ fun ExportScreen(
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Показываем сообщения через Snackbar
     LaunchedEffect(uiState.message) {
         uiState.message?.let { message ->
             snackbarHostState.showSnackbar(message)
@@ -47,7 +86,6 @@ fun ExportScreen(
         }
     }
 
-    // Запускаем запрос Health Connect permissions, если есть ожидающий набор разрешений
     LaunchedEffect(viewModel.pendingPermissions) {
         viewModel.pendingPermissions?.let { permissions ->
             onRequestHealthPermissions(permissions)
@@ -58,11 +96,78 @@ fun ExportScreen(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("HealthConnect Export") },
+                title = { Text(stringResource(R.string.app_title)) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                ),
+                actions = {
+                    // Locale selector
+                    var showLocaleMenu by remember { mutableStateOf(false) }
+                    val currentLocale = uiState.locale
+                    IconButton(onClick = { showLocaleMenu = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Language,
+                            contentDescription = stringResource(R.string.locale_switch),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showLocaleMenu,
+                        onDismissRequest = { showLocaleMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.locale_system)) },
+                            onClick = {
+                                showLocaleMenu = false
+                                viewModel.setLocale(null)
+                            },
+                            leadingIcon = if (currentLocale == null) {
+                                { Icon(Icons.Default.Check, contentDescription = null) }
+                            } else null
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.locale_en)) },
+                            onClick = {
+                                showLocaleMenu = false
+                                viewModel.setLocale("en")
+                            },
+                            leadingIcon = if (currentLocale == "en") {
+                                { Icon(Icons.Default.Check, contentDescription = null) }
+                            } else null
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.locale_ru)) },
+                            onClick = {
+                                showLocaleMenu = false
+                                viewModel.setLocale("ru")
+                            },
+                            leadingIcon = if (currentLocale == "ru") {
+                                { Icon(Icons.Default.Check, contentDescription = null) }
+                            } else null
+                        )
+                    }
+
+                    // Theme toggle
+                    val (themeIcon, themeDesc) = when {
+                        uiState.isDarkTheme == null -> Icons.Default.Settings to R.string.theme_follow_system
+                        uiState.isDarkTheme == true -> Icons.Default.DarkMode to R.string.theme_switch_dark
+                        else -> Icons.Default.LightMode to R.string.theme_switch_light
+                    }
+                    IconButton(onClick = {
+                        viewModel.setDarkTheme(
+                            if (uiState.isDarkTheme == null) true
+                            else if (uiState.isDarkTheme == true) false
+                            else null
+                        )
+                    }) {
+                        Icon(
+                            imageVector = themeIcon,
+                            contentDescription = stringResource(themeDesc),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
             )
         }
     ) { padding ->
@@ -117,7 +222,9 @@ fun ExportScreen(
                             uiState.selectedTypes + type
                         }
                         viewModel.selectTypes(newTypes)
-                    }
+                    },
+                    onSelectAll = { viewModel.selectTypes(HealthDataType.entries.toSet()) },
+                    onDeselectAll = { viewModel.selectTypes(emptySet()) }
                 )
             }
 
@@ -141,7 +248,7 @@ fun ExportScreen(
                         checked = uiState.autoSyncDrive,
                         onCheckedChange = { viewModel.setAutoSyncDrive(it) }
                     )
-                    Text("Auto-sync with Google Drive")
+                    Text(stringResource(R.string.auto_sync_drive))
                 }
             }
 
@@ -162,40 +269,57 @@ fun ExportScreen(
                     } else {
                         Icon(Icons.Default.Save, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Export ${uiState.selectedTypes.size} data types")
+                        Text(stringResource(R.string.export_data_types, uiState.selectedTypes.size))
                     }
                 }
             }
 
             // Exported Files List
             if (uiState.exportedFiles.isNotEmpty()) {
-                item {
-                    Text(
-                        "Exported files (${uiState.exportedFiles.size}):",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                }
-                items(uiState.exportedFiles) { file ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
+                item(key = "exported_header") {
+                    var headerVisible by remember { mutableStateOf(false) }
+                    LaunchedEffect(Unit) { headerVisible = true }
+                    AnimatedVisibility(
+                        visible = headerVisible,
+                        enter = fadeIn(tween(300)) + slideInVertically(tween(300))
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .padding(12.dp)
-                                .fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
+                        Text(
+                            stringResource(R.string.exported_files_title, uiState.exportedFiles.size),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                }
+                itemsIndexed(uiState.exportedFiles, key = { _, file -> file.absolutePath }) { index, file ->
+                    var itemVisible by remember { mutableStateOf(false) }
+                    LaunchedEffect(Unit) {
+                        delay((30L * index.coerceAtMost(10))) // stagger — до 300мс макс
+                        itemVisible = true
+                    }
+                    AnimatedVisibility(
+                        visible = itemVisible,
+                        enter = fadeIn(tween(300)) + slideInVertically(tween(300))
+                    ) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
                         ) {
-                            Icon(Icons.Default.Save, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(file.name, style = MaterialTheme.typography.bodyMedium)
-                                Text(
-                                    formatFileSize(file.length()),
-                                    style = MaterialTheme.typography.bodySmall
-                                )
+                            Row(
+                                modifier = Modifier
+                                    .padding(12.dp)
+                                    .fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Save, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(file.name, style = MaterialTheme.typography.bodyMedium)
+                                    Text(
+                                        formatFileSize(file.length()),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
                             }
                         }
                     }
@@ -207,27 +331,63 @@ fun ExportScreen(
     }
 }
 
+@Composable
 private fun formatFileSize(bytes: Long): String {
     return when {
-        bytes < 1024 -> "$bytes B"
-        bytes < 1024 * 1024 -> "${bytes / 1024} KB"
-        else -> String.format(Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0))
+        bytes < 1024 -> stringResource(R.string.file_size_bytes, bytes)
+        bytes < 1024 * 1024 -> stringResource(R.string.file_size_kb, bytes / 1024)
+        else -> stringResource(R.string.file_size_mb, bytes / (1024.0 * 1024.0))
     }
 }
+
+// ===== Localized display name helpers =====
+
+@Composable
+private fun exportFrequencyDisplayName(freq: ExportFrequency): String = when (freq) {
+    ExportFrequency.MANUAL -> stringResource(R.string.freq_manual)
+    ExportFrequency.DAILY -> stringResource(R.string.freq_daily)
+    ExportFrequency.WEEKLY -> stringResource(R.string.freq_weekly)
+}
+
+@Composable
+private fun healthDataTypeDisplayName(type: HealthDataType): String = when (type) {
+    HealthDataType.STEPS -> stringResource(R.string.data_type_STEPS)
+    HealthDataType.HEART_RATE -> stringResource(R.string.data_type_HEART_RATE)
+    HealthDataType.SLEEP -> stringResource(R.string.data_type_SLEEP)
+    HealthDataType.CALORIES -> stringResource(R.string.data_type_CALORIES)
+    HealthDataType.DISTANCE -> stringResource(R.string.data_type_DISTANCE)
+    HealthDataType.FLOORS_CLIMBED -> stringResource(R.string.data_type_FLOORS_CLIMBED)
+    HealthDataType.ACTIVE_CALORIES -> stringResource(R.string.data_type_ACTIVE_CALORIES)
+    HealthDataType.WEIGHT -> stringResource(R.string.data_type_WEIGHT)
+    HealthDataType.BODY_FAT -> stringResource(R.string.data_type_BODY_FAT)
+    HealthDataType.BLOOD_PRESSURE -> stringResource(R.string.data_type_BLOOD_PRESSURE)
+    HealthDataType.BLOOD_GLUCOSE -> stringResource(R.string.data_type_BLOOD_GLUCOSE)
+    HealthDataType.OXYGEN_SATURATION -> stringResource(R.string.data_type_OXYGEN_SATURATION)
+    HealthDataType.BODY_TEMPERATURE -> stringResource(R.string.data_type_BODY_TEMPERATURE)
+    HealthDataType.RESPIRATORY_RATE -> stringResource(R.string.data_type_RESPIRATORY_RATE)
+    HealthDataType.HYDRATION -> stringResource(R.string.data_type_HYDRATION)
+    HealthDataType.RESTING_HEART_RATE -> stringResource(R.string.data_type_RESTING_HEART_RATE)
+    HealthDataType.EXERCISE -> stringResource(R.string.data_type_EXERCISE)
+    HealthDataType.NUTRITION -> stringResource(R.string.data_type_NUTRITION)
+    HealthDataType.SPEED -> stringResource(R.string.data_type_SPEED)
+    HealthDataType.MENSTRUATION -> stringResource(R.string.data_type_MENSTRUATION)
+}
+
+// ===== Drive Status Card =====
 
 @Composable
 fun DriveStatusCard(status: DriveStatus, onSync: () -> Unit, onSignInClick: () -> Unit, onSignOutClick: () -> Unit) {
     val (icon, title, color) = when (status) {
         is DriveStatus.NotConnected ->
-            Triple(Icons.Default.CloudOff, "Google Drive not connected", MaterialTheme.colorScheme.error)
+            Triple(Icons.Default.CloudOff, stringResource(R.string.drive_not_connected), MaterialTheme.colorScheme.error)
         is DriveStatus.Connected ->
-            Triple(Icons.Default.Cloud, "Google Drive connected", MaterialTheme.colorScheme.primary)
+            Triple(Icons.Default.Cloud, stringResource(R.string.drive_connected), MaterialTheme.colorScheme.primary)
         is DriveStatus.Syncing ->
-            Triple(Icons.Default.Refresh, "Syncing...", MaterialTheme.colorScheme.tertiary)
+            Triple(Icons.Default.Refresh, stringResource(R.string.drive_syncing), MaterialTheme.colorScheme.tertiary)
         is DriveStatus.Synced ->
-            Triple(Icons.Default.Cloud, "Synced: ${status.filesCount} files", MaterialTheme.colorScheme.primary)
+            Triple(Icons.Default.Cloud, stringResource(R.string.drive_synced, status.filesCount), MaterialTheme.colorScheme.primary)
         is DriveStatus.Error ->
-            Triple(Icons.Default.CloudOff, "Error: ${status.error}", MaterialTheme.colorScheme.error)
+            Triple(Icons.Default.CloudOff, stringResource(R.string.drive_error, status.error), MaterialTheme.colorScheme.error)
     }
 
     Card(
@@ -249,15 +409,15 @@ fun DriveStatusCard(status: DriveStatus, onSync: () -> Unit, onSignInClick: () -
             when (status) {
                 is DriveStatus.NotConnected, is DriveStatus.Error -> {
                     TextButton(onClick = onSignInClick) {
-                        Text("Sign in to Google")
+                        Text(stringResource(R.string.sign_in))
                     }
                 }
                 is DriveStatus.Connected, is DriveStatus.Synced -> {
                     TextButton(onClick = onSync) {
-                        Text("Sync")
+                        Text(stringResource(R.string.sync_now))
                     }
                     TextButton(onClick = onSignOutClick) {
-                        Text("Sign out")
+                        Text(stringResource(R.string.sign_out))
                     }
                 }
                 is DriveStatus.Syncing -> {
@@ -267,6 +427,8 @@ fun DriveStatusCard(status: DriveStatus, onSync: () -> Unit, onSignInClick: () -
         }
     }
 }
+
+// ===== Schedule Card =====
 
 @Composable
 fun ScheduleCard(
@@ -284,7 +446,8 @@ fun ScheduleCard(
             ) {
                 Icon(Icons.Default.Schedule, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                    Text("Scheduled Export",
+                Text(
+                    stringResource(R.string.scheduled_export),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f)
                 )
@@ -292,7 +455,6 @@ fun ScheduleCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Frequency selector
             ExportFrequency.entries.forEach { freq ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -302,18 +464,17 @@ fun ScheduleCard(
                         selected = frequency == freq,
                         onClick = { onFrequencyChange(freq) }
                     )
-                    Text(freq.displayName)
+                    Text(exportFrequencyDisplayName(freq))
                 }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Schedule status and actions
             when (scheduleStatus) {
                 is ScheduleStatus.NotScheduled -> {
                     if (frequency != ExportFrequency.MANUAL) {
                         Button(onClick = onSchedule, modifier = Modifier.fillMaxWidth()) {
-                            Text("Enable Schedule")
+                            Text(stringResource(R.string.enable_schedule))
                         }
                     }
                 }
@@ -321,7 +482,7 @@ fun ScheduleCard(
                     Text(scheduleStatus.nextRun, style = MaterialTheme.typography.bodySmall)
                     Spacer(modifier = Modifier.height(4.dp))
                     OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
-                            Text("Disable")
+                        Text(stringResource(R.string.disable))
                     }
                 }
                 is ScheduleStatus.Running -> {
@@ -332,31 +493,292 @@ fun ScheduleCard(
     }
 }
 
+// ===== Data Type Selection Card =====
+
+private enum class DataTypeCategory(val icon: ImageVector) {
+    ACTIVITY(Icons.Default.Bolt),
+    VITALS(Icons.Default.Favorite),
+    BODY(Icons.Default.Person)
+}
+
+@Composable
+private fun dataTypeCategoryDisplayName(category: DataTypeCategory): String = when (category) {
+    DataTypeCategory.ACTIVITY -> stringResource(R.string.category_activity)
+    DataTypeCategory.VITALS -> stringResource(R.string.category_vitals)
+    DataTypeCategory.BODY -> stringResource(R.string.category_body)
+}
+
+private fun categoryForType(type: HealthDataType): DataTypeCategory = when (type) {
+    HealthDataType.STEPS, HealthDataType.DISTANCE, HealthDataType.FLOORS_CLIMBED,
+    HealthDataType.CALORIES, HealthDataType.ACTIVE_CALORIES,
+    HealthDataType.EXERCISE, HealthDataType.SPEED -> DataTypeCategory.ACTIVITY
+
+    HealthDataType.HEART_RATE, HealthDataType.RESTING_HEART_RATE,
+    HealthDataType.BLOOD_PRESSURE, HealthDataType.BLOOD_GLUCOSE,
+    HealthDataType.OXYGEN_SATURATION, HealthDataType.BODY_TEMPERATURE,
+    HealthDataType.RESPIRATORY_RATE -> DataTypeCategory.VITALS
+
+    HealthDataType.WEIGHT, HealthDataType.BODY_FAT, HealthDataType.HYDRATION,
+    HealthDataType.SLEEP, HealthDataType.NUTRITION, HealthDataType.MENSTRUATION -> DataTypeCategory.BODY
+}
+
+private val dataTypesByCategory: Map<DataTypeCategory, List<HealthDataType>> by lazy {
+    HealthDataType.entries.groupBy { categoryForType(it) }
+}
+
 @Composable
 fun DataTypeCard(
     selectedTypes: Set<HealthDataType>,
-    onTypeToggle: (HealthDataType) -> Unit
+    onTypeToggle: (HealthDataType) -> Unit,
+    onSelectAll: () -> Unit,
+    onDeselectAll: () -> Unit
 ) {
+    val allSelected = selectedTypes.size == HealthDataType.entries.size
+    val noneSelected = selectedTypes.isEmpty()
+
+    // Состояние раскрытия категорий — все раскрыты по умолчанию
+    val expandedStates = remember {
+        mutableStateMapOf<DataTypeCategory, Boolean>().apply {
+            DataTypeCategory.entries.forEach { put(it, true) }
+        }
+    }
+
     Card {
         Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Data Types", style = MaterialTheme.typography.titleMedium)
+            // Header row
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    stringResource(R.string.data_types),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = if (noneSelected) MaterialTheme.colorScheme.surfaceVariant
+                             else MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Text(
+                        "${selectedTypes.size} / ${HealthDataType.entries.size}",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (noneSelected) MaterialTheme.colorScheme.onSurfaceVariant
+                                else MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(8.dp))
 
-            HealthDataType.entries.forEach { type ->
+            // Select / Deselect All
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = onSelectAll,
+                    enabled = !allSelected,
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Text(stringResource(R.string.select_all), style = MaterialTheme.typography.labelSmall)
+                }
+                OutlinedButton(
+                    onClick = onDeselectAll,
+                    enabled = !noneSelected,
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Text(stringResource(R.string.deselect_all), style = MaterialTheme.typography.labelSmall)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Expand / Collapse All buttons
+            val allExpanded = DataTypeCategory.entries.all { expandedStates[it] == true }
+            val allCollapsed = DataTypeCategory.entries.all { expandedStates[it] == false }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        DataTypeCategory.entries.forEach { expandedStates[it] = true }
+                    },
+                    enabled = !allExpanded,
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Text(stringResource(R.string.expand_all), style = MaterialTheme.typography.labelSmall)
+                }
+                OutlinedButton(
+                    onClick = {
+                        DataTypeCategory.entries.forEach { expandedStates[it] = false }
+                    },
+                    enabled = !allCollapsed,
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Text(stringResource(R.string.collapse_all), style = MaterialTheme.typography.labelSmall)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Collapsible categories
+            DataTypeCategory.entries.forEachIndexed { index, category ->
+                val types = dataTypesByCategory[category] ?: return@forEachIndexed
+                val selectedInCategory = types.count { selectedTypes.contains(it) }
+                val expanded = expandedStates[category] ?: true
+
+                // Clickable category header
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            expandedStates[category] = !expanded
+                        }
+                        .padding(vertical = 4.dp)
                 ) {
-                    Checkbox(
-                        checked = selectedTypes.contains(type),
-                        onCheckedChange = { onTypeToggle(type) }
+                    // Icon badge
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Icon(
+                            imageVector = category.icon,
+                            contentDescription = dataTypeCategoryDisplayName(category),
+                            modifier = Modifier
+                                .padding(6.dp)
+                                .size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // Title
+                    Text(
+                        dataTypeCategoryDisplayName(category),
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.weight(1f)
                     )
-                    Text(type.displayName)
+
+                    // Selected counter
+                    Text(
+                        "$selectedInCategory / ${types.size}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // Animated chevron
+                    val chevronRotation by animateFloatAsState(
+                        targetValue = if (expanded) 180f else 0f,
+                        animationSpec = tween(durationMillis = 200),
+                        label = "chevronRotation"
+                    )
+                    Icon(
+                        imageVector = Icons.Default.ExpandMore,
+                        contentDescription = if (expanded) stringResource(R.string.collapse_section)
+                                             else stringResource(R.string.expand_section),
+                        modifier = Modifier
+                            .size(20.dp)
+                            .rotate(chevronRotation),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Animated content
+                AnimatedVisibility(
+                    visible = expanded,
+                    enter = expandVertically(
+                        animationSpec = tween(durationMillis = 250)
+                    ),
+                    exit = shrinkVertically(
+                        animationSpec = tween(durationMillis = 200)
+                    )
+                ) {
+                    val mid = (types.size + 1) / 2
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            types.take(mid).forEach { type ->
+                                DataTypeRow(type, selectedTypes, onTypeToggle)
+                            }
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            types.drop(mid).forEach { type ->
+                                DataTypeRow(type, selectedTypes, onTypeToggle)
+                            }
+                        }
+                    }
+                }
+
+                // Spacer between categories
+                if (index < DataTypeCategory.entries.lastIndex) {
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
         }
     }
 }
+
+@Composable
+fun DataTypeRow(
+    type: HealthDataType,
+    selectedTypes: Set<HealthDataType>,
+    onTypeToggle: (HealthDataType) -> Unit
+) {
+    val displayName = healthDataTypeDisplayName(type)
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(36.dp)
+    ) {
+        Checkbox(
+            checked = selectedTypes.contains(type),
+            onCheckedChange = { onTypeToggle(type) },
+            modifier = Modifier.size(20.dp)
+        )
+        Icon(
+            imageVector = iconForType(type),
+            contentDescription = displayName,
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            displayName,
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+}
+
+private fun iconForType(type: HealthDataType): ImageVector = when (type) {
+    HealthDataType.STEPS -> Icons.Default.DirectionsWalk
+    HealthDataType.HEART_RATE -> Icons.Default.Favorite
+    HealthDataType.SLEEP -> Icons.Default.Nightlight
+    HealthDataType.CALORIES -> Icons.Default.LocalFireDepartment
+    HealthDataType.DISTANCE -> Icons.Default.Straighten
+    HealthDataType.FLOORS_CLIMBED -> Icons.Default.Stairs
+    HealthDataType.ACTIVE_CALORIES -> Icons.Default.Bolt
+    HealthDataType.WEIGHT -> Icons.Default.MonitorWeight
+    HealthDataType.BODY_FAT -> Icons.Default.Scale
+    HealthDataType.BLOOD_PRESSURE -> Icons.Default.FavoriteBorder
+    HealthDataType.BLOOD_GLUCOSE -> Icons.Default.Bloodtype
+    HealthDataType.OXYGEN_SATURATION -> Icons.Default.Air
+    HealthDataType.BODY_TEMPERATURE -> Icons.Default.DeviceThermostat
+    HealthDataType.RESPIRATORY_RATE -> Icons.Default.Air
+    HealthDataType.HYDRATION -> Icons.Default.WaterDrop
+    HealthDataType.RESTING_HEART_RATE -> Icons.Default.FavoriteBorder
+    HealthDataType.EXERCISE -> Icons.Default.FitnessCenter
+    HealthDataType.NUTRITION -> Icons.Default.Restaurant
+    HealthDataType.SPEED -> Icons.Default.Speed
+    HealthDataType.MENSTRUATION -> Icons.Default.CalendarMonth
+}
+
+// ===== Date Range Card =====
 
 @Composable
 fun DateRangeCard(
@@ -367,41 +789,77 @@ fun DateRangeCard(
 ) {
     val context = LocalContext.current
 
+    val preset7dStart = LocalDate.now().minusDays(7)
+    val preset7dEnd = LocalDate.now().minusDays(1)
+    val preset30dStart = LocalDate.now().minusDays(30)
+    val preset30dEnd = LocalDate.now().minusDays(1)
+
+    val is7dPreset = startDate == preset7dStart && endDate == preset7dEnd
+    val is30dPreset = startDate == preset30dStart && endDate == preset30dEnd
+
     Card {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("Export Period", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.export_period), style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Quick period buttons
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = {
-                    onStartDateChange(LocalDate.now().minusDays(7))
-                    onEndDateChange(LocalDate.now().minusDays(1))
-                }) {
-                    Text("7 days")
+                // 7 days preset
+                if (is7dPreset) {
+                    Button(
+                        onClick = {
+                            onStartDateChange(preset7dStart)
+                            onEndDateChange(preset7dEnd)
+                        }
+                    ) {
+                        Text(stringResource(R.string.days_7))
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = {
+                            onStartDateChange(preset7dStart)
+                            onEndDateChange(preset7dEnd)
+                        }
+                    ) {
+                        Text(stringResource(R.string.days_7))
+                    }
                 }
-                OutlinedButton(onClick = {
-                    onStartDateChange(LocalDate.now().minusDays(30))
-                    onEndDateChange(LocalDate.now().minusDays(1))
-                }) {
-                    Text("30 days")
+                // 30 days preset
+                if (is30dPreset) {
+                    Button(
+                        onClick = {
+                            onStartDateChange(preset30dStart)
+                            onEndDateChange(preset30dEnd)
+                        }
+                    ) {
+                        Text(stringResource(R.string.days_30))
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = {
+                            onStartDateChange(preset30dStart)
+                            onEndDateChange(preset30dEnd)
+                        }
+                    ) {
+                        Text(stringResource(R.string.days_30))
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Date pickers
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 DatePickerButton(
-                    label = "From",
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.from_label),
                     date = startDate,
                     onDateSelected = onStartDateChange
                 )
                 DatePickerButton(
-                    label = "To",
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.to_label),
                     date = endDate,
                     onDateSelected = onEndDateChange
                 )
@@ -411,25 +869,70 @@ fun DateRangeCard(
 }
 
 @Composable
-fun DatePickerButton(label: String, date: LocalDate, onDateSelected: (LocalDate) -> Unit) {
+fun DatePickerButton(modifier: Modifier = Modifier, label: String, date: LocalDate, onDateSelected: (LocalDate) -> Unit) {
     val context = LocalContext.current
 
-    OutlinedButton(onClick = {
-        val calendar = Calendar.getInstance()
-        calendar.set(date.year, date.monthValue - 1, date.dayOfMonth)
-        DatePickerDialog(
-            context,
-            { _, year, month, day ->
-                onDateSelected(LocalDate.of(year, month + 1, day))
-            },
-            calendar.get(Calendar.YEAR),
-            calendar.get(Calendar.MONTH),
-            calendar.get(Calendar.DAY_OF_MONTH)
-        ).show()
-    }) {
-        Text("$label: ${date.format(DateTimeFormatter.ISO_LOCAL_DATE)}")
+    // Check if date is at a preset value (defaults)
+    val isPreset = date == LocalDate.now().minusDays(7) ||
+        date == LocalDate.now().minusDays(1) ||
+        date == LocalDate.now()
+
+    val containerColor = if (isPreset) MaterialTheme.colorScheme.surfaceVariant
+                         else MaterialTheme.colorScheme.primaryContainer
+    val contentColor = if (isPreset) MaterialTheme.colorScheme.onSurface
+                       else MaterialTheme.colorScheme.onPrimaryContainer
+    val labelColor = if (isPreset) MaterialTheme.colorScheme.onSurfaceVariant
+                     else MaterialTheme.colorScheme.onPrimaryContainer
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = containerColor,
+        modifier = modifier
+            .height(56.dp)
+            .clickable {
+                val calendar = Calendar.getInstance()
+                calendar.set(date.year, date.monthValue - 1, date.dayOfMonth)
+                DatePickerDialog(
+                    context,
+                    { _, year, month, day ->
+                        onDateSelected(LocalDate.of(year, month + 1, day))
+                    },
+                    calendar.get(Calendar.YEAR),
+                    calendar.get(Calendar.MONTH),
+                    calendar.get(Calendar.DAY_OF_MONTH)
+                ).show()
+            }
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 12.dp)
+                .fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.CalendarMonth,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = contentColor
+            )
+            Column {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = labelColor
+                )
+                Text(
+                    text = date.format(DateTimeFormatter.ofPattern("MMM d, yyyy")),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = contentColor
+                )
+            }
+        }
     }
 }
+
+// ===== Webhook Card =====
 
 @Composable
 fun WebhookCard(
@@ -452,7 +955,7 @@ fun WebhookCard(
                 Icon(Icons.Default.Http, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    "Webhook",
+                    stringResource(R.string.webhook),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f)
                 )
@@ -463,8 +966,8 @@ fun WebhookCard(
             OutlinedTextField(
                 value = webhookUrl,
                 onValueChange = onUrlChange,
-                label = { Text("Webhook URL") },
-                placeholder = { Text("https://example.com/api/health-data") },
+                label = { Text(stringResource(R.string.webhook_url_label)) },
+                placeholder = { Text(stringResource(R.string.webhook_url_placeholder)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 isError = urlHasError,
@@ -479,8 +982,8 @@ fun WebhookCard(
             OutlinedTextField(
                 value = webhookAuthToken,
                 onValueChange = onTokenChange,
-                label = { Text("Bearer Token (optional)") },
-                placeholder = { Text("sk-...") },
+                label = { Text(stringResource(R.string.bearer_token_label)) },
+                placeholder = { Text(stringResource(R.string.bearer_token_placeholder)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
@@ -498,8 +1001,8 @@ fun WebhookCard(
                     enabled = webhookUrl.isNotBlank()
                 )
                 Text(
-                    if (webhookUrl.isBlank()) "Enter a webhook URL first"
-                    else "Send JSON to webhook after export"
+                    if (webhookUrl.isBlank()) stringResource(R.string.enter_url_first)
+                    else stringResource(R.string.send_json)
                 )
             }
         }

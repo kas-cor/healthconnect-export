@@ -12,6 +12,7 @@ local.properties
 
 # QWEN context
 .qwen/
+QWEN.md
 
 # Secrets
 client_secret_*.json

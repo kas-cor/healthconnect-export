@@ -9,7 +9,7 @@ Android app for exporting Google Health Connect data to JSON format with optiona
 - **Scheduled export** — daily or weekly via WorkManager
 - **Google Drive sync** — optional, auto-sync to Drive
 - **Webhook delivery** — POST JSON to a URL (with optional Bearer auth)
-- **21 data types** — steps, heart rate, sleep, calories, exercise, nutrition, and more
+- **20 data types** — steps, heart rate, sleep, calories, exercise, nutrition, and more
 - **Date range selection** — last 7/30 days or custom range
 - **Manual + automatic** — export on demand or on schedule
 
@@ -58,19 +58,75 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ## CI/CD 🚀
 
-Automated builds on every push to `main`:
-- Lint → unit tests → coverage → debug APK
-- On tag push (`v*`): release APK + GitHub Release
+Workflow: `.github/workflows/build-apk.yml`
+
+### Triggers
+
+- **Push** to `main`, `develop`
+- **Pull Request** to `main`
+- **Push tag** `v*` (e.g., `v1.1`)
+- **Manual** via `workflow_dispatch`
+
+### Pipeline
+
+```
+Push → Lint → Unit tests → Coverage → Debug APK
+Tag push → + Decode keystore → Sign → Release APK → GitHub Release
+```
+
+### GitHub Secrets
+
+| Secret | Description |
+|---|---|
+| `KEYSTORE_BASE64` | `healthconnect-release.jks` in base64 |
+| `KEYSTORE_PASSWORD` | Keystore password |
+| `KEY_ALIAS` | Key alias (default: `healthconnect`) |
+| `KEY_PASSWORD` | Key password (falls back to `KEYSTORE_PASSWORD`) |
+
+### Release
+
+```bash
+git tag v1.1
+git push origin v1.1
+# CI: bump version → build → create GitHub Release
+```
 
 [Workflow](.github/workflows/build-apk.yml)
 
 ## Google Drive setup 🔐
 
-1. [Google Cloud Console](https://console.cloud.google.com/)
-2. Create OAuth 2.0 Client ID (Android)
-3. Package: `com.healthconnect.export` + SHA-1
-4. Enable Google Drive API
-5. Scope: `DRIVE_FILE`
+Для Google Sign-In требуется **два** OAuth Client ID в одном Google Cloud Project:
+
+| Тип | Client ID | Назначение |
+|---|---|---|
+| **Android** (OAuth) | `730530422387-oaffqtrvfd1rqr6jn1uq8791mgbbpmlj` | Проверка SHA-1 + package name (Google Play Services) |
+| **Web application** (OAuth) | `730530422387-dveo97h089iesh4etmj74q9dn8j221f1` | `requestIdToken()` в коде |
+
+### SHA-1 fingerprints
+
+| Build type | SHA-1 fingerprint |
+|---|---|
+| **Release** | `2A:BF:A4:CA:62:59:78:A2:5D:78:FD:74:2D:CB:CA:07:D2:37:42:72` |
+| **Debug** | `8B:BB:D1:45:E2:61:5B:02:57:E1:3F:26:29:1A:AF:F0:2C:40:77:73` |
+
+### OAuth consent screen
+
+1. Откройте [OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent)
+2. Тип: **External** → **Testing** (не требуется верификация)
+3. Добавьте **Test users** — свой email
+4. На шаге **Scopes** добавьте `https://www.googleapis.com/auth/drive.file`
+
+### Required APIs
+
+- [Google Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com) — `ENABLED`
+- [Identity Toolkit API](https://console.cloud.google.com/apis/library/identitytoolkit.googleapis.com) — `ENABLED`
+
+### Verify signing
+
+```bash
+apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
+# SHA-1: 2abfa4ca625978a25d78fd742dcbca07d2374272
+```
 
 ## Webhook 📡
 
@@ -86,18 +142,33 @@ After export, JSON can be sent to any URL:
 - Default: Daily (auto-enabled at startup)
 - Uses WorkManager `PeriodicWorkRequest`
 
+## Permissions
+
+| Permission | Purpose |
+|---|---|
+| `INTERNET` | Drive sync + webhook |
+| `ACCESS_NETWORK_STATE` | Network check |
+| `FOREGROUND_SERVICE` | Scheduled work |
+| `RECEIVE_BOOT_COMPLETED` | Reschedule after reboot |
+| `health.READ_*` | Health Connect data types (20 types) |
+
 ## Tech stack
 
 | Component | Version |
 |---|---|
-| Kotlin | 2.1.20 |
-| Compose / Material3 | BOM 2024.02 |
-| AGP / Gradle | 9.1.1 / 9.4.1 |
-| Health Connect | 1.1.0 |
-| minSdk / targetSdk | 28 / 36 |
+| Language | Kotlin 2.1.20 |
+| UI | Jetpack Compose + Material3 (BOM 2024.02) |
+| Build | AGP 9.1.1 / Gradle 9.4.1 |
+| Health Connect | `connect-client:1.1.0` |
+| Google Drive | `google-api-services-drive:v3`, `google-http-client-gson` |
+| Auth | `play-services-auth:21.0.0` |
+| Background | WorkManager `work-runtime-ktx:2.9.0` |
+| Serialization | `kotlinx-serialization-json:1.6.2` |
+| minSdk / targetSdk / compileSdk | 28 / 36 / 36 |
 | JVM | 21 |
 | Testing | JUnit 4.13.2, Mockito 5.11.0 |
 | Coverage | JaCoCo 0.8.11 |
+| CI | GitHub Actions |
 
 ## License 📄
 

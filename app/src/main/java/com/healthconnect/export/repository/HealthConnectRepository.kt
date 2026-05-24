@@ -121,7 +121,6 @@ class HealthConnectRepository(private val context: Context) {
                 HealthDataType.EXERCISE -> permissions.add(HealthPermission.getReadPermission(ExerciseSessionRecord::class))
                 HealthDataType.NUTRITION -> permissions.add(HealthPermission.getReadPermission(NutritionRecord::class))
                 HealthDataType.MENSTRUATION -> permissions.add(HealthPermission.getReadPermission(MenstruationFlowRecord::class))
-                HealthDataType.CARDIOVASCULAR -> permissions.add(HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class))
                 HealthDataType.SPEED -> permissions.add(HealthPermission.getReadPermission(SpeedRecord::class))
             }
         }
@@ -184,7 +183,6 @@ class HealthConnectRepository(private val context: Context) {
             restingHeartRate = if (types.contains(HealthDataType.RESTING_HEART_RATE)) readRestingHeartRate(timeFilter) else null,
             exercises = if (types.contains(HealthDataType.EXERCISE)) readExercises(timeFilter) else null,
             nutrition = if (types.contains(HealthDataType.NUTRITION)) readNutrition(timeFilter) else null,
-            cardiovascular = if (types.contains(HealthDataType.CARDIOVASCULAR)) readCardiovascular(timeFilter) else null,
             speed = if (types.contains(HealthDataType.SPEED)) readSpeed(timeFilter) else null,
             menstruation = if (types.contains(HealthDataType.MENSTRUATION)) readMenstruation(timeFilter) else null,
             metadata = metadata
@@ -538,17 +536,6 @@ class HealthConnectRepository(private val context: Context) {
                 vitaminDMcg = record.vitaminD?.inMicrograms
             )
         }
-    }
-
-    private suspend fun readCardiovascular(filter: TimeRangeFilter): CardiovascularData? {
-        val c = client ?: return null
-        val response = c.readRecords(ReadRecordsRequest(HeartRateVariabilityRmssdRecord::class, timeRangeFilter = filter))
-        if (allRecords.isEmpty()) return null
-        val avgHrv = allRecords.map { it.heartRateVariabilityMillis }.average()
-        return CardiovascularData(
-            hrvRmssdMs = avgHrv,
-            recordsCount = allRecords.size
-        )
     }
 
     private suspend fun readSpeed(filter: TimeRangeFilter): SpeedData? {

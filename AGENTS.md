@@ -202,17 +202,49 @@ Workflow: `.github/workflows/build-apk.yml`
 
 > **Security:** Never commit `.jks`, `.base64`, or password files to git. The `.gitignore` already excludes `*.jks`, `*.base64`, `.keystore_password.txt`.
 
-### Google Cloud Console — SHA-1 fingerprint
+### Google Cloud Console — Credentials
 
-After creating a new keystore, update the OAuth 2.0 Client ID in Google Cloud Console with the new SHA-1 fingerprint:
+Для Google Sign-In на Android требуется **два** OAuth Client ID в одном Google Cloud Project:
+
+| Тип | Client ID | Назначение |
+|---|---|---|
+| **Android** (OAuth) | `730530422387-oaffqtrvfd1rqr6jn1uq8791mgbbpmlj` | Проверка SHA-1 + package name (Google Play Services) |
+| **Web application** (OAuth) | `730530422387-dveo97h089iesh4etmj74q9dn8j221f1` | `requestIdToken()` в коде (генерация ID token) |
+
+#### SHA-1 fingerprints
+
+Оба SHA-1 отпечатка добавлены в **Android OAuth Client ID** в Google Cloud Console:
+
+| Build type | SHA-1 fingerprint | Команда |
+|---|---|---|
+| **Release** | `2A:BF:A4:CA:62:59:78:A2:5D:78:FD:74:2D:CB:CA:07:D2:37:42:72` | `keytool -list -v -keystore healthconnect-release.jks` |
+| **Debug** | `8B:BB:D1:45:E2:61:5B:02:57:E1:3F:26:29:1A:AF:F0:2C:40:77:73` | `keytool -list -v -keystore ~/.android/debug.keystore -storepass android` |
+
+#### Проверка SHA-1 из APK
 
 ```bash
-keytool -list -v -keystore healthconnect-release.jks -storepass <password> | grep SHA1
-# Example output:
-# SHA1: 2A:BF:A4:CA:62:59:78:A2:5D:78:FD:74:2D:CB:CA:07:D2:37:42:72
+# Убедиться, что APK подписан правильным ключом
+apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
+# Должен показать: SHA-1: 2abfa4ca625978a25d78fd742dcbca07d2374272
 ```
 
-Add this SHA-1 to the existing Android OAuth client ID in [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials → Edit Android client.
+**Важно:**
+- `requestIdToken()` в коде использует **Web Client ID**, а Android Client ID остаётся в Google Cloud Console для верификации
+- Оба Client ID должны быть в одном Google Cloud Project
+- SHA-1 из `healthconnect-release.jks` (`2A:BF:A4:CA:...`) добавлен в Android Client ID
+
+#### Настройка OAuth consent screen
+
+1. Откройте [OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent)
+2. Тип: **External**
+3. **Testing** (не требуется верификация)
+4. Обязательно добавьте **Test users** — свой email
+5. На шаге **Scopes** добавьте `https://www.googleapis.com/auth/drive.file`
+
+#### Включённые API
+
+- [Google Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com) — `ENABLED`
+- [Identity Toolkit API](https://console.cloud.google.com/apis/library/identitytoolkit.googleapis.com) — `ENABLED`
 
 ### Release process
 
@@ -251,7 +283,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | `ACCESS_NETWORK_STATE` | Network check |
 | `FOREGROUND_SERVICE` | Scheduled work |
 | `RECEIVE_BOOT_COMPLETED` | Reschedule after reboot |
-| `health.READ_*` | Health Connect data types (21 types) |
+| `health.READ_*` | Health Connect data types (20 types) |
 
 ---
 
@@ -281,11 +313,36 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ## Google Drive setup
 
-1. Create OAuth 2.0 Client ID (Android) in Google Cloud Console
-2. Package name: `com.healthconnect.export`
-3. SHA-1 certificate fingerprint
-4. Enable Google Drive API
-5. Scope: `DRIVE_FILE`
+### 1. Google Cloud Console
+
+1. Создайте **Android OAuth Client ID**:
+   - Тип: **Android**
+   - Package name: `com.healthconnect.export`
+   - SHA-1: Release `2A:BF:A4:CA:62:59:78:A2:5D:78:FD:74:2D:CB:CA:07:D2:37:42:72`
+2. Создайте **Web Application Client ID**:
+   - Тип: **Web application**
+   - Authorized redirect URIs: не нужны (используется для `requestIdToken`)
+3. Настройте **OAuth consent screen** (External / Testing)
+4. Включите **Google Drive API**
+5. Включите **Identity Toolkit API**
+
+### 2. Код
+
+```kotlin
+// GoogleDriveRepository.kt
+fun getSignInOptions(): GoogleSignInOptions {
+    return GoogleSignInOptions.Builder()
+        .requestEmail()
+        .requestIdToken("730530422387-dveo97h089iesh4etmj74q9dn8j221f1.apps.googleusercontent.com")
+        .requestScopes(Scope(DriveScopes.DRIVE_FILE))
+        .build()
+}
+```
+
+**Важно:**
+- `requestIdToken()` использует **Web Client ID** — это обязательно для Google Sign-In
+- Android Client ID с SHA-1 остаётся в Google Cloud Console для верификации приложения
+- Scope `DRIVE_FILE` даёт доступ к файлам, созданным этим приложением
 
 ---
 
