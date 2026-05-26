@@ -256,7 +256,7 @@ dependencies {
     implementation("com.google.apis:google-api-services-drive:v3-rev20240123-2.0.0")
 
     // WorkManager for background tasks
-    implementation("androidx.work:work-runtime-ktx:2.9.0")
+    implementation("androidx.work:work-runtime-ktx:2.11.2")
 
     // Serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
@@ -265,7 +265,7 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.mockito:mockito-core:5.11.0")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.3.1")
-    testImplementation("androidx.work:work-testing:2.9.0")
+    testImplementation("androidx.work:work-testing:2.11.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
     testImplementation("org.robolectric:robolectric:4.12.2")
     testImplementation("androidx.compose.ui:ui-test-junit4")
