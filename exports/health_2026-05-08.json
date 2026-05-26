@@ -1,0 +1,47 @@
+{
+    "date": "2026-05-08",
+    "steps": {
+        "total_steps": 5249,
+        "records_count": 341
+    },
+    "heart_rate": {
+        "avg_bpm": 92.79718309859155,
+        "min_bpm": 61,
+        "max_bpm": 143,
+        "records_count": 20
+    },
+    "sleep": {
+        "total_duration_minutes": 237,
+        "sleep_stages": {
+            "Other (7)": 13,
+            "REM sleep": 191,
+            "Out of bed": 15,
+            "Other (6)": 14
+        },
+        "records_count": 1
+    },
+    "calories": {
+        "total_calories_kcal": 185.34724044799805,
+        "records_count": 291
+    },
+    "distance": {
+        "total_distance_meters": 3301.714033484459,
+        "records_count": 327
+    },
+    "floors_climbed": {
+        "total_floors": 6.128683725992839,
+        "records_count": 14
+    },
+    "resting_heart_rate": {
+        "avg_bpm": 69.0,
+        "min_bpm": 69,
+        "max_bpm": 69,
+        "records_count": 1
+    },
+    "metadata": {
+        "app_version": "1.0.0",
+        "export_timestamp": "2026-05-25T23:29:09.221189",
+        "timezone": "Europe/Moscow",
+        "source_device": "22041216G"
+    }
+}
