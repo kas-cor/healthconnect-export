@@ -105,9 +105,15 @@ jobs:
         badges-directory: badges
         generate-branches-badge: true
         generate-summary: false
-        commit-badge: true
-        commit-message: 'chore: update coverage badge'
         on-missing-report: fail
+
+    - name: Commit coverage badges
+      if: github.ref == 'refs/heads/main'
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        commit_message: 'chore: update coverage badge'
+        file_pattern: badges/*.svg
+
     - name: Upload coverage report (HTML)
       if: always()
       uses: actions/upload-artifact@v7

@@ -107,6 +107,7 @@ class ExportViewModelTest {
         whenever(mockApp.getSystemService(android.content.Context.CONNECTIVITY_SERVICE))
             .thenReturn(mock<android.net.ConnectivityManager>())
         whenever(mockApp.getExternalFilesDir(anyOrNull())).thenReturn(tempDir)
+        whenever(mockApp.getExternalFilesDirs(anyOrNull())).thenReturn(arrayOf(tempDir))
 
         // Mock GoogleSignIn static methods
         mockedGoogleSignIn = Mockito.mockStatic(GoogleSignIn::class.java)
