@@ -99,7 +99,7 @@ jobs:
       run: ./gradlew jacocoTestReport jacocoTestCoverageVerification 2>&1 | tail -40
     - name: Generate coverage badge
       if: github.ref == 'refs/heads/main'
-      uses: cicirello/jacoco-badge-generator@v2.11.0
+      uses: cicirello/jacoco-badge-generator@v2.12.1
       with:
         jacoco-csv-file: app/build/reports/jacoco/jacocoTestReport/jacocoTestReport.csv
         badges-directory: badges
