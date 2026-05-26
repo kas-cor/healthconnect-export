@@ -14,6 +14,9 @@ local.properties
 .qwen/
 QWEN.md
 
+# Exported health data
+exports/
+
 # Secrets
 client_secret_*.json
 google-services.json
