@@ -67,7 +67,7 @@ jobs:
       run: ./gradlew testDebugUnitTest 2>&1 | tail -30
     - name: Upload test results
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: test-results
         path: app/build/reports/tests/
@@ -110,7 +110,7 @@ jobs:
         on-missing-report: fail
     - name: Upload coverage report (HTML)
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: coverage-html
         path: app/build/reports/jacoco/jacocoTestReport/html/
@@ -118,7 +118,7 @@ jobs:
 
     - name: Upload coverage report (XML)
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: coverage-xml
         path: app/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
@@ -153,7 +153,7 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk "HealthConnectExport-${VERSION}-debug.apk"
         fi
     - name: Upload Debug APK
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: HealthConnectExport-debug
         path: HealthConnectExport-*-debug.apk
@@ -235,7 +235,7 @@ jobs:
 
     - name: Upload Release APK
       if: startsWith(github.ref, 'refs/tags/v')
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: HealthConnectExport-release
         path: HealthConnectExport-*.apk
