@@ -399,10 +399,38 @@ fun getSignInOptions(): GoogleSignInOptions {
 
 ## Webhook
 
-- URL: configurable in UI
-- Auth: optional Bearer token (stored in `ExportConfig`)
-- Method: POST
-- Content-Type: `application/json`
-- Timeout: 15 seconds
-- URL validation: client-side (red highlight on invalid URL)
-- Works with both manual and scheduled exports
+### Request
+
+| Attribute | Value |
+|---|---|
+| **Method** | POST |
+| **Content-Type** | `application/json` |
+| **Authorization** | `Bearer <token>` (optional) |
+| **Timeout** | 15 seconds |
+| **URL validation** | Client-side (red highlight on invalid URL) |
+
+### Payload structure
+
+JSON body is wrapped in a `messages` envelope:
+
+```json
+{
+  "messages": [
+    {
+      "date": "2026-05-23",
+      "steps": { "total_steps": 12453, "records_count": 480 },
+      "heart_rate": { "avg_bpm": 72.5, "min_bpm": 55, "max_bpm": 142, "records_count": 18 },
+      "sleep": { "total_duration_minutes": 420, "records_count": 1 },
+      "metadata": {
+        "app_version": "1.0.0",
+        "export_timestamp": "2026-05-23T23:00:00",
+        "timezone": "Europe/Moscow"
+      }
+    }
+  ]
+}
+```
+
+Each `messages` element is a `DailyHealthRecord` — one per exported day. Backed by `WebhookPayload` data class in `WebhookRepository.kt`.
+
+Works with both manual and scheduled exports.

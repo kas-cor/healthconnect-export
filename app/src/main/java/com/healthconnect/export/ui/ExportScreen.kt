@@ -5,13 +5,18 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -317,24 +322,124 @@ fun ExportScreen(
                 }
             }
 
-            // Export Button
+            // Export Button with animated transitions
             item {
                 Button(
                     onClick = { viewModel.exportNow() },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !uiState.isLoading
-                ) {
-                    if (uiState.isLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = MaterialTheme.colorScheme.onPrimary
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .animateContentSize(
+                            animationSpec = tween(durationMillis = 300)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(uiState.exportProgress)
-                    } else {
-                        Icon(Icons.Default.Save, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(stringResource(R.string.export_data_types, uiState.selectedTypes.size))
+                ) {
+                    AnimatedContent(
+                        targetState = uiState.isLoading,
+                        transitionSpec = {
+                            if (targetState) {
+                                ContentTransform(
+                                    targetContentEnter = slideInVertically { it } + fadeIn(animationSpec = tween(300)),
+                                    initialContentExit = slideOutVertically { -it } + fadeOut(animationSpec = tween(200))
+                                )
+                            } else {
+                                ContentTransform(
+                                    targetContentEnter = slideInVertically { -it } + fadeIn(animationSpec = tween(300)),
+                                    initialContentExit = slideOutVertically { it } + fadeOut(animationSpec = tween(200))
+                                )
+                            }
+                        },
+                        label = "exportButtonState"
+                    ) { isLoading ->
+                        if (isLoading) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                AnimatedContent(
+                                    targetState = uiState.progressPhase,
+                                    transitionSpec = {
+                                        ContentTransform(
+                                            targetContentEnter = slideInVertically { it } + fadeIn(animationSpec = tween(250)),
+                                            initialContentExit = slideOutVertically { -it } + fadeOut(animationSpec = tween(200))
+                                        )
+                                    },
+                                    label = "exportProgressPhase"
+                                ) { phase ->
+                                    when (phase) {
+                                        "read" -> {
+                                            val progress = if (uiState.progressTotal > 0)
+                                                uiState.progressCurrent.toFloat() / uiState.progressTotal.toFloat()
+                                            else 0f
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Text(
+                                                    stringResource(R.string.export_progress_reading, uiState.progressDate),
+                                                    style = MaterialTheme.typography.labelSmall
+                                                )
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                LinearProgressIndicator(
+                                                    progress = { progress },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    "${uiState.progressCurrent}/${uiState.progressTotal}",
+                                                    style = MaterialTheme.typography.labelSmall
+                                                )
+                                            }
+                                        }
+                                        "save" -> {
+                                            val progress = if (uiState.progressTotal > 0)
+                                                uiState.progressCurrent.toFloat() / uiState.progressTotal.toFloat()
+                                            else 0f
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Text(
+                                                    stringResource(R.string.export_progress_saving, uiState.progressDate),
+                                                    style = MaterialTheme.typography.labelSmall
+                                                )
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                LinearProgressIndicator(
+                                                    progress = { progress },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    "${uiState.progressCurrent}/${uiState.progressTotal}",
+                                                    style = MaterialTheme.typography.labelSmall
+                                                )
+                                            }
+                                        }
+                                        else -> {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(20.dp),
+                                                    color = MaterialTheme.colorScheme.onPrimary
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(uiState.exportProgress)
+                                            }
+                                        }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(12.dp),
+                                        tint = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        stringResource(R.string.cancel_export),
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                                        )
+                                    )
+                                }
+                            }
+                        } else {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Save, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(stringResource(R.string.export_data_types, uiState.selectedTypes.size))
+                            }
+                        }
                     }
                 }
             }

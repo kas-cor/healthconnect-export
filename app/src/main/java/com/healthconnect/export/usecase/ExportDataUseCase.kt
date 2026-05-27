@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.flow
 import java.io.File
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 
 /**
  * Represents a step during the export process.
@@ -89,16 +90,28 @@ class ExportDataUseCase(
                 return@flow
             }
 
-            // 3. Read data
-            emit(ExportStep.Progress("Reading data…"))
-            val records = healthRepo.readPeriod(
-                startDate, endDate, config.enabledTypes,
-                selectedSourcePackage = config.selectedSourcePackage
-            )
+            // 3. Read data day-by-day with progress
+            val totalDays = ChronoUnit.DAYS.between(startDate, endDate) + 1
+            val records = mutableListOf<DailyHealthRecord>()
+            var currentDate = startDate
+            var dayIndex = 0
+            while (!currentDate.isAfter(endDate)) {
+                dayIndex++
+                emit(ExportStep.Progress("read:$dayIndex:$totalDays:${currentDate}"))
+                val record = healthRepo.readDay(
+                    currentDate, config.enabledTypes,
+                    selectedSourcePackage = config.selectedSourcePackage
+                )
+                records.add(record)
+                currentDate = currentDate.plusDays(1)
+            }
 
-            // 4. Save files
-            emit(ExportStep.Progress("Saving ${records.size} days…"))
-            val files = localRepo.saveRecords(records, config)
+            // 4. Save files with progress
+            val files = mutableListOf<File>()
+            records.forEachIndexed { i, record ->
+                emit(ExportStep.Progress("save:${i + 1}:${records.size}:${record.date}"))
+                files.add(localRepo.saveDailyRecord(record, config))
+            }
 
             // 5. Compute summary
             val summary = ExportSummary(

@@ -384,7 +384,7 @@ class WebhookRepositoryTest {
     // =============================================
 
     @Test
-    fun `sendRecords serializes records as JSON array in body`() {
+    fun `sendRecords serializes records inside messages key in body`() {
         val request = withServerAndCapture { url ->
             runBlocking {
                 repo.sendRecords(url, singleRecord, null)
@@ -393,7 +393,9 @@ class WebhookRepositoryTest {
 
         val body = request.substringAfter("\n\n")
         assertTrue("Body should contain record date", body.contains("2026-05-24"))
-        assertTrue("Body should be JSON array", body.trimStart().startsWith("["))
+        assertTrue("Body should start with object brace", body.trimStart().startsWith("{"))
+        assertTrue("Body should contain messages key", body.contains("\"messages\""))
+        assertTrue("Body should end with closing brace", body.trimEnd().endsWith("}"))
         assertTrue("Body should contain metadata", body.contains("metadata"))
     }
 
