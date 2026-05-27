@@ -3,11 +3,17 @@ package com.healthconnect.export.repository
 import com.healthconnect.export.data.DailyHealthRecord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+
+@Serializable
+data class WebhookPayload(
+    val messages: List<DailyHealthRecord>
+)
 
 class WebhookRepository {
 
@@ -38,7 +44,7 @@ class WebhookRepository {
             connection.connectTimeout = 15_000
             connection.readTimeout = 15_000
 
-            val body = json.encodeToString(records)
+            val body = json.encodeToString(WebhookPayload(records))
 
             OutputStreamWriter(connection.outputStream).use { writer ->
                 writer.write(body)

@@ -154,4 +154,12 @@
     <string name="dashboard_label_sleep">Ср. сон</string>
     <string name="dashboard_label_active_cal">Акт. кал</string>
     <string name="dashboard_no_data">—</string>
+
+    <!-- Export Progress -->
+    <string name="export_progress_reading">Чтение %s…</string>
+    <string name="export_progress_saving">Сохранение %s…</string>
+
+    <!-- Cancel -->
+    <string name="cancel_export">Отмена</string>
+    <string name="vm_export_cancelled">Экспорт отменён</string>
 </resources>

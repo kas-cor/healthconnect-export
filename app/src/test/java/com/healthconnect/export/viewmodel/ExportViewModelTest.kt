@@ -6,30 +6,27 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.res.Resources
+import android.app.ActivityManager
+import android.app.job.JobScheduler
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import androidx.activity.result.ActivityResult
 import androidx.work.Configuration
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.Operation
+import androidx.work.PeriodicWorkRequest
 import androidx.work.WorkManager
+import androidx.work.testing.WorkManagerTestInitHelper
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.common.api.ApiException
-import com.google.android.gms.common.api.Status
-import com.google.android.gms.tasks.Task
-import com.healthconnect.export.data.DailyHealthRecord
-import com.healthconnect.export.data.ExportMetadata
-import com.healthconnect.export.repository.HealthConnectRepository
-import com.healthconnect.export.repository.LocalExportRepository
-import com.healthconnect.export.repository.GoogleDriveRepository
-import com.healthconnect.export.repository.WebhookRepository
-import com.healthconnect.export.usecase.ExportDataUseCase
-import com.healthconnect.export.repository.WebhookResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.setMain
-import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -40,6 +37,13 @@ import org.mockito.MockedStatic
 import org.mockito.Mockito
 import org.mockito.junit.MockitoJUnitRunner
 import org.mockito.kotlin.*
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.Status
+import com.google.android.gms.tasks.Task
+import com.healthconnect.export.data.*
+import com.healthconnect.export.repository.*
+import com.healthconnect.export.usecase.ExportDataUseCase
 import java.io.File
 import java.lang.reflect.Field
 import java.time.LocalDate
@@ -109,6 +113,26 @@ class ExportViewModelTest {
         whenever(mockApp.getExternalFilesDir(anyOrNull())).thenReturn(tempDir)
         whenever(mockApp.getExternalFilesDirs(anyOrNull())).thenReturn(arrayOf(tempDir))
 
+        // Initialize WorkManager via WorkManagerTestInitHelper
+        // This requires stubbing several system services on the mock Application
+        val mockPm = mock<PackageManager>()
+        whenever(mockApp.packageManager).thenReturn(mockPm)
+        val mockAppInfo = mock<ApplicationInfo>()
+        mockAppInfo.processName = "com.healthconnect.export"
+        whenever(mockPm.getApplicationInfo(eq("com.healthconnect.export"), any<Int>())).thenReturn(mockAppInfo)
+        whenever(mockApp.applicationInfo).thenReturn(mockAppInfo)
+        whenever(mockApp.getSystemService(Context.ACTIVITY_SERVICE))
+            .thenReturn(mock<ActivityManager>())
+        whenever(mockApp.getSystemService(Context.JOB_SCHEDULER_SERVICE))
+            .thenReturn(mock<JobScheduler>())
+        val dbDir = File(tempDir, "databases")
+        dbDir.mkdirs()
+        whenever(mockApp.getDatabasePath(any())).thenReturn(File(dbDir, "workmanager.db"))
+        val config = Configuration.Builder()
+            .setMinimumLoggingLevel(android.util.Log.WARN)
+            .build()
+        WorkManagerTestInitHelper.initializeTestWorkManager(mockApp, config)
+
         // Mock GoogleSignIn static methods
         mockedGoogleSignIn = Mockito.mockStatic(GoogleSignIn::class.java)
         mockedGoogleSignIn!!.`when`<GoogleSignInClient> {
@@ -117,16 +141,6 @@ class ExportViewModelTest {
         mockedGoogleSignIn!!.`when`<GoogleSignInAccount?> {
             GoogleSignIn.getLastSignedInAccount(any<Context>())
         }.thenReturn(null)
-
-        // Initialize WorkManager for testing
-        val workConfig = Configuration.Builder()
-            .setMinimumLoggingLevel(android.util.Log.DEBUG)
-            .build()
-        try {
-            WorkManager.initialize(mockApp, workConfig)
-        } catch (_: IllegalStateException) {
-            // Already initialized (e.g. by previous test)
-        }
 
         // Create ViewModel (init block runs here)
         viewModel = ExportViewModel(mockApp)
@@ -216,27 +230,26 @@ class ExportViewModelTest {
     @Test
     fun `exportNow successful export saves files and syncs to drive`() {
         runTest {
-            val records = listOf(
-                DailyHealthRecord(
-                    date = "2026-05-24",
-                    metadata = ExportMetadata(
-                        appVersion = "1.0.0",
-                        exportTimestamp = "2026-05-24T12:00:00",
-                        timezone = "UTC"
-                    )
+            val record = DailyHealthRecord(
+                date = "2026-05-24",
+                metadata = ExportMetadata(
+                    appVersion = "1.0.0",
+                    exportTimestamp = "2026-05-24T12:00:00",
+                    timezone = "UTC"
                 )
             )
-            val files = listOf(File(tempDir, "health_2026-05-24.json"))
+            val file = File(tempDir, "health_2026-05-24.json")
 
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(true)
-            whenever(mockHealthRepo.readPeriod(any(), any(), any(), anyOrNull())).thenReturn(records)
-            whenever(mockLocalRepo.saveRecords(any(), any())).thenReturn(files)
+            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull())).thenReturn(record)
+            whenever(mockLocalRepo.saveDailyRecord(any(), any())).thenReturn(file)
             whenever(mockDriveRepo.isSignedIn()).thenReturn(true)
             whenever(mockDriveRepo.syncFiles(any<List<File>>())).thenReturn(listOf("file_id"))
 
-            // Init sets autoSyncDrive=false (mock prefs return false)
-            // Re-enable it for this test
+            // Set single-day range so readDay/saveDailyRecord are called once
+            viewModel.setDateRange(LocalDate.of(2026, 5, 24), LocalDate.of(2026, 5, 24))
+            // Re-enable auto-sync for this test
             viewModel.setAutoSyncDrive(true)
 
             viewModel.exportNow()
@@ -250,8 +263,8 @@ class ExportViewModelTest {
             assertEquals(1, state.exportedFiles.size)
             assertNotNull(state.message)
 
-            verify(mockHealthRepo).readPeriod(any(), any(), any(), anyOrNull())
-            verify(mockLocalRepo).saveRecords(any(), any())
+            verify(mockHealthRepo).readDay(any(), any(), anyOrNull())
+            verify(mockLocalRepo).saveDailyRecord(any(), any())
             verify(mockDriveRepo).syncFiles(any<List<File>>())
         }
     }
@@ -261,7 +274,7 @@ class ExportViewModelTest {
         runTest {
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(true)
-            whenever(mockHealthRepo.readPeriod(any(), any(), any(), anyOrNull()))
+            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull()))
                 .thenThrow(RuntimeException("Test error"))
 
             viewModel.exportNow()
@@ -277,25 +290,26 @@ class ExportViewModelTest {
     @Test
     fun `exportNow successful export does not sync drive when autoSync disabled`() {
         runTest {
-            val records = listOf(
-                DailyHealthRecord(
-                    date = "2026-05-24",
-                    metadata = ExportMetadata(
-                        appVersion = "1.0.0",
-                        exportTimestamp = "2026-05-24T12:00:00",
-                        timezone = "UTC"
-                    )
+            val record = DailyHealthRecord(
+                date = "2026-05-24",
+                metadata = ExportMetadata(
+                    appVersion = "1.0.0",
+                    exportTimestamp = "2026-05-24T12:00:00",
+                    timezone = "UTC"
                 )
             )
-            val files = listOf(File(tempDir, "health_2026-05-24.json"))
+            val file = File(tempDir, "health_2026-05-24.json")
 
             // Disable auto-sync
             viewModel.setAutoSyncDrive(false)
 
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(true)
-            whenever(mockHealthRepo.readPeriod(any(), any(), any(), anyOrNull())).thenReturn(records)
-            whenever(mockLocalRepo.saveRecords(any(), any())).thenReturn(files)
+            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull())).thenReturn(record)
+            whenever(mockLocalRepo.saveDailyRecord(any(), any())).thenReturn(file)
+
+            // Set single-day range so readDay/saveDailyRecord are called once
+            viewModel.setDateRange(LocalDate.of(2026, 5, 24), LocalDate.of(2026, 5, 24))
 
             viewModel.exportNow()
 
@@ -313,17 +327,16 @@ class ExportViewModelTest {
     @Test
     fun `exportNow when webhook enabled sends data to webhook`() {
         runTest {
-            val records = listOf(
-                DailyHealthRecord(
-                    date = "2026-05-24",
-                    metadata = ExportMetadata(
-                        appVersion = "1.0.0",
-                        exportTimestamp = "2026-05-24T12:00:00",
-                        timezone = "UTC"
-                    )
+            val record = DailyHealthRecord(
+                date = "2026-05-24",
+                metadata = ExportMetadata(
+                    appVersion = "1.0.0",
+                    exportTimestamp = "2026-05-24T12:00:00",
+                    timezone = "UTC"
                 )
             )
-            val files = listOf(File(tempDir, "health_2026-05-24.json"))
+            val records = listOf(record)
+            val file = File(tempDir, "health_2026-05-24.json")
 
             // Enable webhook
             viewModel.setWebhookUrl("https://example.com/webhook")
@@ -332,12 +345,15 @@ class ExportViewModelTest {
 
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(true)
-            whenever(mockHealthRepo.readPeriod(any(), any(), any(), anyOrNull())).thenReturn(records)
-            whenever(mockLocalRepo.saveRecords(any(), any())).thenReturn(files)
+            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull())).thenReturn(record)
+            whenever(mockLocalRepo.saveDailyRecord(any(), any())).thenReturn(file)
             whenever(mockDriveRepo.isSignedIn()).thenReturn(false)
             // Stub webhookRepo to return success — otherwise ViewModel's when() throws NoWhenBranchMatchedException
             whenever(mockWebhookRepo.sendRecords(any(), any(), anyOrNull()))
                 .thenReturn(WebhookResult.Success(200, ""))
+
+            // Set single-day range so readDay/saveDailyRecord are called once
+            viewModel.setDateRange(LocalDate.of(2026, 5, 24), LocalDate.of(2026, 5, 24))
 
             viewModel.exportNow()
 

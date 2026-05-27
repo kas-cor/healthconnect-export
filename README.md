@@ -180,11 +180,53 @@ apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
 
 ## Webhook 📡
 
-After export, JSON can be sent to any URL:
-- URL + optional Bearer token in UI
-- `Content-Type: application/json`
-- 15s timeout
-- URL validation with red highlight
+After export, health data can be sent to any URL as a POST request.
+
+### Configuration
+
+- **URL** — configurable in UI, validated client-side (red highlight on invalid)
+- **Auth** — optional Bearer token (stored in `ExportConfig`)
+- **Auto-send** — toggle in UI to send automatically after each export
+- Works with both manual and scheduled exports
+
+### Request format
+
+| Attribute | Value |
+|---|---|
+| **Method** | `POST` |
+| **Content-Type** | `application/json` |
+| **Authorization** | `Bearer <token>` (optional) |
+| **Timeout** | 15 seconds |
+
+### Payload structure
+
+The JSON body is wrapped in a `messages` envelope:
+
+```json
+{
+  "messages": [
+    {
+      "date": "2026-05-23",
+      "steps": { "total_steps": 12453, "records_count": 480 },
+      "heart_rate": { "avg_bpm": 72.5, "min_bpm": 55, "max_bpm": 142, "records_count": 18 },
+      "sleep": {
+        "total_duration_minutes": 420,
+        "sleep_stages": { "Deep sleep": 90, "Light sleep": 195, "REM sleep": 105, "Awake": 30 },
+        "records_count": 1
+      },
+      "metadata": {
+        "app_version": "1.0.0",
+        "export_timestamp": "2026-05-23T23:00:00",
+        "timezone": "Europe/Moscow",
+        "source_device": "test_device"
+      }
+    }
+    // ... more days
+  ]
+}
+```
+
+Each element in the `messages` array is a `DailyHealthRecord` — one per exported day — containing all selected health data types. The full list of supported fields includes steps, heart rate, sleep, calories, distance, floors climbed, active calories, weight, body fat, blood pressure, blood glucose, oxygen saturation, body temperature, respiratory rate, hydration, resting heart rate, exercises, nutrition, speed, and menstruation.
 
 ## Scheduling ⏰
 

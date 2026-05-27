@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Coverage gate thresholds:** `repository` LINE minimum raised to **≥ 35%**
 - **README.md:** Updated test suites table with new files and counts
 - **AGENTS.md:** Synced test structure and file listings
+- **Webhook:** JSON payload format changed to `{"messages": [...]}` envelope; `WebhookPayload` data class added to `WebhookRepository`
 
 ## [1.1] — 2026-05-26
 

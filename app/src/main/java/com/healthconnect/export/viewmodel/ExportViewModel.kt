@@ -21,6 +21,8 @@ import com.healthconnect.export.repository.GoogleDriveRepository
 import com.healthconnect.export.repository.WebhookRepository
 import com.healthconnect.export.repository.WebhookResult
 import com.healthconnect.export.worker.DailyExportWorker
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.io.File
@@ -50,7 +52,11 @@ data class ExportUiState(
     val availableSources: List<String> = emptyList(),
     val selectedSourcePackage: String? = null,
     val sourcesLoading: Boolean = false,
-    val exportSummary: ExportSummary? = null
+    val exportSummary: ExportSummary? = null,
+    val progressCurrent: Int = 0,
+    val progressTotal: Int = 0,
+    val progressDate: String = "",
+    val progressPhase: String = "",
 )
 
 sealed class DriveStatus {
@@ -68,6 +74,8 @@ sealed class ScheduleStatus {
 }
 
 class ExportViewModel(application: Application) : AndroidViewModel(application) {
+
+    private var currentExportJob: Job? = null
 
     private val healthRepo = HealthConnectRepository(getApplication())
     private val localRepo = LocalExportRepository(getApplication())
@@ -373,74 +381,116 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
 
     fun exportNow() {
         Log.d("ExportViewModel", "exportNow() called")
-        viewModelScope.launch {
-            val state = _uiState.value
+        // If already exporting — cancel instead
+        if (_uiState.value.isLoading) {
+            cancelExport()
+            return
+        }
 
-            exportUseCase.execute(
-                context = getApplication(),
-                config = ExportConfig(
-                    enabledTypes = state.selectedTypes,
-                    frequency = state.frequency,
-                    autoSyncDrive = state.autoSyncDrive,
-                    selectedSourcePackage = state.selectedSourcePackage
-                ),
-                startDate = state.startDate,
-                endDate = state.endDate
-            ).collect { step ->
-                when (step) {
-                    is ExportStep.CheckingPermissions -> {
-                        _uiState.update {
-                            it.copy(isLoading = true, exportProgress = str(R.string.vm_check_permissions))
+        val job = viewModelScope.launch {
+            try {
+                val state = _uiState.value
+
+                exportUseCase.execute(
+                    context = getApplication(),
+                    config = ExportConfig(
+                        enabledTypes = state.selectedTypes,
+                        frequency = state.frequency,
+                        autoSyncDrive = state.autoSyncDrive,
+                        selectedSourcePackage = state.selectedSourcePackage
+                    ),
+                    startDate = state.startDate,
+                    endDate = state.endDate
+                ).collect { step ->
+                    when (step) {
+                        is ExportStep.CheckingPermissions -> {
+                            _uiState.update {
+                                it.copy(isLoading = true, exportProgress = str(R.string.vm_check_permissions))
+                            }
                         }
-                    }
-                    is ExportStep.HealthNotAvailable -> {
-                        _uiState.update {
-                            it.copy(isLoading = false, message = str(R.string.vm_health_not_available))
+                        is ExportStep.HealthNotAvailable -> {
+                            _uiState.update {
+                                it.copy(isLoading = false, message = str(R.string.vm_health_not_available))
+                            }
                         }
-                    }
-                    is ExportStep.HealthNotInstalled -> {
-                        _uiState.update {
-                            it.copy(isLoading = false, message = str(R.string.vm_health_not_installed))
+                        is ExportStep.HealthNotInstalled -> {
+                            _uiState.update {
+                                it.copy(isLoading = false, message = str(R.string.vm_health_not_installed))
+                            }
                         }
-                    }
-                    is ExportStep.PermissionsRequired -> {
-                        pendingPermissions = step.permissions
-                        _uiState.update {
-                            it.copy(isLoading = false, message = str(R.string.vm_permissions_required))
+                        is ExportStep.PermissionsRequired -> {
+                            pendingPermissions = step.permissions
+                            _uiState.update {
+                                it.copy(isLoading = false, message = str(R.string.vm_permissions_required))
+                            }
                         }
-                    }
-                    is ExportStep.Progress -> {
-                        _uiState.update { it.copy(exportProgress = step.message) }
-                    }
-                    is ExportStep.Complete -> {
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                exportProgress = str(R.string.vm_saved_files, step.files.size),
-                                exportedFiles = step.files,
-                                exportSummary = step.summary,
-                                message = str(R.string.vm_export_complete, step.files.size)
-                            )
+                        is ExportStep.Progress -> {
+                            val parts = step.message.split(":")
+                            if (parts.size == 4 && (parts[0] == "read" || parts[0] == "save")) {
+                                _uiState.update {
+                                    it.copy(
+                                        exportProgress = step.message,
+                                        progressPhase = parts[0],
+                                        progressCurrent = parts[1].toIntOrNull() ?: 0,
+                                        progressTotal = parts[2].toIntOrNull() ?: 0,
+                                        progressDate = parts[3]
+                                    )
+                                }
+                            } else {
+                                _uiState.update { it.copy(exportProgress = step.message) }
+                            }
                         }
-                        // Post-export: auto-sync to Drive
-                        if (state.autoSyncDrive && driveRepo.isSignedIn()) {
-                            syncToDrive(step.files)
+                        is ExportStep.Complete -> {
+                            _uiState.update {
+                                it.copy(
+                                    isLoading = false,
+                                    exportProgress = str(R.string.vm_saved_files, step.files.size),
+                                    exportedFiles = step.files,
+                                    exportSummary = step.summary,
+                                    message = str(R.string.vm_export_complete, step.files.size)
+                                )
+                            }
+                            // Post-export: auto-sync to Drive
+                            if (state.autoSyncDrive && driveRepo.isSignedIn()) {
+                                syncToDrive(step.files)
+                            }
+                            // Post-export: send to webhook
+                            if (state.autoSendWebhook && state.webhookUrl.isNotBlank()) {
+                                sendToWebhook(state.webhookUrl, state.webhookAuthToken, step.records)
+                            }
                         }
-                        // Post-export: send to webhook
-                        if (state.autoSendWebhook && state.webhookUrl.isNotBlank()) {
-                            sendToWebhook(state.webhookUrl, state.webhookAuthToken, step.records)
-                        }
-                    }
-                    is ExportStep.Error -> {
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                message = step.message
-                            )
+                        is ExportStep.Error -> {
+                            _uiState.update {
+                                it.copy(
+                                    isLoading = false,
+                                    message = step.message
+                                )
+                            }
                         }
                     }
                 }
+            } catch (e: CancellationException) {
+                // Export was cancelled — do nothing, cancelExport() already reset state
+            } finally {
+                currentExportJob = null
             }
+        }
+        currentExportJob = job
+    }
+
+    private fun cancelExport() {
+        currentExportJob?.cancel()
+        currentExportJob = null
+        _uiState.update {
+            it.copy(
+                isLoading = false,
+                exportProgress = "",
+                progressPhase = "",
+                progressCurrent = 0,
+                progressTotal = 0,
+                progressDate = "",
+                message = str(R.string.vm_export_cancelled)
+            )
         }
     }
 
