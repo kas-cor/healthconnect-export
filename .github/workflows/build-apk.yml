@@ -289,7 +289,7 @@ jobs:
         git log --oneline $(git tag --sort=-version:refname | head -2 | tail -1 || git rev-list --max-parents=0 HEAD)..HEAD --no-merges >> CHANGELOG.md 2>/dev/null || echo "- Initial release" >> CHANGELOG.md
 
     - name: Create Release
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       with:
         name: v${{ env.VERSION }}
         body_path: CHANGELOG.md
