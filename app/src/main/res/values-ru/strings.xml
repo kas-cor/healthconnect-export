@@ -159,7 +159,23 @@
     <string name="export_progress_reading">Чтение %s…</string>
     <string name="export_progress_saving">Сохранение %s…</string>
 
+    <!-- Every 2 Hours Webhook -->
+    <string name="every_2_hours_webhook">Отправлять данные за сегодня каждые 2 часа (только webhook)</string>
+    <string name="enter_url_first_every_2h">Сначала введите URL вебхука</string>
+    <string name="every_2_hours_enabled">Отправка каждые 2 часа включена</string>
+    <string name="every_2_hours_disabled">Отправка каждые 2 часа отключена</string>
+
+    <!-- Webhook test -->
+    <string name="webhook_test">Тест вебхука</string>
+    <string name="webhook_testing">Тестирование вебхука…</string>
+    <string name="vm_webhook_test_success">Тест вебхука: успешно (%d)</string>
+    <string name="vm_webhook_test_error">Тест вебхука: ошибка %d — %s</string>
+    <string name="vm_webhook_no_data">Нет данных о здоровье за сегодня</string>
+
     <!-- Cancel -->
     <string name="cancel_export">Отмена</string>
     <string name="vm_export_cancelled">Экспорт отменён</string>
+
+    <!-- Health Connect access limitation -->
+    <string name="health_connect_access_limit">Health Connect может ограничивать доступ к данным за последние 30 дней для недавно подключённых приложений. Данные за более ранний период могут быть недоступны.</string>
 </resources>

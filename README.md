@@ -17,6 +17,7 @@ Android app for exporting Google Health Connect data to JSON format with optiona
 - **Scheduled export** — daily or weekly via WorkManager
 - **Google Drive sync** — optional, auto-sync to Drive
 - **Webhook delivery** — POST JSON to a URL (with optional Bearer auth)
+- **Every-2-hours webhook** — send current day's data to webhook every 2 hours (no Drive sync)
 - **20 data types** — steps, heart rate, sleep, calories, exercise, nutrition, and more
 - **Date range selection** — last 7/30 days or custom range
 - **Manual + automatic** — export on demand or on schedule
@@ -28,8 +29,9 @@ MainActivity → ExportScreen (Compose) → ExportViewModel
   ├─ HealthConnectRepository  — read Health Connect API
   ├─ LocalExportRepository    — save JSON files
   ├─ GoogleDriveRepository    — sync to Drive
-  └─ WebhookRepository        — POST to webhook
-  └─ DailyExportWorker        — scheduled background export
+  ├─ WebhookRepository        — POST to webhook
+  ├─ DailyExportWorker        — scheduled background export (daily/weekly)
+  └─ Every2HoursWebhookWorker — periodic webhook-only export (every 2 hours)
 ```
 
 ## Quick start 🚀
@@ -231,6 +233,7 @@ Each element in the `messages` array is a `DailyHealthRecord` — one per export
 ## Scheduling ⏰
 
 - **Manual**, **Daily** (24h), or **Weekly** (168h)
+- **Every 2 hours** — optional webhook-only sending of current day's data (checkbox in Schedule section)
 - Default: Daily (auto-enabled at startup)
 - Uses WorkManager `PeriodicWorkRequest`
 

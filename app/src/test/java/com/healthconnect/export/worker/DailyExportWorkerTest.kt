@@ -147,8 +147,7 @@ class DailyExportWorkerTest {
         )
         val files = listOf(File(tempDir, "health_yesterday.json"))
 
-        whenever(mockLocalRepo.isExported(any(), any())).thenReturn(false)
-        whenever(mockHealthRepo.readPeriod(any(), any(), any(), anyOrNull())).thenReturn(records)
+        whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())).thenReturn(records)
         whenever(mockLocalRepo.saveRecords(any(), any())).thenReturn(files)
         whenever(mockDriveRepo.isSignedIn()).thenReturn(true)
         whenever(mockDriveRepo.uploadFile(any(), any())).thenReturn("file_id")
@@ -159,64 +158,10 @@ class DailyExportWorkerTest {
 
         assertEquals(ListenableWorker.Result.success(), result)
 
-        verify(mockLocalRepo).isExported(any(), eq(config))
-        verify(mockHealthRepo).readPeriod(any(), any(), eq(config.enabledTypes), anyOrNull())
+        verify(mockHealthRepo).readPeriodInBatch(any(), any(), eq(config.enabledTypes), anyOrNull(), anyOrNull())
         verify(mockLocalRepo).saveRecords(eq(records), eq(config))
         verify(mockDriveRepo, atLeastOnce()).uploadFile(any(), any())
         verify(mockWebhookRepo).sendRecords(eq(config.webhookUrl), eq(records), eq(config.webhookAuthToken))
-        }
-    }
-
-    @Test
-    fun `already exported skips health read but syncs to drive`() {
-        runBlocking {
-        val config = ExportConfig(
-            enabledTypes = setOf(HealthDataType.STEPS),
-            frequency = ExportFrequency.DAILY,
-            autoSyncDrive = true,
-            autoSendWebhook = false
-        )
-        val filePair = LocalDate.now().minusDays(1) to File(tempDir, "health_2026-05-25.json")
-
-        whenever(mockLocalRepo.isExported(any(), any())).thenReturn(true)
-        whenever(mockDriveRepo.isSignedIn()).thenReturn(true)
-        whenever(mockLocalRepo.listExportedFiles(any())).thenReturn(listOf(filePair))
-        whenever(mockDriveRepo.uploadFile(any(), any())).thenReturn("file_id")
-
-        val worker = createWorker(config)
-        val result = worker.doWork()
-
-        assertEquals(ListenableWorker.Result.success(), result)
-
-        // Should NOT read health data or save
-        verify(mockHealthRepo, never()).readPeriod(any(), any(), any(), anyOrNull())
-        verify(mockLocalRepo, never()).saveRecords(any(), any())
-        // BUT should sync to drive
-        verify(mockDriveRepo).uploadFile(any(), any())
-        }
-    }
-
-    @Test
-    fun `already exported without drive sync does nothing`() {
-        runBlocking {
-        val config = ExportConfig(
-            enabledTypes = setOf(HealthDataType.STEPS),
-            frequency = ExportFrequency.DAILY,
-            autoSyncDrive = false,
-            autoSendWebhook = false
-        )
-
-        whenever(mockLocalRepo.isExported(any(), any())).thenReturn(true)
-
-        val worker = createWorker(config)
-        val result = worker.doWork()
-
-        assertEquals(ListenableWorker.Result.success(), result)
-
-        verify(mockHealthRepo, never()).readPeriod(any(), any(), any(), anyOrNull())
-        verify(mockLocalRepo, never()).saveRecords(any(), any())
-        verify(mockDriveRepo, never()).uploadFile(any(), any())
-        verify(mockWebhookRepo, never()).sendRecords(any(), any(), anyOrNull())
         }
     }
 
@@ -230,15 +175,14 @@ class DailyExportWorkerTest {
             autoSendWebhook = false
         )
 
-        whenever(mockLocalRepo.isExported(any(), any())).thenReturn(false)
-        whenever(mockHealthRepo.readPeriod(any(), any(), any(), anyOrNull())).thenReturn(emptyList())
+        whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())).thenReturn(emptyList())
 
         val worker = createWorker(config)
         val result = worker.doWork()
 
         assertEquals(ListenableWorker.Result.success(), result)
 
-        verify(mockHealthRepo).readPeriod(any(), any(), any(), anyOrNull())
+        verify(mockHealthRepo).readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())
         verify(mockLocalRepo, never()).saveRecords(any(), any())
         }
     }
@@ -253,8 +197,7 @@ class DailyExportWorkerTest {
             autoSendWebhook = false
         )
 
-        whenever(mockLocalRepo.isExported(any(), any())).thenReturn(false)
-        whenever(mockHealthRepo.readPeriod(any(), any(), any(), anyOrNull()))
+        whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
             .thenThrow(SecurityException("No permission"))
 
         val worker = createWorker(config)
@@ -274,8 +217,7 @@ class DailyExportWorkerTest {
             autoSendWebhook = false
         )
 
-        whenever(mockLocalRepo.isExported(any(), any())).thenReturn(false)
-        whenever(mockHealthRepo.readPeriod(any(), any(), any(), anyOrNull()))
+        whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
             .thenThrow(IllegalStateException("HC not available"))
 
         val worker = createWorker(config)
@@ -295,8 +237,7 @@ class DailyExportWorkerTest {
             autoSendWebhook = false
         )
 
-        whenever(mockLocalRepo.isExported(any(), any())).thenReturn(false)
-        whenever(mockHealthRepo.readPeriod(any(), any(), any(), anyOrNull()))
+        whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
             .thenThrow(RuntimeException("Network error"))
 
         val worker = createWorker(config)
@@ -324,8 +265,7 @@ class DailyExportWorkerTest {
         )
         val files = listOf(File(tempDir, "health_yesterday.json"))
 
-        whenever(mockLocalRepo.isExported(any(), any())).thenReturn(false)
-        whenever(mockHealthRepo.readPeriod(any(), any(), any(), anyOrNull())).thenReturn(records)
+        whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())).thenReturn(records)
         whenever(mockLocalRepo.saveRecords(any(), any())).thenReturn(files)
 
         val worker = createWorker(config)
@@ -354,8 +294,7 @@ class DailyExportWorkerTest {
         )
         val files = listOf(File(tempDir, "health_yesterday.json"))
 
-        whenever(mockLocalRepo.isExported(any(), any())).thenReturn(false)
-        whenever(mockHealthRepo.readPeriod(any(), any(), any(), anyOrNull())).thenReturn(records)
+        whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())).thenReturn(records)
         whenever(mockLocalRepo.saveRecords(any(), any())).thenReturn(files)
 
         val worker = createWorker(config)
@@ -380,9 +319,8 @@ class DailyExportWorkerTest {
         )
         val files = listOf(File(tempDir, "health_yesterday.json"))
 
-        whenever(mockLocalRepo.isExported(any(), any())).thenReturn(false)
         // The default config has ALL types enabled
-        whenever(mockHealthRepo.readPeriod(any(), any(), eq(HealthDataType.entries.toSet()), anyOrNull()))
+        whenever(mockHealthRepo.readPeriodInBatch(any(), any(), eq(HealthDataType.entries.toSet()), anyOrNull(), anyOrNull()))
             .thenReturn(records)
         whenever(mockLocalRepo.saveRecords(any(), any())).thenReturn(files)
         // Default autoSyncDrive=true, but drive may or may not be signed in
@@ -394,7 +332,7 @@ class DailyExportWorkerTest {
 
         assertEquals(ListenableWorker.Result.success(), result)
 
-        verify(mockHealthRepo).readPeriod(any(), any(), eq(HealthDataType.entries.toSet()), anyOrNull())
+        verify(mockHealthRepo).readPeriodInBatch(any(), any(), eq(HealthDataType.entries.toSet()), anyOrNull(), anyOrNull())
         verify(mockLocalRepo).saveRecords(any(), any())
         }
     }
@@ -513,8 +451,7 @@ class DailyExportWorkerTest {
             )
             val files = listOf(File(tempDir, "health_yesterday.json"))
 
-            whenever(mockLocalRepo.isExported(any(), any())).thenReturn(false)
-            whenever(mockHealthRepo.readPeriod(any(), any(), any(), anyOrNull())).thenReturn(records)
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())).thenReturn(records)
             whenever(mockLocalRepo.saveRecords(any(), any())).thenReturn(files)
             whenever(mockDriveRepo.isSignedIn()).thenReturn(true)
             whenever(mockDriveRepo.uploadFile(any(), any()))
@@ -526,89 +463,6 @@ class DailyExportWorkerTest {
             // Generic exception propagates to catch → retry
             assertEquals(ListenableWorker.Result.retry(), result)
             verify(mockDriveRepo).uploadFile(any(), any())
-        }
-    }
-
-    @Test
-    fun `drive sync with already exported and no matching files returns success`() {
-        runBlocking {
-            val config = ExportConfig(
-                enabledTypes = setOf(HealthDataType.STEPS),
-                frequency = ExportFrequency.DAILY,
-                autoSyncDrive = true,
-                autoSendWebhook = false
-            )
-
-            whenever(mockLocalRepo.isExported(any(), any())).thenReturn(true)
-            whenever(mockDriveRepo.isSignedIn()).thenReturn(true)
-            // No files for yesterday — only files for other dates
-            whenever(mockLocalRepo.listExportedFiles(any())).thenReturn(
-                listOf(
-                    LocalDate.now().minusDays(3) to File(tempDir, "health_old.json")
-                )
-            )
-
-            val worker = createWorker(config)
-            val result = worker.doWork()
-
-            assertEquals(ListenableWorker.Result.success(), result)
-            verify(mockLocalRepo).listExportedFiles(any())
-            // No files matched yesterday, so no upload
-            verify(mockDriveRepo, never()).uploadFile(any(), any())
-        }
-    }
-
-    @Test
-    fun `already exported syncs multiple files to drive`() {
-        runBlocking {
-            val config = ExportConfig(
-                enabledTypes = setOf(HealthDataType.STEPS),
-                frequency = ExportFrequency.DAILY,
-                autoSyncDrive = true,
-                autoSendWebhook = false
-            )
-            val yesterday = LocalDate.now().minusDays(1)
-            val file1 = File(tempDir, "health_1.json")
-            val file2 = File(tempDir, "health_2.json")
-
-            whenever(mockLocalRepo.isExported(any(), any())).thenReturn(true)
-            whenever(mockDriveRepo.isSignedIn()).thenReturn(true)
-            whenever(mockLocalRepo.listExportedFiles(any())).thenReturn(
-                listOf(yesterday to file1, yesterday to file2)
-            )
-            whenever(mockDriveRepo.uploadFile(any(), any())).thenReturn("file_id")
-
-            val worker = createWorker(config)
-            val result = worker.doWork()
-
-            assertEquals(ListenableWorker.Result.success(), result)
-            // Both files should be uploaded
-            verify(mockDriveRepo, times(2)).uploadFile(any(), any())
-            verify(mockDriveRepo).uploadFile(eq(file1), any())
-            verify(mockDriveRepo).uploadFile(eq(file2), any())
-        }
-    }
-
-    @Test
-    fun `drive sync not signed in skips upload for already exported`() {
-        runBlocking {
-            val config = ExportConfig(
-                enabledTypes = setOf(HealthDataType.STEPS),
-                frequency = ExportFrequency.DAILY,
-                autoSyncDrive = true,
-                autoSendWebhook = false
-            )
-
-            whenever(mockLocalRepo.isExported(any(), any())).thenReturn(true)
-            whenever(mockDriveRepo.isSignedIn()).thenReturn(false)
-
-            val worker = createWorker(config)
-            val result = worker.doWork()
-
-            assertEquals(ListenableWorker.Result.success(), result)
-            verify(mockDriveRepo).isSignedIn()
-            verify(mockDriveRepo, never()).uploadFile(any(), any())
-            verify(mockLocalRepo, never()).listExportedFiles(any())
         }
     }
 
@@ -634,8 +488,7 @@ class DailyExportWorkerTest {
             )
             val files = listOf(File(tempDir, "health_yesterday.json"))
 
-            whenever(mockLocalRepo.isExported(any(), any())).thenReturn(false)
-            whenever(mockHealthRepo.readPeriod(any(), any(), any(), anyOrNull())).thenReturn(records)
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())).thenReturn(records)
             whenever(mockLocalRepo.saveRecords(any(), any())).thenReturn(files)
 
             val worker = createWorker(config)
@@ -664,8 +517,7 @@ class DailyExportWorkerTest {
             )
             val files = listOf(File(tempDir, "health_yesterday.json"))
 
-            whenever(mockLocalRepo.isExported(any(), any())).thenReturn(false)
-            whenever(mockHealthRepo.readPeriod(any(), any(), any(), anyOrNull())).thenReturn(records)
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())).thenReturn(records)
             whenever(mockLocalRepo.saveRecords(any(), any())).thenReturn(files)
             whenever(mockWebhookRepo.sendRecords(any(), any(), anyOrNull()))
                 .thenThrow(RuntimeException("Webhook timeout"))
@@ -698,8 +550,7 @@ class DailyExportWorkerTest {
             )
             val files = listOf(File(tempDir, "health_yesterday.json"))
 
-            whenever(mockLocalRepo.isExported(any(), any())).thenReturn(false)
-            whenever(mockHealthRepo.readPeriod(any(), any(), any(), anyOrNull())).thenReturn(records)
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())).thenReturn(records)
             whenever(mockLocalRepo.saveRecords(any(), any())).thenReturn(files)
             whenever(mockWebhookRepo.sendRecords(any(), any(), anyOrNull()))
                 .thenReturn(WebhookResult.Success(200, "OK"))
@@ -740,8 +591,7 @@ class DailyExportWorkerTest {
             )
             val files = listOf(File(tempDir, "health_yesterday.json"))
 
-            whenever(mockLocalRepo.isExported(any(), any())).thenReturn(false)
-            whenever(mockHealthRepo.readPeriod(any(), any(), any(), anyOrNull())).thenReturn(records)
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())).thenReturn(records)
             whenever(mockLocalRepo.saveRecords(any(), any())).thenReturn(files)
             whenever(mockDriveRepo.isSignedIn()).thenReturn(true)
             whenever(mockDriveRepo.uploadFile(any(), any()))
@@ -757,35 +607,6 @@ class DailyExportWorkerTest {
             verify(mockDriveRepo).uploadFile(any(), any())
             // Webhook is not called because Drive exception interrupted the flow
             verify(mockWebhookRepo, never()).sendRecords(any(), any(), anyOrNull())
-        }
-    }
-
-    @Test
-    fun `sync to drive exception on already exported causes retry`() {
-        runBlocking {
-            val config = ExportConfig(
-                enabledTypes = setOf(HealthDataType.STEPS),
-                frequency = ExportFrequency.DAILY,
-                autoSyncDrive = true,
-                autoSendWebhook = false
-            )
-            val yesterday = LocalDate.now().minusDays(1)
-            val file1 = File(tempDir, "health_yesterday.json")
-
-            whenever(mockLocalRepo.isExported(any(), any())).thenReturn(true)
-            whenever(mockDriveRepo.isSignedIn()).thenReturn(true)
-            whenever(mockLocalRepo.listExportedFiles(any())).thenReturn(
-                listOf(yesterday to file1)
-            )
-            whenever(mockDriveRepo.uploadFile(any(), any()))
-                .thenThrow(RuntimeException("Drive error"))
-
-            val worker = createWorker(config)
-            val result = worker.doWork()
-
-            // syncToDrive exception propagates to catch → retry
-            assertEquals(ListenableWorker.Result.retry(), result)
-            verify(mockDriveRepo).uploadFile(any(), any())
         }
     }
 }

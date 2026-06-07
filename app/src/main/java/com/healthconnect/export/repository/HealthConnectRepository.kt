@@ -204,6 +204,8 @@ class HealthConnectRepository(private val context: Context) {
         val end = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
         val timeFilter = TimeRangeFilter.between(start, end)
 
+        Log.d(TAG, "readDay($date): start=$start, end=$end, types=$types, source=$selectedSourcePackage")
+
         val metadata = ExportMetadata(
             appVersion = "1.0.0",
             exportTimestamp = Instant.now().toDateTimeString(),
@@ -211,7 +213,7 @@ class HealthConnectRepository(private val context: Context) {
             sourceDevice = android.os.Build.MODEL
         )
 
-        DailyHealthRecord(
+        val record = DailyHealthRecord(
             date = date.toString(),
             steps = if (types.contains(HealthDataType.STEPS)) readSteps(timeFilter, selectedSourcePackage) else null,
             heartRate = if (types.contains(HealthDataType.HEART_RATE)) readHeartRate(timeFilter) else null,
@@ -235,24 +237,37 @@ class HealthConnectRepository(private val context: Context) {
             menstruation = if (types.contains(HealthDataType.MENSTRUATION)) readMenstruation(timeFilter) else null,
             metadata = metadata
         )
-    }
 
-    /**
-     * Reads multiple days of data
-     */
-    suspend fun readPeriod(
-        startDate: LocalDate,
-        endDate: LocalDate,
-        types: Set<HealthDataType>,
-        selectedSourcePackage: String? = null
-    ): List<DailyHealthRecord> {
-        val records = mutableListOf<DailyHealthRecord>()
-        var current = startDate
-        while (!current.isAfter(endDate)) {
-            records.add(readDay(current, types, selectedSourcePackage))
-            current = current.plusDays(1)
+        // Log summary of which data types returned results
+        val nonNullFields = mutableListOf<String>()
+        if (record.steps != null) nonNullFields.add("steps")
+        if (record.heartRate != null) nonNullFields.add("heartRate")
+        if (record.sleep != null) nonNullFields.add("sleep")
+        if (record.calories != null) nonNullFields.add("calories")
+        if (record.distance != null) nonNullFields.add("distance")
+        if (record.floorsClimbed != null) nonNullFields.add("floorsClimbed")
+        if (record.activeCalories != null) nonNullFields.add("activeCalories")
+        if (record.weight != null) nonNullFields.add("weight")
+        if (record.bodyFat != null) nonNullFields.add("bodyFat")
+        if (record.bloodPressure != null) nonNullFields.add("bloodPressure")
+        if (record.bloodGlucose != null) nonNullFields.add("bloodGlucose")
+        if (record.oxygenSaturation != null) nonNullFields.add("oxygenSaturation")
+        if (record.bodyTemperature != null) nonNullFields.add("bodyTemperature")
+        if (record.respiratoryRate != null) nonNullFields.add("respiratoryRate")
+        if (record.hydration != null) nonNullFields.add("hydration")
+        if (record.restingHeartRate != null) nonNullFields.add("restingHeartRate")
+        if (record.exercises != null) nonNullFields.add("exercises")
+        if (record.nutrition != null) nonNullFields.add("nutrition")
+        if (record.speed != null) nonNullFields.add("speed")
+        if (record.menstruation != null) nonNullFields.add("menstruation")
+
+        if (nonNullFields.isEmpty()) {
+            Log.w(TAG, "readDay($date): ALL data types returned null! types=$types")
+        } else {
+            Log.d(TAG, "readDay($date): non-null fields: $nonNullFields")
         }
-        return records
+
+        record
     }
 
     // ===== Pagination helper =====
@@ -264,12 +279,24 @@ class HealthConnectRepository(private val context: Context) {
      * Чтобы гарантированно получить всё, используем pageToken из ответа.
      */
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
-    internal suspend fun <T : Record> readAllPages(request: ReadRecordsRequest<T>): List<T> {
+    internal suspend fun <T : Record> readAllPages(
+        request: ReadRecordsRequest<T>,
+        onPageProgress: ((typeName: String, pageNumber: Int) -> Unit)? = null
+    ): List<T> {
         val c = client ?: return emptyList()
         val allRecords = mutableListOf<T>()
         var pageToken: String? = null
+        var pageCount = 0
+        val maxPages = 100 // Safety limit to prevent infinite loops
         do {
+            pageCount++
+            if (pageCount > maxPages) {
+                Log.w(TAG, "readAllPages: exceeded max pages ($maxPages), stopping")
+                break
+            }
             val recordType = request.recordType
+            val typeName = recordType.simpleName ?: "Unknown"
+            onPageProgress?.invoke(typeName, pageCount)
             val pageRequest = ReadRecordsRequest(
                 recordType = recordType,
                 timeRangeFilter = request.timeRangeFilter,
@@ -279,28 +306,563 @@ class HealthConnectRepository(private val context: Context) {
                 pageToken = pageToken
             )
             val response = c.readRecords(pageRequest)
+            val recordsOnPage = response.records.size
+            if (recordsOnPage == 0 && pageToken != null) {
+                Log.w(TAG, "readAllPages: empty page with non-null pageToken, stopping")
+                break
+            }
             allRecords.addAll(response.records)
             pageToken = response.pageToken
-            Log.d(TAG, "readAllPages: got ${allRecords.size} records, pageToken=$pageToken")
+            Log.d(TAG, "readAllPages(${request.recordType.simpleName}): page=$pageCount, got=$recordsOnPage, total=${allRecords.size}, nextToken=$pageToken")
         } while (pageToken != null)
         return allRecords
     }
 
-    // ===== Private readers =====
+    // ===== Extraction functions (pure aggregation logic, no API calls) =====
+
+    private fun extractSteps(records: List<StepsRecord>, selectedSourcePackage: String? = null): StepsData? {
+        if (records.isEmpty()) return null
+        val filtered = filterByPreferredOrigin(records, selectedSourcePackage)
+        if (filtered.isEmpty()) return null
+        val total = filtered.sumOf { it.count }
+        Log.d(TAG, "extractSteps: records=${records.size}, filtered=${filtered.size}, totalSteps=$total")
+        return StepsData(totalSteps = total, recordsCount = filtered.size)
+    }
+
+    private fun extractHeartRate(records: List<HeartRateRecord>): HeartRateData? {
+        if (records.isEmpty()) return null
+        val samples = records.flatMap { it.samples }
+        if (samples.isEmpty()) return null
+        val beats = samples.map { it.beatsPerMinute }
+        return HeartRateData(
+            avgBpm = beats.average(),
+            minBpm = beats.min().toInt(),
+            maxBpm = beats.max().toInt(),
+            recordsCount = records.size
+        )
+    }
+
+    private fun extractSleep(records: List<SleepSessionRecord>): SleepData? {
+        if (records.isEmpty()) return null
+        val totalMinutes = records.sumOf {
+            ChronoUnit.MINUTES.between(it.startTime, it.endTime)
+        }
+        val stageDurations = mutableMapOf<String, Long>()
+        records.forEach { record ->
+            record.stages.forEach { stage ->
+                val name = sleepStageToString(stage.stage) ?: "Unknown"
+                val duration = ChronoUnit.MINUTES.between(stage.startTime, stage.endTime)
+                if (duration > 0) {
+                    stageDurations[name] = (stageDurations[name] ?: 0) + duration
+                }
+            }
+        }
+        return SleepData(
+            totalDurationMinutes = totalMinutes,
+            sleepStages = stageDurations,
+            recordsCount = records.size
+        )
+    }
+
+    private fun extractCalories(records: List<TotalCaloriesBurnedRecord>, selectedSourcePackage: String? = null): CaloriesData? {
+        if (records.isEmpty()) return null
+        val filtered = filterByPreferredOrigin(records, selectedSourcePackage)
+        if (filtered.isEmpty()) return null
+        val total = filtered.sumOf { it.energy.inKilocalories }
+        return CaloriesData(totalCalories = total, recordsCount = filtered.size)
+    }
+
+    private fun extractDistance(records: List<DistanceRecord>, selectedSourcePackage: String? = null): DistanceData? {
+        if (records.isEmpty()) return null
+        val filtered = filterByPreferredOrigin(records, selectedSourcePackage)
+        if (filtered.isEmpty()) return null
+        val total = filtered.sumOf { it.distance.inMeters }
+        return DistanceData(totalDistanceMeters = total, recordsCount = filtered.size)
+    }
+
+    private fun extractFloorsClimbed(records: List<FloorsClimbedRecord>, selectedSourcePackage: String? = null): FloorsClimbedData? {
+        if (records.isEmpty()) return null
+        val filtered = filterByPreferredOrigin(records, selectedSourcePackage)
+        if (filtered.isEmpty()) return null
+        val total = filtered.sumOf { it.floors }
+        return FloorsClimbedData(totalFloors = total, recordsCount = filtered.size)
+    }
+
+    private fun extractActiveCalories(records: List<ActiveCaloriesBurnedRecord>, selectedSourcePackage: String? = null): ActiveCaloriesData? {
+        if (records.isEmpty()) return null
+        val filtered = filterByPreferredOrigin(records, selectedSourcePackage)
+        if (filtered.isEmpty()) return null
+        val total = filtered.sumOf { it.energy.inKilocalories }
+        return ActiveCaloriesData(totalCalories = total, recordsCount = filtered.size)
+    }
+
+    private fun extractWeight(records: List<WeightRecord>): WeightData? {
+        if (records.isEmpty()) return null
+        val avg = records.map { it.weight.inKilograms }.average()
+        return WeightData(weightKg = avg, recordsCount = records.size)
+    }
+
+    private fun extractBodyFat(records: List<BodyFatRecord>): BodyFatData? {
+        if (records.isEmpty()) return null
+        val avg = records.map { it.percentage.value }.average()
+        return BodyFatData(percentage = avg, recordsCount = records.size)
+    }
+
+    private fun extractBloodPressure(records: List<BloodPressureRecord>): BloodPressureData? {
+        if (records.isEmpty()) return null
+        val systolicAvg = records.map { it.systolic.inMillimetersOfMercury }.average()
+        val diastolicAvg = records.map { it.diastolic.inMillimetersOfMercury }.average()
+        val position = bodyPositionToString(records.firstOrNull()?.bodyPosition)
+        return BloodPressureData(
+            systolicMmHg = systolicAvg,
+            diastolicMmHg = diastolicAvg,
+            bodyPosition = position,
+            recordsCount = records.size
+        )
+    }
+
+    private fun extractBloodGlucose(records: List<BloodGlucoseRecord>): BloodGlucoseData? {
+        if (records.isEmpty()) return null
+        val avg = records.map { it.level.inMillimolesPerLiter }.average()
+        val source = specimenSourceToString(records.firstOrNull()?.specimenSource)
+        val mealType = mealTypeToString(records.firstOrNull()?.mealType)
+        return BloodGlucoseData(
+            level = avg,
+            specimenSource = source,
+            mealType = mealType,
+            recordsCount = records.size
+        )
+    }
+
+    private fun extractOxygenSaturation(records: List<OxygenSaturationRecord>): OxygenSaturationData? {
+        if (records.isEmpty()) return null
+        val avg = records.map { it.percentage.value }.average()
+        return OxygenSaturationData(percentage = avg, recordsCount = records.size)
+    }
+
+    private fun extractBodyTemperature(records: List<BodyTemperatureRecord>): BodyTemperatureData? {
+        if (records.isEmpty()) return null
+        val avg = records.map { it.temperature.inCelsius }.average()
+        val location = measurementLocationToString(records.firstOrNull()?.measurementLocation)
+        return BodyTemperatureData(
+            temperatureCelsius = avg,
+            measurementLocation = location,
+            recordsCount = records.size
+        )
+    }
+
+    private fun extractRespiratoryRate(records: List<RespiratoryRateRecord>): RespiratoryRateData? {
+        if (records.isEmpty()) return null
+        val avg = records.map { it.rate }.average()
+        return RespiratoryRateData(rate = avg, recordsCount = records.size)
+    }
+
+    private fun extractHydration(records: List<HydrationRecord>): HydrationData? {
+        if (records.isEmpty()) return null
+        val total = records.sumOf { it.volume.inLiters }
+        return HydrationData(totalVolumeLiters = total, recordsCount = records.size)
+    }
+
+    private fun extractRestingHeartRate(records: List<RestingHeartRateRecord>): RestingHeartRateData? {
+        if (records.isEmpty()) return null
+        val bpmValues = records.map { it.beatsPerMinute }
+        return RestingHeartRateData(
+            avgBpm = bpmValues.average(),
+            minBpm = bpmValues.min(),
+            maxBpm = bpmValues.max(),
+            recordsCount = records.size
+        )
+    }
+
+    private fun extractExercises(records: List<ExerciseSessionRecord>): List<ExerciseData>? {
+        if (records.isEmpty()) return null
+        return records.map { record ->
+            ExerciseData(
+                exerciseType = exerciseTypeToString(record.exerciseType) ?: "Unknown",
+                startTime = record.startTime.toDateTimeString(),
+                endTime = record.endTime.toDateTimeString(),
+                durationMinutes = ChronoUnit.MINUTES.between(record.startTime, record.endTime),
+                title = record.title,
+                notes = record.notes
+            )
+        }
+    }
+
+    private fun extractNutrition(records: List<NutritionRecord>): List<NutritionData>? {
+        if (records.isEmpty()) return null
+        return records.map { record ->
+            NutritionData(
+                name = record.name,
+                mealType = nutritionMealTypeToString(record.mealType),
+                energyKcal = record.energy?.inKilocalories,
+                proteinG = record.protein?.inGrams,
+                totalCarbohydrateG = record.totalCarbohydrate?.inGrams,
+                fatG = record.totalFat?.inGrams,
+                dietaryFiberG = record.dietaryFiber?.inGrams,
+                sugarG = record.sugar?.inGrams,
+                saturatedFatG = record.saturatedFat?.inGrams,
+                transFatG = record.transFat?.inGrams,
+                cholesterolMg = record.cholesterol?.inMilligrams,
+                sodiumMg = record.sodium?.inMilligrams,
+                potassiumMg = record.potassium?.inMilligrams,
+                caffeineMg = record.caffeine?.inMilligrams,
+                calciumMg = record.calcium?.inMilligrams,
+                ironMg = record.iron?.inMilligrams,
+                magnesiumMg = record.magnesium?.inMilligrams,
+                vitaminCMg = record.vitaminC?.inMilligrams,
+                vitaminDMcg = record.vitaminD?.inMicrograms
+            )
+        }
+    }
+
+    private fun extractSpeed(records: List<SpeedRecord>): SpeedData? {
+        if (records.isEmpty()) return null
+        val allSamples = records.flatMap { it.samples }
+        if (allSamples.isEmpty()) return null
+        val avgSpeed = allSamples.map { it.speed.inMetersPerSecond }.average()
+        return SpeedData(
+            avgSpeedMetersPerSecond = avgSpeed,
+            recordsCount = records.size
+        )
+    }
+
+    private fun extractMenstruation(records: List<MenstruationFlowRecord>): MenstruationData? {
+        if (records.isEmpty()) return null
+        val record = records.first()
+        return MenstruationData(
+            flowType = menstruationFlowToString(record.flow),
+            time = record.time.toDateTimeString()
+        )
+    }
+
+    // ===== Batch period reader =====
+
+    /**
+     * Reads health data for an entire period in batch mode.
+     * For each data type, makes ONE API call to read ALL records for the full period,
+     * then groups results by day. This avoids rate limiting from N×M calls (N=days, M=types).
+     */
+    suspend fun readPeriodInBatch(
+        startDate: LocalDate,
+        endDate: LocalDate,
+        types: Set<HealthDataType>,
+        selectedSourcePackage: String? = null,
+        onPageProgress: ((typeName: String, pageNumber: Int) -> Unit)? = null
+    ): List<DailyHealthRecord> = withContext(Dispatchers.IO) {
+        val start = startDate.atStartOfDay(ZoneId.systemDefault()).toInstant()
+        val end = endDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
+        val timeFilter = TimeRangeFilter.between(start, end)
+
+        Log.d(TAG, "readPeriodInBatch: start=$startDate, end=$endDate, types=$types, source=$selectedSourcePackage")
+        Log.d(TAG, "readPeriodInBatch: timeFilter start=$start, end=$end")
+
+        val metadata = ExportMetadata(
+            appVersion = "1.0.0",
+            exportTimestamp = Instant.now().toDateTimeString(),
+            timezone = ZoneId.systemDefault().id,
+            sourceDevice = android.os.Build.MODEL
+        )
+
+        // Build a map: date -> builder, pre-populated
+        val daysMap = mutableMapOf<String, DailyHealthRecord>()
+        var current = startDate
+        while (!current.isAfter(endDate)) {
+            daysMap[current.toString()] = DailyHealthRecord(
+                date = current.toString(),
+                metadata = metadata
+            )
+            current = current.plusDays(1)
+        }
+
+        // Group by day helper (selector must provide the timestamp property for each record type)
+
+        // Helper to map HealthDataType to a user-friendly display name
+        fun displayName(type: HealthDataType): String = type.displayName
+
+        // Process each data type with a single API call
+        if (types.contains(HealthDataType.STEPS)) {
+            val typeName = displayName(HealthDataType.STEPS)
+            val allRecords = readAllPages(ReadRecordsRequest(StepsRecord::class, timeRangeFilter = timeFilter)) { _, page ->
+                onPageProgress?.invoke(typeName, page)
+            }
+
+            val byDay = allRecords.groupBy { it.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
+            byDay.forEach { (dateStr, records) ->
+                daysMap[dateStr] = daysMap[dateStr]!!.copy(
+                    steps = extractSteps(records, selectedSourcePackage)
+                )
+            }
+
+            Log.d(TAG, "readPeriodInBatch STEPS: total=${allRecords.size}, days=${byDay.size}")
+        }
+
+        if (types.contains(HealthDataType.HEART_RATE)) {
+            val typeName = displayName(HealthDataType.HEART_RATE)
+            val allRecords = readAllPages(ReadRecordsRequest(HeartRateRecord::class, timeRangeFilter = timeFilter)) { _, page ->
+                onPageProgress?.invoke(typeName, page)
+            }
+
+            val byDay = allRecords.groupBy { it.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
+            byDay.forEach { (dateStr, records) ->
+                daysMap[dateStr] = daysMap[dateStr]!!.copy(
+                    heartRate = extractHeartRate(records)
+                )
+            }
+
+            Log.d(TAG, "readPeriodInBatch HEART_RATE: total=${allRecords.size}, days=${byDay.size}")
+        }
+
+        if (types.contains(HealthDataType.SLEEP)) {
+            val typeName = displayName(HealthDataType.SLEEP)
+            val allRecords = readAllPages(ReadRecordsRequest(SleepSessionRecord::class, timeRangeFilter = timeFilter)) { _, page ->
+                onPageProgress?.invoke(typeName, page)
+            }
+            val byDay = allRecords.groupBy { it.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
+            byDay.forEach { (dateStr, records) ->
+                daysMap[dateStr] = daysMap[dateStr]!!.copy(
+                    sleep = extractSleep(records)
+                )
+            }
+            Log.d(TAG, "readPeriodInBatch SLEEP: total=${allRecords.size}, days=${byDay.size}")
+        }
+
+        if (types.contains(HealthDataType.CALORIES)) {
+            val typeName = displayName(HealthDataType.CALORIES)
+            val allRecords = readAllPages(ReadRecordsRequest(TotalCaloriesBurnedRecord::class, timeRangeFilter = timeFilter)) { _, page ->
+                onPageProgress?.invoke(typeName, page)
+            }
+            val byDay = allRecords.groupBy { it.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
+            byDay.forEach { (dateStr, records) ->
+                daysMap[dateStr] = daysMap[dateStr]!!.copy(
+                    calories = extractCalories(records, selectedSourcePackage)
+                )
+            }
+        }
+
+        if (types.contains(HealthDataType.DISTANCE)) {
+            val typeName = displayName(HealthDataType.DISTANCE)
+            val allRecords = readAllPages(ReadRecordsRequest(DistanceRecord::class, timeRangeFilter = timeFilter)) { _, page ->
+                onPageProgress?.invoke(typeName, page)
+            }
+            val byDay = allRecords.groupBy { it.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
+            byDay.forEach { (dateStr, records) ->
+                daysMap[dateStr] = daysMap[dateStr]!!.copy(
+                    distance = extractDistance(records, selectedSourcePackage)
+                )
+            }
+        }
+
+        if (types.contains(HealthDataType.FLOORS_CLIMBED)) {
+            val typeName = displayName(HealthDataType.FLOORS_CLIMBED)
+            val allRecords = readAllPages(ReadRecordsRequest(FloorsClimbedRecord::class, timeRangeFilter = timeFilter)) { _, page ->
+                onPageProgress?.invoke(typeName, page)
+            }
+            val byDay = allRecords.groupBy { it.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
+            byDay.forEach { (dateStr, records) ->
+                daysMap[dateStr] = daysMap[dateStr]!!.copy(
+                    floorsClimbed = extractFloorsClimbed(records, selectedSourcePackage)
+                )
+            }
+        }
+
+        if (types.contains(HealthDataType.ACTIVE_CALORIES)) {
+            val typeName = displayName(HealthDataType.ACTIVE_CALORIES)
+            val allRecords = readAllPages(ReadRecordsRequest(ActiveCaloriesBurnedRecord::class, timeRangeFilter = timeFilter)) { _, page ->
+                onPageProgress?.invoke(typeName, page)
+            }
+            val byDay = allRecords.groupBy { it.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
+            byDay.forEach { (dateStr, records) ->
+                daysMap[dateStr] = daysMap[dateStr]!!.copy(
+                    activeCalories = extractActiveCalories(records, selectedSourcePackage)
+                )
+            }
+        }
+
+        if (types.contains(HealthDataType.WEIGHT)) {
+            val typeName = displayName(HealthDataType.WEIGHT)
+            val allRecords = readAllPages(ReadRecordsRequest(WeightRecord::class, timeRangeFilter = timeFilter)) { _, page ->
+                onPageProgress?.invoke(typeName, page)
+            }
+            val byDay = allRecords.groupBy { it.time.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
+            byDay.forEach { (dateStr, records) ->
+                daysMap[dateStr] = daysMap[dateStr]!!.copy(
+                    weight = extractWeight(records)
+                )
+            }
+        }
+
+        if (types.contains(HealthDataType.BODY_FAT)) {
+            val typeName = displayName(HealthDataType.BODY_FAT)
+            val allRecords = readAllPages(ReadRecordsRequest(BodyFatRecord::class, timeRangeFilter = timeFilter)) { _, page ->
+                onPageProgress?.invoke(typeName, page)
+            }
+            val byDay = allRecords.groupBy { it.time.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
+            byDay.forEach { (dateStr, records) ->
+                daysMap[dateStr] = daysMap[dateStr]!!.copy(
+                    bodyFat = extractBodyFat(records)
+                )
+            }
+        }
+
+        if (types.contains(HealthDataType.BLOOD_PRESSURE)) {
+            val typeName = displayName(HealthDataType.BLOOD_PRESSURE)
+            val allRecords = readAllPages(ReadRecordsRequest(BloodPressureRecord::class, timeRangeFilter = timeFilter)) { _, page ->
+                onPageProgress?.invoke(typeName, page)
+            }
+            val byDay = allRecords.groupBy { it.time.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
+            byDay.forEach { (dateStr, records) ->
+                daysMap[dateStr] = daysMap[dateStr]!!.copy(
+                    bloodPressure = extractBloodPressure(records)
+                )
+            }
+        }
+
+        if (types.contains(HealthDataType.BLOOD_GLUCOSE)) {
+            val typeName = displayName(HealthDataType.BLOOD_GLUCOSE)
+            val allRecords = readAllPages(ReadRecordsRequest(BloodGlucoseRecord::class, timeRangeFilter = timeFilter)) { _, page ->
+                onPageProgress?.invoke(typeName, page)
+            }
+            val byDay = allRecords.groupBy { it.time.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
+            byDay.forEach { (dateStr, records) ->
+                daysMap[dateStr] = daysMap[dateStr]!!.copy(
+                    bloodGlucose = extractBloodGlucose(records)
+                )
+            }
+        }
+
+        if (types.contains(HealthDataType.OXYGEN_SATURATION)) {
+            val typeName = displayName(HealthDataType.OXYGEN_SATURATION)
+            val allRecords = readAllPages(ReadRecordsRequest(OxygenSaturationRecord::class, timeRangeFilter = timeFilter)) { _, page ->
+                onPageProgress?.invoke(typeName, page)
+            }
+            val byDay = allRecords.groupBy { it.time.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
+            byDay.forEach { (dateStr, records) ->
+                daysMap[dateStr] = daysMap[dateStr]!!.copy(
+                    oxygenSaturation = extractOxygenSaturation(records)
+                )
+            }
+        }
+
+        if (types.contains(HealthDataType.BODY_TEMPERATURE)) {
+            val typeName = displayName(HealthDataType.BODY_TEMPERATURE)
+            val allRecords = readAllPages(ReadRecordsRequest(BodyTemperatureRecord::class, timeRangeFilter = timeFilter)) { _, page ->
+                onPageProgress?.invoke(typeName, page)
+            }
+            val byDay = allRecords.groupBy { it.time.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
+            byDay.forEach { (dateStr, records) ->
+                daysMap[dateStr] = daysMap[dateStr]!!.copy(
+                    bodyTemperature = extractBodyTemperature(records)
+                )
+            }
+        }
+
+        if (types.contains(HealthDataType.RESPIRATORY_RATE)) {
+            val typeName = displayName(HealthDataType.RESPIRATORY_RATE)
+            val allRecords = readAllPages(ReadRecordsRequest(RespiratoryRateRecord::class, timeRangeFilter = timeFilter)) { _, page ->
+                onPageProgress?.invoke(typeName, page)
+            }
+            val byDay = allRecords.groupBy { it.time.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
+            byDay.forEach { (dateStr, records) ->
+                daysMap[dateStr] = daysMap[dateStr]!!.copy(
+                    respiratoryRate = extractRespiratoryRate(records)
+                )
+            }
+        }
+
+        if (types.contains(HealthDataType.HYDRATION)) {
+            val typeName = displayName(HealthDataType.HYDRATION)
+            val allRecords = readAllPages(ReadRecordsRequest(HydrationRecord::class, timeRangeFilter = timeFilter)) { _, page ->
+                onPageProgress?.invoke(typeName, page)
+            }
+            val byDay = allRecords.groupBy { it.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
+            byDay.forEach { (dateStr, records) ->
+                daysMap[dateStr] = daysMap[dateStr]!!.copy(
+                    hydration = extractHydration(records)
+                )
+            }
+        }
+
+        if (types.contains(HealthDataType.RESTING_HEART_RATE)) {
+            val typeName = displayName(HealthDataType.RESTING_HEART_RATE)
+            val allRecords = readAllPages(ReadRecordsRequest(RestingHeartRateRecord::class, timeRangeFilter = timeFilter)) { _, page ->
+                onPageProgress?.invoke(typeName, page)
+            }
+            val byDay = allRecords.groupBy { it.time.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
+            byDay.forEach { (dateStr, records) ->
+                daysMap[dateStr] = daysMap[dateStr]!!.copy(
+                    restingHeartRate = extractRestingHeartRate(records)
+                )
+            }
+        }
+
+        if (types.contains(HealthDataType.EXERCISE)) {
+            val typeName = displayName(HealthDataType.EXERCISE)
+            val allRecords = readAllPages(ReadRecordsRequest(ExerciseSessionRecord::class, timeRangeFilter = timeFilter)) { _, page ->
+                onPageProgress?.invoke(typeName, page)
+            }
+            val byDay = allRecords.groupBy { it.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
+            byDay.forEach { (dateStr, records) ->
+                daysMap[dateStr] = daysMap[dateStr]!!.copy(
+                    exercises = extractExercises(records)
+                )
+            }
+        }
+
+        if (types.contains(HealthDataType.NUTRITION)) {
+            val typeName = displayName(HealthDataType.NUTRITION)
+            val allRecords = readAllPages(ReadRecordsRequest(NutritionRecord::class, timeRangeFilter = timeFilter)) { _, page ->
+                onPageProgress?.invoke(typeName, page)
+            }
+            val byDay = allRecords.groupBy { it.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
+            byDay.forEach { (dateStr, records) ->
+                daysMap[dateStr] = daysMap[dateStr]!!.copy(
+                    nutrition = extractNutrition(records)
+                )
+            }
+        }
+
+        if (types.contains(HealthDataType.SPEED)) {
+            val typeName = displayName(HealthDataType.SPEED)
+            val allRecords = readAllPages(ReadRecordsRequest(SpeedRecord::class, timeRangeFilter = timeFilter)) { _, page ->
+                onPageProgress?.invoke(typeName, page)
+            }
+            val byDay = allRecords.groupBy { it.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
+            byDay.forEach { (dateStr, records) ->
+                daysMap[dateStr] = daysMap[dateStr]!!.copy(
+                    speed = extractSpeed(records)
+                )
+            }
+        }
+
+        if (types.contains(HealthDataType.MENSTRUATION)) {
+            val typeName = displayName(HealthDataType.MENSTRUATION)
+            val allRecords = readAllPages(ReadRecordsRequest(MenstruationFlowRecord::class, timeRangeFilter = timeFilter)) { _, page ->
+                onPageProgress?.invoke(typeName, page)
+            }
+            val byDay = allRecords.groupBy { it.time.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
+            byDay.forEach { (dateStr, records) ->
+                daysMap[dateStr] = daysMap[dateStr]!!.copy(
+                    menstruation = extractMenstruation(records)
+                )
+            }
+        }
+
+        // Return sorted list
+        val result = startDate.datesUntil(endDate.plusDays(1))
+            .map { date -> daysMap[date.toString()] ?: DailyHealthRecord(date = date.toString(), metadata = metadata) }
+            .toList()
+
+        val daysWithData = result.count { r -> r.steps != null || r.heartRate != null || r.sleep != null || r.calories != null || r.distance != null || r.weight != null }
+        Log.d(TAG, "readPeriodInBatch: completed, ${result.size} days total, $daysWithData days with data")
+        result
+    }
+
+    // ===== Private readers (now delegate to extraction functions) =====
 
     private suspend fun readSteps(filter: TimeRangeFilter, selectedSourcePackage: String? = null): StepsData? {
         val c = client ?: return null
         val allRecords = readAllPages(ReadRecordsRequest(StepsRecord::class, timeRangeFilter = filter))
-        if (allRecords.isEmpty()) return null
-
-        val filtered = filterByPreferredOrigin(allRecords, selectedSourcePackage)
-        if (filtered.isEmpty()) return null
-
-        // Single source — just sum (overlaps from same source are rare in practice)
-        val total = filtered.sumOf { it.count }
-
-        Log.d(TAG, "readSteps: raw=${allRecords.size}, filtered=${filtered.size}, totalSteps=$total")
-        return StepsData(totalSteps = total, recordsCount = filtered.size)
+        return extractSteps(allRecords, selectedSourcePackage)
     }
 
     /**
@@ -355,245 +917,114 @@ class HealthConnectRepository(private val context: Context) {
     private suspend fun readHeartRate(filter: TimeRangeFilter): HeartRateData? {
         val c = client ?: return null
         val allRecords = readAllPages(ReadRecordsRequest(HeartRateRecord::class, timeRangeFilter = filter))
-        if (allRecords.isEmpty()) return null
-        val samples = allRecords.flatMap { it.samples }
-        if (samples.isEmpty()) return null
-        val beats = samples.map { it.beatsPerMinute }
-        return HeartRateData(
-            avgBpm = beats.average(),
-            minBpm = beats.min().toInt(),
-            maxBpm = beats.max().toInt(),
-            recordsCount = allRecords.size
-        )
+        return extractHeartRate(allRecords)
     }
 
     private suspend fun readSleep(filter: TimeRangeFilter): SleepData? {
         val c = client ?: return null
         val allRecords = readAllPages(ReadRecordsRequest(SleepSessionRecord::class, timeRangeFilter = filter))
-        if (allRecords.isEmpty()) return null
-        val totalMinutes = allRecords.sumOf {
-            ChronoUnit.MINUTES.between(it.startTime, it.endTime)
-        }
-        val stageDurations = mutableMapOf<String, Long>()
-        allRecords.forEach { record ->
-            record.stages.forEach { stage ->
-                val name = sleepStageToString(stage.stage) ?: "Неизвестно"
-                val duration = ChronoUnit.MINUTES.between(stage.startTime, stage.endTime)
-                if (duration > 0) {
-                    stageDurations[name] = (stageDurations[name] ?: 0) + duration
-                }
-            }
-        }
-        return SleepData(
-            totalDurationMinutes = totalMinutes,
-            sleepStages = stageDurations,
-            recordsCount = allRecords.size
-        )
+        return extractSleep(allRecords)
     }
 
     private suspend fun readCalories(filter: TimeRangeFilter, selectedSourcePackage: String? = null): CaloriesData? {
         val c = client ?: return null
         val allRecords = readAllPages(ReadRecordsRequest(TotalCaloriesBurnedRecord::class, timeRangeFilter = filter))
-        if (allRecords.isEmpty()) return null
-        val filtered = filterByPreferredOrigin(allRecords, selectedSourcePackage)
-        if (filtered.isEmpty()) return null
-        val total = filtered.sumOf { it.energy.inKilocalories }
-        return CaloriesData(totalCalories = total, recordsCount = filtered.size)
+        return extractCalories(allRecords, selectedSourcePackage)
     }
 
     private suspend fun readDistance(filter: TimeRangeFilter, selectedSourcePackage: String? = null): DistanceData? {
         val c = client ?: return null
         val allRecords = readAllPages(ReadRecordsRequest(DistanceRecord::class, timeRangeFilter = filter))
-        if (allRecords.isEmpty()) return null
-        val filtered = filterByPreferredOrigin(allRecords, selectedSourcePackage)
-        if (filtered.isEmpty()) return null
-        val total = filtered.sumOf { it.distance.inMeters }
-        return DistanceData(totalDistanceMeters = total, recordsCount = filtered.size)
+        return extractDistance(allRecords, selectedSourcePackage)
     }
 
     private suspend fun readFloorsClimbed(filter: TimeRangeFilter, selectedSourcePackage: String? = null): FloorsClimbedData? {
         val c = client ?: return null
         val allRecords = readAllPages(ReadRecordsRequest(FloorsClimbedRecord::class, timeRangeFilter = filter))
-        if (allRecords.isEmpty()) return null
-        val filtered = filterByPreferredOrigin(allRecords, selectedSourcePackage)
-        if (filtered.isEmpty()) return null
-        val total = filtered.sumOf { it.floors }
-        return FloorsClimbedData(totalFloors = total, recordsCount = filtered.size)
+        return extractFloorsClimbed(allRecords, selectedSourcePackage)
     }
 
     private suspend fun readActiveCalories(filter: TimeRangeFilter, selectedSourcePackage: String? = null): ActiveCaloriesData? {
         val c = client ?: return null
         val allRecords = readAllPages(ReadRecordsRequest(ActiveCaloriesBurnedRecord::class, timeRangeFilter = filter))
-        if (allRecords.isEmpty()) return null
-        val filtered = filterByPreferredOrigin(allRecords, selectedSourcePackage)
-        if (filtered.isEmpty()) return null
-        val total = filtered.sumOf { it.energy.inKilocalories }
-        return ActiveCaloriesData(totalCalories = total, recordsCount = filtered.size)
+        return extractActiveCalories(allRecords, selectedSourcePackage)
     }
 
     private suspend fun readWeight(filter: TimeRangeFilter): WeightData? {
         val c = client ?: return null
         val allRecords = readAllPages(ReadRecordsRequest(WeightRecord::class, timeRangeFilter = filter))
-        if (allRecords.isEmpty()) return null
-        // WeightRecord stores weight in kilograms
-        val avg = allRecords.map { it.weight.inKilograms }.average()
-        return WeightData(weightKg = avg, recordsCount = allRecords.size)
+        return extractWeight(allRecords)
     }
 
     private suspend fun readBodyFat(filter: TimeRangeFilter): BodyFatData? {
         val c = client ?: return null
         val allRecords = readAllPages(ReadRecordsRequest(BodyFatRecord::class, timeRangeFilter = filter))
-        if (allRecords.isEmpty()) return null
-        val avg = allRecords.map { it.percentage.value }.average()
-        return BodyFatData(percentage = avg, recordsCount = allRecords.size)
+        return extractBodyFat(allRecords)
     }
 
     private suspend fun readBloodPressure(filter: TimeRangeFilter): BloodPressureData? {
         val c = client ?: return null
         val allRecords = readAllPages(ReadRecordsRequest(BloodPressureRecord::class, timeRangeFilter = filter))
-        if (allRecords.isEmpty()) return null
-        val systolicAvg = allRecords.map { it.systolic.inMillimetersOfMercury }.average()
-        val diastolicAvg = allRecords.map { it.diastolic.inMillimetersOfMercury }.average()
-        val position = bodyPositionToString(allRecords.firstOrNull()?.bodyPosition)
-        return BloodPressureData(
-            systolicMmHg = systolicAvg,
-            diastolicMmHg = diastolicAvg,
-            bodyPosition = position,
-            recordsCount = allRecords.size
-        )
+        return extractBloodPressure(allRecords)
     }
 
     private suspend fun readBloodGlucose(filter: TimeRangeFilter): BloodGlucoseData? {
         val c = client ?: return null
         val allRecords = readAllPages(ReadRecordsRequest(BloodGlucoseRecord::class, timeRangeFilter = filter))
-        if (allRecords.isEmpty()) return null
-        val avg = allRecords.map { it.level.inMillimolesPerLiter }.average()
-        val source = specimenSourceToString(allRecords.firstOrNull()?.specimenSource)
-        val mealType = mealTypeToString(allRecords.firstOrNull()?.mealType)
-        return BloodGlucoseData(
-            level = avg,
-            specimenSource = source,
-            mealType = mealType,
-            recordsCount = allRecords.size
-        )
+        return extractBloodGlucose(allRecords)
     }
 
     private suspend fun readOxygenSaturation(filter: TimeRangeFilter): OxygenSaturationData? {
         val c = client ?: return null
         val allRecords = readAllPages(ReadRecordsRequest(OxygenSaturationRecord::class, timeRangeFilter = filter))
-        if (allRecords.isEmpty()) return null
-        val avg = allRecords.map { it.percentage.value }.average()
-        return OxygenSaturationData(percentage = avg, recordsCount = allRecords.size)
+        return extractOxygenSaturation(allRecords)
     }
 
     private suspend fun readBodyTemperature(filter: TimeRangeFilter): BodyTemperatureData? {
         val c = client ?: return null
         val allRecords = readAllPages(ReadRecordsRequest(BodyTemperatureRecord::class, timeRangeFilter = filter))
-        if (allRecords.isEmpty()) return null
-        val avg = allRecords.map { it.temperature.inCelsius }.average()
-        val location = measurementLocationToString(allRecords.firstOrNull()?.measurementLocation)
-        return BodyTemperatureData(
-            temperatureCelsius = avg,
-            measurementLocation = location,
-            recordsCount = allRecords.size
-        )
+        return extractBodyTemperature(allRecords)
     }
 
     private suspend fun readRespiratoryRate(filter: TimeRangeFilter): RespiratoryRateData? {
         val c = client ?: return null
         val allRecords = readAllPages(ReadRecordsRequest(RespiratoryRateRecord::class, timeRangeFilter = filter))
-        if (allRecords.isEmpty()) return null
-        val avg = allRecords.map { it.rate }.average()
-        return RespiratoryRateData(rate = avg, recordsCount = allRecords.size)
+        return extractRespiratoryRate(allRecords)
     }
 
     private suspend fun readHydration(filter: TimeRangeFilter): HydrationData? {
         val c = client ?: return null
         val allRecords = readAllPages(ReadRecordsRequest(HydrationRecord::class, timeRangeFilter = filter))
-        if (allRecords.isEmpty()) return null
-        val total = allRecords.sumOf { it.volume.inLiters }
-        return HydrationData(totalVolumeLiters = total, recordsCount = allRecords.size)
+        return extractHydration(allRecords)
     }
 
     private suspend fun readRestingHeartRate(filter: TimeRangeFilter): RestingHeartRateData? {
         val c = client ?: return null
         val allRecords = readAllPages(ReadRecordsRequest(RestingHeartRateRecord::class, timeRangeFilter = filter))
-        if (allRecords.isEmpty()) return null
-        val bpmValues = allRecords.map { it.beatsPerMinute }
-        return RestingHeartRateData(
-            avgBpm = bpmValues.average(),
-            minBpm = bpmValues.min(),
-            maxBpm = bpmValues.max(),
-            recordsCount = allRecords.size
-        )
+        return extractRestingHeartRate(allRecords)
     }
 
     private suspend fun readExercises(filter: TimeRangeFilter): List<ExerciseData>? {
         val c = client ?: return null
         val allRecords = readAllPages(ReadRecordsRequest(ExerciseSessionRecord::class, timeRangeFilter = filter))
-        if (allRecords.isEmpty()) return null
-        return allRecords.map { record ->
-            ExerciseData(
-                exerciseType = exerciseTypeToString(record.exerciseType) ?: "Неизвестно",
-                startTime = record.startTime.toDateTimeString(),
-                endTime = record.endTime.toDateTimeString(),
-                durationMinutes = ChronoUnit.MINUTES.between(record.startTime, record.endTime),
-                title = record.title,
-                notes = record.notes
-            )
-        }
+        return extractExercises(allRecords)
     }
 
     private suspend fun readNutrition(filter: TimeRangeFilter): List<NutritionData>? {
         val c = client ?: return null
         val allRecords = readAllPages(ReadRecordsRequest(NutritionRecord::class, timeRangeFilter = filter))
-        if (allRecords.isEmpty()) return null
-        return allRecords.map { record ->
-            NutritionData(
-                name = record.name,
-                mealType = nutritionMealTypeToString(record.mealType),
-                energyKcal = record.energy?.inKilocalories,
-                proteinG = record.protein?.inGrams,
-                totalCarbohydrateG = record.totalCarbohydrate?.inGrams,
-                fatG = record.totalFat?.inGrams,
-                dietaryFiberG = record.dietaryFiber?.inGrams,
-                sugarG = record.sugar?.inGrams,
-                saturatedFatG = record.saturatedFat?.inGrams,
-                transFatG = record.transFat?.inGrams,
-                cholesterolMg = record.cholesterol?.inMilligrams,
-                sodiumMg = record.sodium?.inMilligrams,
-                potassiumMg = record.potassium?.inMilligrams,
-                caffeineMg = record.caffeine?.inMilligrams,
-                calciumMg = record.calcium?.inMilligrams,
-                ironMg = record.iron?.inMilligrams,
-                magnesiumMg = record.magnesium?.inMilligrams,
-                vitaminCMg = record.vitaminC?.inMilligrams,
-                vitaminDMcg = record.vitaminD?.inMicrograms
-            )
-        }
+        return extractNutrition(allRecords)
     }
 
     private suspend fun readSpeed(filter: TimeRangeFilter): SpeedData? {
         val c = client ?: return null
         val allRecords = readAllPages(ReadRecordsRequest(SpeedRecord::class, timeRangeFilter = filter))
-        if (allRecords.isEmpty()) return null
-        val allSamples = allRecords.flatMap { it.samples }
-        if (allSamples.isEmpty()) return null
-        val avgSpeed = allSamples.map { it.speed.inMetersPerSecond }.average()
-        return SpeedData(
-            avgSpeedMetersPerSecond = avgSpeed,
-            recordsCount = allRecords.size
-        )
+        return extractSpeed(allRecords)
     }
 
     private suspend fun readMenstruation(filter: TimeRangeFilter): MenstruationData? {
         val c = client ?: return null
         val allRecords = readAllPages(ReadRecordsRequest(MenstruationFlowRecord::class, timeRangeFilter = filter))
-        if (allRecords.isEmpty()) return null
-        val record = allRecords.first()
-        return MenstruationData(
-            flowType = menstruationFlowToString(record.flow),
-            time = record.time.toDateTimeString()
-        )
+        return extractMenstruation(allRecords)
     }
 }

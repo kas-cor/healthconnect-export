@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.flow
 import java.io.File
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
 
 /**
  * Represents a step during the export process.
@@ -90,21 +89,24 @@ class ExportDataUseCase(
                 return@flow
             }
 
-            // 3. Read data day-by-day with progress
-            val totalDays = ChronoUnit.DAYS.between(startDate, endDate) + 1
-            val records = mutableListOf<DailyHealthRecord>()
-            var currentDate = startDate
-            var dayIndex = 0
-            while (!currentDate.isAfter(endDate)) {
-                dayIndex++
-                emit(ExportStep.Progress("read:$dayIndex:$totalDays:${currentDate}"))
-                val record = healthRepo.readDay(
-                    currentDate, config.enabledTypes,
-                    selectedSourcePackage = config.selectedSourcePackage
-                )
-                records.add(record)
-                currentDate = currentDate.plusDays(1)
-            }
+            // 3. Read all data in batch (one API call per type instead of N×M calls)
+            // onPageProgress is invoked from IO dispatcher (inside readAllPages),
+            // so we collect events into a thread-safe list and emit after the call returns.
+            val readProgress = mutableListOf<ExportStep>()
+            val records = healthRepo.readPeriodInBatch(
+                startDate = startDate,
+                endDate = endDate,
+                types = config.enabledTypes,
+                selectedSourcePackage = config.selectedSourcePackage,
+                onPageProgress = { typeName, pageNumber ->
+                    synchronized(readProgress) {
+                        readProgress.add(ExportStep.Progress("read:$typeName:$pageNumber"))
+                    }
+                }
+            )
+            // Emit collected page progress (copy outside synchronized to avoid emit inside critical section)
+            val progressSnapshot = synchronized(readProgress) { readProgress.toList() }
+            progressSnapshot.forEach { emit(it) }
 
             // 4. Save files with progress
             val files = mutableListOf<File>()

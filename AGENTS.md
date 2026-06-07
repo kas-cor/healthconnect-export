@@ -41,7 +41,8 @@ MainActivity (ComponentActivity)
             ├─ LocalExportRepository  — save JSON to device
             ├─ GoogleDriveRepository  — sync with Google Drive
             └─ WebhookRepository      — POST to webhook URL
-       └─ DailyExportWorker (WorkManager, background)
+       ├─ DailyExportWorker (WorkManager, background)
+       └─ Every2HoursWebhookWorker (WorkManager, every 2 hours)
 ```
 
 ### Project structure
@@ -69,7 +70,8 @@ healthconnect-export/
 │       │   │   └── theme/
 │       │   │       └── AppTheme.kt
 │       │   └── worker/
-│       │       └── DailyExportWorker.kt
+│       │       ├── DailyExportWorker.kt
+│       │       └── Every2HoursWebhookWorker.kt
 │       ├── main/res/
 │       │   ├── values/strings.xml
 │       │   ├── values/themes.xml
@@ -111,6 +113,10 @@ UI → ViewModel → HealthConnectRepository (read records)
                 → LocalExportRepository (save JSON)
                 → GoogleDriveRepository (sync, optional)
                 → WebhookRepository (POST, optional)
+
+Every2HoursWebhookWorker (every 2h)
+  → HealthConnectRepository (read today)
+  → WebhookRepository (POST, no local save / no Drive)
 ```
 
 ### JSON file format
@@ -357,8 +363,9 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 - **Manual**: Export on button press
 - **Daily**: 24h interval via WorkManager `PeriodicWorkRequest`
 - **Weekly**: 168h interval
+- **Every 2 hours**: Optional webhook-only sending of current day's data (checkbox in Schedule section)
 - Default: **Daily** (set at app startup)
-- Policy: `ExistingPeriodicWorkPolicy.KEEP`
+- Policy: `ExistingPeriodicWorkPolicy.KEEP` (main), `UPDATE` (2-hour webhook)
 
 ---
 

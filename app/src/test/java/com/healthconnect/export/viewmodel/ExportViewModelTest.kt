@@ -104,6 +104,7 @@ class ExportViewModelTest {
         whenever(mockApp.getSharedPreferences(any(), any())).thenReturn(mockPrefs)
         whenever(mockApp.getString(any())).thenReturn("test_string")
         whenever(mockApp.getString(any(), any())).thenReturn("test_string")
+        whenever(mockApp.getString(any(), any(), any())).thenReturn("test_string")
         whenever(mockApp.packageName).thenReturn("com.healthconnect.export")
         val mockResources = mock<Resources>()
         whenever(mockApp.resources).thenReturn(mockResources)
@@ -242,12 +243,12 @@ class ExportViewModelTest {
 
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(true)
-            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull())).thenReturn(record)
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())).thenReturn(listOf(record))
             whenever(mockLocalRepo.saveDailyRecord(any(), any())).thenReturn(file)
             whenever(mockDriveRepo.isSignedIn()).thenReturn(true)
             whenever(mockDriveRepo.syncFiles(any<List<File>>())).thenReturn(listOf("file_id"))
 
-            // Set single-day range so readDay/saveDailyRecord are called once
+            // Set single-day range
             viewModel.setDateRange(LocalDate.of(2026, 5, 24), LocalDate.of(2026, 5, 24))
             // Re-enable auto-sync for this test
             viewModel.setAutoSyncDrive(true)
@@ -263,7 +264,7 @@ class ExportViewModelTest {
             assertEquals(1, state.exportedFiles.size)
             assertNotNull(state.message)
 
-            verify(mockHealthRepo).readDay(any(), any(), anyOrNull())
+            verify(mockHealthRepo).readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())
             verify(mockLocalRepo).saveDailyRecord(any(), any())
             verify(mockDriveRepo).syncFiles(any<List<File>>())
         }
@@ -274,7 +275,7 @@ class ExportViewModelTest {
         runTest {
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(true)
-            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull()))
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
                 .thenThrow(RuntimeException("Test error"))
 
             viewModel.exportNow()
@@ -305,10 +306,10 @@ class ExportViewModelTest {
 
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(true)
-            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull())).thenReturn(record)
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())).thenReturn(listOf(record))
             whenever(mockLocalRepo.saveDailyRecord(any(), any())).thenReturn(file)
 
-            // Set single-day range so readDay/saveDailyRecord are called once
+            // Set single-day range
             viewModel.setDateRange(LocalDate.of(2026, 5, 24), LocalDate.of(2026, 5, 24))
 
             viewModel.exportNow()
@@ -345,14 +346,14 @@ class ExportViewModelTest {
 
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(true)
-            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull())).thenReturn(record)
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())).thenReturn(listOf(record))
             whenever(mockLocalRepo.saveDailyRecord(any(), any())).thenReturn(file)
             whenever(mockDriveRepo.isSignedIn()).thenReturn(false)
             // Stub webhookRepo to return success — otherwise ViewModel's when() throws NoWhenBranchMatchedException
             whenever(mockWebhookRepo.sendRecords(any(), any(), anyOrNull()))
                 .thenReturn(WebhookResult.Success(200, ""))
 
-            // Set single-day range so readDay/saveDailyRecord are called once
+            // Set single-day range
             viewModel.setDateRange(LocalDate.of(2026, 5, 24), LocalDate.of(2026, 5, 24))
 
             viewModel.exportNow()
@@ -368,6 +369,194 @@ class ExportViewModelTest {
                 eq(records),
                 eq("test-token")
             )
+        }
+    }
+
+    // =============================================
+    // testWebhook() Tests
+    // =============================================
+
+    @Test
+    fun `testWebhook when url is blank shows enter url message`() {
+        runTest {
+            // URL is blank by default
+            viewModel.testWebhook()
+
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertFalse(state.isTestingWebhook)
+            assertNotNull(state.message)
+            // The message comes from mock string, not actual resource
+        }
+    }
+
+    @Test
+    fun `testWebhook when url has error shows enter url message`() {
+        runTest {
+            // Set invalid URL — this triggers webhookUrlError
+            viewModel.setWebhookUrl("not-a-valid-url")
+
+            // Mock webhook validation to return false
+            whenever(mockWebhookRepo.isValidWebhookUrl(any())).thenReturn(false)
+            // Re-set to trigger validation with mocked isValidWebhookUrl
+            viewModel.setWebhookUrl("not-a-valid-url")
+
+            viewModel.testWebhook()
+
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertFalse(state.isTestingWebhook)
+            assertNotNull(state.webhookUrlError)
+            assertNotNull(state.message)
+        }
+    }
+
+    @Test
+    fun `testWebhook when health data empty shows no data message`() {
+        runTest {
+            viewModel.setWebhookUrl("https://example.com/webhook")
+            whenever(mockWebhookRepo.isValidWebhookUrl(any())).thenReturn(true)
+            // Re-set to clear any error
+            viewModel.setWebhookUrl("https://example.com/webhook")
+
+            // Mock readPeriodInBatch to return empty list
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
+                .thenReturn(emptyList())
+
+            viewModel.testWebhook()
+
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertFalse(state.isTestingWebhook)
+            assertNotNull(state.message)
+
+            verify(mockHealthRepo).readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())
+            verify(mockWebhookRepo, never()).sendRecords(any(), any(), anyOrNull())
+        }
+    }
+
+    @Test
+    fun `testWebhook success sends webhook and shows success message`() {
+        runTest {
+            val record = DailyHealthRecord(
+                date = "2026-05-27",
+                metadata = ExportMetadata(
+                    appVersion = "1.0.0",
+                    exportTimestamp = "2026-05-27T12:00:00",
+                    timezone = "UTC"
+                )
+            )
+            val records = listOf(record)
+
+            viewModel.setWebhookUrl("https://example.com/webhook")
+            whenever(mockWebhookRepo.isValidWebhookUrl(any())).thenReturn(true)
+            viewModel.setWebhookUrl("https://example.com/webhook")
+
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
+                .thenReturn(records)
+            whenever(mockWebhookRepo.sendRecords(any(), any(), anyOrNull()))
+                .thenReturn(WebhookResult.Success(200, ""))
+
+            viewModel.testWebhook()
+
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertFalse(state.isTestingWebhook)
+            assertNotNull(state.message)
+
+            verify(mockHealthRepo).readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())
+            verify(mockWebhookRepo).sendRecords(
+                eq("https://example.com/webhook"),
+                eq(records),
+                anyOrNull()
+            )
+        }
+    }
+
+    @Test
+    fun `testWebhook when sendRecords error shows error message`() {
+        runTest {
+            val record = DailyHealthRecord(
+                date = "2026-05-27",
+                metadata = ExportMetadata(
+                    appVersion = "1.0.0",
+                    exportTimestamp = "2026-05-27T12:00:00",
+                    timezone = "UTC"
+                )
+            )
+            val records = listOf(record)
+
+            viewModel.setWebhookUrl("https://example.com/webhook")
+            whenever(mockWebhookRepo.isValidWebhookUrl(any())).thenReturn(true)
+            viewModel.setWebhookUrl("https://example.com/webhook")
+
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
+                .thenReturn(records)
+            whenever(mockWebhookRepo.sendRecords(any(), any(), anyOrNull()))
+                .thenReturn(WebhookResult.Error(500, "Internal Server Error"))
+
+            viewModel.testWebhook()
+
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertFalse(state.isTestingWebhook)
+            assertNotNull(state.message)
+
+            verify(mockHealthRepo).readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())
+            verify(mockWebhookRepo).sendRecords(
+                eq("https://example.com/webhook"),
+                eq(records),
+                anyOrNull()
+            )
+        }
+    }
+
+    @Test
+    fun `testWebhook exception during read shows error message`() {
+        runTest {
+            viewModel.setWebhookUrl("https://example.com/webhook")
+            whenever(mockWebhookRepo.isValidWebhookUrl(any())).thenReturn(true)
+            viewModel.setWebhookUrl("https://example.com/webhook")
+
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
+                .thenThrow(RuntimeException("Network error"))
+
+            viewModel.testWebhook()
+
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertFalse(state.isTestingWebhook)
+            assertNotNull(state.message)
+
+            verify(mockHealthRepo).readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())
+        }
+    }
+
+    @Test
+    fun `cancelTestWebhook cancels running test and resets state`() {
+        runTest {
+            viewModel.setWebhookUrl("https://example.com/webhook")
+            whenever(mockWebhookRepo.isValidWebhookUrl(any())).thenReturn(true)
+            viewModel.setWebhookUrl("https://example.com/webhook")
+
+            // testWebhook() sets isTestingWebhook = true synchronously before launching the coroutine
+            viewModel.testWebhook()
+
+            // isTestingWebhook is set before the coroutine starts (StandardTestDispatcher delays execution)
+            assertTrue(viewModel.uiState.value.isTestingWebhook)
+
+            // Cancel the test before the coroutine executes
+            viewModel.cancelTestWebhook()
+
+            val state = viewModel.uiState.value
+            assertFalse(state.isTestingWebhook)
+            assertNotNull(state.message)
         }
     }
 

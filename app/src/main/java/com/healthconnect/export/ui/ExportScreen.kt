@@ -60,6 +60,7 @@ import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -226,9 +227,12 @@ fun ExportScreen(
                     webhookUrlError = uiState.webhookUrlError,
                     webhookAuthToken = uiState.webhookAuthToken,
                     autoSendWebhook = uiState.autoSendWebhook,
+                    isTestingWebhook = uiState.isTestingWebhook,
                     onUrlChange = { viewModel.setWebhookUrl(it) },
                     onTokenChange = { viewModel.setWebhookAuthToken(it) },
-                    onToggle = { viewModel.setAutoSendWebhook(it) }
+                    onToggle = { viewModel.setAutoSendWebhook(it) },
+                    onTestClick = { viewModel.testWebhook() },
+                    onCancelTestClick = { viewModel.cancelTestWebhook() }
                 )
             }
 
@@ -239,7 +243,10 @@ fun ExportScreen(
                     scheduleStatus = uiState.scheduleStatus,
                     onFrequencyChange = { viewModel.setFrequency(it) },
                     onSchedule = { viewModel.scheduleExport() },
-                    onCancel = { viewModel.cancelSchedule() }
+                    onCancel = { viewModel.cancelSchedule() },
+                    autoSendWebhookEvery2Hours = uiState.autoSendWebhookEvery2Hours,
+                    webhookUrl = uiState.webhookUrl,
+                    onAutoSendEvery2HoursChange = { viewModel.setAutoSendWebhookEvery2Hours(it) }
                 )
             }
 
@@ -363,24 +370,34 @@ fun ExportScreen(
                                 ) { phase ->
                                     when (phase) {
                                         "read" -> {
-                                            val progress = if (uiState.progressTotal > 0)
-                                                uiState.progressCurrent.toFloat() / uiState.progressTotal.toFloat()
-                                            else 0f
                                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text(
-                                                    stringResource(R.string.export_progress_reading, uiState.progressDate),
-                                                    style = MaterialTheme.typography.labelSmall
-                                                )
-                                                Spacer(modifier = Modifier.height(4.dp))
-                                                LinearProgressIndicator(
-                                                    progress = { progress },
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                )
-                                                Spacer(modifier = Modifier.height(2.dp))
-                                                Text(
-                                                    "${uiState.progressCurrent}/${uiState.progressTotal}",
-                                                    style = MaterialTheme.typography.labelSmall
-                                                )
+                                                if (uiState.progressTotal > 0) {
+                                                    // Type-level progress (unknown total pages not available)
+                                                    Text(
+                                                        stringResource(R.string.export_progress_reading, uiState.progressDate),
+                                                        style = MaterialTheme.typography.labelSmall
+                                                    )
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                    LinearProgressIndicator(
+                                                        progress = { uiState.progressCurrent.toFloat() / uiState.progressTotal.toFloat() },
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                    )
+                                                    Spacer(modifier = Modifier.height(2.dp))
+                                                    Text(
+                                                        "${uiState.progressCurrent}/${uiState.progressTotal}",
+                                                        style = MaterialTheme.typography.labelSmall
+                                                    )
+                                                } else {
+                                                    // Page-level progress: show type name + page number
+                                                    Text(
+                                                        "${uiState.progressDate}  •  стр. ${uiState.progressCurrent}",
+                                                        style = MaterialTheme.typography.labelSmall
+                                                    )
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                    LinearProgressIndicator(
+                                                        modifier = Modifier.fillMaxWidth()
+                                                    )
+                                                }
                                             }
                                         }
                                         "save" -> {
@@ -546,7 +563,10 @@ fun ScheduleCard(
     scheduleStatus: ScheduleStatus,
     onFrequencyChange: (ExportFrequency) -> Unit,
     onSchedule: () -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    autoSendWebhookEvery2Hours: Boolean = false,
+    webhookUrl: String = "",
+    onAutoSendEvery2HoursChange: (Boolean) -> Unit = {}
 ) {
     Card {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -598,6 +618,26 @@ fun ScheduleCard(
                 is ScheduleStatus.Running -> {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
+            }
+
+            // Every 2 hours webhook checkbox
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Checkbox(
+                    checked = autoSendWebhookEvery2Hours,
+                    onCheckedChange = { onAutoSendEvery2HoursChange(it) },
+                    enabled = webhookUrl.isNotBlank()
+                )
+                Text(
+                    text = if (webhookUrl.isBlank()) stringResource(R.string.enter_url_first_every_2h)
+                           else stringResource(R.string.every_2_hours_webhook),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
     }
@@ -963,6 +1003,31 @@ fun DateRangeCard(
                     onDateSelected = onEndDateChange
                 )
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = stringResource(R.string.health_connect_access_limit),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+                    )
+                }
+            }
         }
     }
 }
@@ -1275,7 +1340,7 @@ fun ExportedFilesCard(files: List<java.io.File>, onFileClick: (java.io.File) -> 
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            files.take(5).forEach { file ->
+            files.sortedByDescending { it.lastModified() }.take(5).forEach { file ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
@@ -1512,9 +1577,12 @@ fun WebhookCard(
     webhookUrlError: String?,
     webhookAuthToken: String,
     autoSendWebhook: Boolean,
+    isTestingWebhook: Boolean = false,
     onUrlChange: (String) -> Unit,
     onTokenChange: (String) -> Unit,
-    onToggle: (Boolean) -> Unit
+    onToggle: (Boolean) -> Unit,
+    onTestClick: () -> Unit = {},
+    onCancelTestClick: () -> Unit = {}
 ) {
     val urlHasError = webhookUrl.isNotBlank() && webhookUrlError != null
 
@@ -1576,6 +1644,36 @@ fun WebhookCard(
                     if (webhookUrl.isBlank()) stringResource(R.string.enter_url_first)
                     else stringResource(R.string.send_json)
                 )
+            }
+
+            // Test webhook button / Cancel test button
+            if (isTestingWebhook) {
+                OutlinedButton(
+                    onClick = onCancelTestClick,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(stringResource(R.string.cancel_export))
+                }
+            } else {
+                OutlinedButton(
+                    onClick = onTestClick,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = webhookUrl.isNotBlank() && webhookUrlError == null
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Http,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(stringResource(R.string.webhook_test))
+                }
             }
         }
     }
