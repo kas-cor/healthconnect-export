@@ -4,7 +4,7 @@
 [![Coverage](https://raw.githubusercontent.com/kas-cor/healthconnect-export/main/badges/coverage.svg)](https://github.com/kas-cor/healthconnect-export/actions/workflows/build-apk.yml)
 [![Branches](https://raw.githubusercontent.com/kas-cor/healthconnect-export/main/badges/branches.svg)](https://github.com/kas-cor/healthconnect-export/actions/workflows/build-apk.yml)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Kotlin](https://img.shields.io/badge/kotlin-2.1.20-purple)](https://kotlinlang.org)
+[![Kotlin](https://img.shields.io/badge/kotlin-2.3.21-purple)](https://kotlinlang.org)
 
 > Coverage badge auto-updates on every push to `main` via CI.
 
@@ -62,11 +62,10 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 # Open: app/build/reports/jacoco/jacocoTestReport/html/index.html
 ```
 
-**Test suites (295 total):**
+**Test suites (262 total):**
 
 | File | Tests | Scope |
 |---|---|---|
-| `HealthConnectRepositoryTest` | 53 | Health Connect API: readDay with 8+ data types, pagination, allPages, edge cases |
 | `WebhookRepositoryTest` | 39 | sendRecords via local HTTP server (success/error/auth/special chars/JSON body) + URL validation |
 | `DataModelsSerializationTest` | 33 | Roundtrip serialization: DailyHealthRecord, ExportConfig, enums, SpeedData |
 | `HighlightJsonSyntaxTest` | 31 | JSON syntax highlighting: strings, numbers (int/float/sci), booleans, null, nested objects, arrays, escaped quotes |
@@ -74,6 +73,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | `DailyExportWorkerTest` | 25 | `doWork()` (success/already-exported/empty/exceptions) + `schedule()` (daily/weekly/manual/cancel) |
 | `LocalExportRepositoryTest` | 24 | File operations: save, list, cleanup, isExported, filename format |
 | `GoogleDriveRepositoryTest` | 23 | Drive sync: upload, list, download, delete, scopes, special characters |
+| `Every2HoursWebhookWorkerTest` | 18 | doWork (happy path, blank URL, exceptions) + schedule/cancel + constants |
 | `ExportDataUseCaseTest` | 15 | Export steps: permissions, reading, saving, webhook, Drive sync, health check |
 | `ExportViewModelTest` | 13 | ViewModel states: loading, export, error, permissions, schedule |
 | `LocaleManagerTest` | 12 | localeDisplayName all branches, saveLocale/getSavedLocale |
@@ -108,10 +108,10 @@ After every push, JaCoCo verifies coverage against 9 rules. If any rule fails, t
 | | BRANCH | ≥ 12% |
 | | INSTRUCTION | ≥ 15% |
 | | CLASS | ≥ 45% |
-| **worker** package | LINE | ≥ 90% |
+| **worker** package | LINE | ≥ 95% |
 | **data** package | LINE | ≥ 70% |
-| **viewmodel** package | LINE | ≥ 60% |
-| **util** package | LINE | ≥ 15% |
+| **viewmodel** package | LINE | ≥ 65% |
+| **util** package | LINE | ≥ 50% |
 | **repository** package | LINE | ≥ 35% |
 
 On push to `main`, a coverage badge is auto-committed to `badges/`.
@@ -251,17 +251,17 @@ Each element in the `messages` array is a `DailyHealthRecord` — one per export
 
 | Component | Version |
 |---|---|
-| Language | Kotlin 2.1.20 |
-| UI | Jetpack Compose + Material3 (BOM 2024.02) |
-| Build | AGP 9.1.1 / Gradle 9.4.1 |
+| Language | Kotlin 2.3.21 |
+| UI | Jetpack Compose + Material3 (BOM 2026.05) |
+| Build | AGP 9.1.1 / Gradle 9.5.1 |
 | Health Connect | `connect-client:1.1.0` |
-| Google Drive | `google-api-services-drive:v3`, `google-http-client-gson` |
-| Auth | `play-services-auth:21.0.0` |
-| Background | WorkManager `work-runtime-ktx:2.9.0` |
-| Serialization | `kotlinx-serialization-json:1.6.2` |
+| Google Drive | `google-api-services-drive:v3-rev20240123`, `google-http-client-gson:2.1.0` |
+| Auth | `play-services-auth:21.6.0` |
+| Background | WorkManager `work-runtime-ktx:2.11.2` |
+| Serialization | `kotlinx-serialization-json:1.11.0` |
 | minSdk / targetSdk / compileSdk | 28 / 36 / 36 |
 | JVM | 21 |
-| Testing | JUnit 4.13.2, Mockito 5.11.0 |
+| Testing | JUnit 4.13.2, Mockito 5.23.0, mockito-kotlin 6.3.0 |
 | Coverage | JaCoCo 0.8.11 |
 | CI | GitHub Actions |
 
@@ -271,6 +271,8 @@ See [CHANGELOG.md](CHANGELOG.md) for full release history.
 
 | Version | Date | Highlights |
 |---|---|---|
+| [v1.5](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.5) | 2026-06-08 | Every-2-hours webhook worker, test webhook button, file sorting descending, dependency updates (Kotlin 2.3.21, Gradle 9.5.1) |
+| [v1.4](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.4) | 2026-06-07 | Date range fix: endDate includes today, 7/30 day presets corrected |
 | [v1.3](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.3) | 2026-05-27 | Webhook payload format `{"messages": [...]}`, export progress with per-day bars, cancel button, day-by-day read |
 | [v1.2](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.2) | 2026-05-27 | **+99 tests** (295 total), repo coverage ~55%, WebhookRepository rewritten with local HTTP server |
 | [v1.1](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.1) | 2026-05-26 | Coverage gate, ktlint, API upgrade, webhook auth, +83 tests, russian L10n |
