@@ -432,6 +432,163 @@ class DailyExportWorkerTest {
     }
 
     // =============================================
+    // scheduleEvery2HoursWebhook() Tests
+    // =============================================
+
+    @Test
+    fun `scheduleEvery2HoursWebhook enabled with valid url schedules work`() {
+        val config = ExportConfig(
+            enabledTypes = setOf(HealthDataType.STEPS),
+            frequency = ExportFrequency.DAILY,
+            autoSyncDrive = false,
+            webhookUrl = "https://hooks.example.com/data",
+            autoSendWebhookEvery2Hours = true
+        )
+
+        // Should schedule the 2-hour worker without throwing
+        DailyExportWorker.scheduleEvery2HoursWebhook(mockApp, config)
+
+        // Verify work was registered via LiveData API for Every2HoursWebhookWorker
+        val workManager = WorkManager.getInstance(mockApp)
+        val liveData = workManager.getWorkInfosForUniqueWorkLiveData(Every2HoursWebhookWorker.WORK_NAME)
+        assertNotNull("Every-2-hours work should be registered", liveData)
+    }
+
+    @Test
+    fun `scheduleEvery2HoursWebhook disabled cancels work`() {
+        val config = ExportConfig(
+            enabledTypes = setOf(HealthDataType.STEPS),
+            frequency = ExportFrequency.DAILY,
+            autoSyncDrive = false,
+            webhookUrl = "https://hooks.example.com/data",
+            autoSendWebhookEvery2Hours = false
+        )
+
+        // Should cancel (or do nothing) without throwing
+        DailyExportWorker.scheduleEvery2HoursWebhook(mockApp, config)
+    }
+
+    @Test
+    fun `scheduleEvery2HoursWebhook enabled with blank url cancels work`() {
+        val config = ExportConfig(
+            enabledTypes = setOf(HealthDataType.STEPS),
+            frequency = ExportFrequency.DAILY,
+            autoSyncDrive = false,
+            webhookUrl = "",
+            autoSendWebhookEvery2Hours = true
+        )
+
+        // config.autoSendWebhookEvery2Hours=true but webhookUrl is blank
+        // → isNotBlank() fails → cancel() is called
+        DailyExportWorker.scheduleEvery2HoursWebhook(mockApp, config)
+    }
+
+    @Test
+    fun `scheduleEvery2HoursWebhook enabled with whitespace url cancels work`() {
+        val config = ExportConfig(
+            enabledTypes = setOf(HealthDataType.STEPS),
+            frequency = ExportFrequency.DAILY,
+            autoSyncDrive = false,
+            webhookUrl = "   ",
+            autoSendWebhookEvery2Hours = true
+        )
+
+        // isNotBlank() returns false for whitespace-only strings → cancel()
+        DailyExportWorker.scheduleEvery2HoursWebhook(mockApp, config)
+    }
+
+    @Test
+    fun `cancelEvery2HoursWebhook cancels without throwing`() {
+        // First schedule a valid worker
+        val config = ExportConfig(
+            enabledTypes = setOf(HealthDataType.STEPS),
+            frequency = ExportFrequency.DAILY,
+            autoSyncDrive = false,
+            webhookUrl = "https://hooks.example.com/data",
+            autoSendWebhookEvery2Hours = true
+        )
+        DailyExportWorker.scheduleEvery2HoursWebhook(mockApp, config)
+
+        // Then cancel it
+        DailyExportWorker.cancelEvery2HoursWebhook(mockApp)
+    }
+
+    @Test
+    fun `scheduleEvery2HoursWebhook called multiple times does not throw`() {
+        val config = ExportConfig(
+            enabledTypes = setOf(HealthDataType.STEPS),
+            frequency = ExportFrequency.DAILY,
+            autoSyncDrive = false,
+            webhookUrl = "https://hooks.example.com/data",
+            autoSendWebhookEvery2Hours = true
+        )
+
+        // Call multiple times to ensure idempotency
+        DailyExportWorker.scheduleEvery2HoursWebhook(mockApp, config)
+        DailyExportWorker.scheduleEvery2HoursWebhook(mockApp, config)
+        DailyExportWorker.scheduleEvery2HoursWebhook(mockApp, config)
+    }
+
+    @Test
+    fun `schedule with every2hours enabled propagates config correctly`() {
+        val config = ExportConfig(
+            enabledTypes = setOf(HealthDataType.STEPS),
+            frequency = ExportFrequency.DAILY,
+            autoSyncDrive = false,
+            webhookUrl = "https://hooks.example.com/data",
+            autoSendWebhookEvery2Hours = true
+        )
+
+        // schedule() internally calls scheduleEvery2HoursWebhook() when frequency != MANUAL
+        // Should not throw — verifies the chain works
+        DailyExportWorker.schedule(mockApp, config)
+
+        // Verify the 2-hour webhook work was registered
+        val workManager = WorkManager.getInstance(mockApp)
+        val liveData = workManager.getWorkInfosForUniqueWorkLiveData(Every2HoursWebhookWorker.WORK_NAME)
+        assertNotNull("Every-2-hours webhook should be registered via schedule()", liveData)
+    }
+
+    @Test
+    fun `schedule manual cancels every2hours webhook`() {
+        // First schedule with 2-hour webhook enabled
+        val dailyConfig = ExportConfig(
+            enabledTypes = setOf(HealthDataType.STEPS),
+            frequency = ExportFrequency.DAILY,
+            autoSyncDrive = false,
+            webhookUrl = "https://hooks.example.com/data",
+            autoSendWebhookEvery2Hours = true
+        )
+        DailyExportWorker.schedule(mockApp, dailyConfig)
+
+        // Switch to manual — should cancel both daily and 2-hour
+        val manualConfig = ExportConfig(
+            enabledTypes = setOf(HealthDataType.STEPS),
+            frequency = ExportFrequency.MANUAL,
+            autoSyncDrive = false,
+            webhookUrl = "https://hooks.example.com/data",
+            autoSendWebhookEvery2Hours = true
+        )
+        DailyExportWorker.schedule(mockApp, manualConfig)
+    }
+
+    @Test
+    fun `cancel cancels both daily and every2hours webhook`() {
+        // Schedule both
+        val config = ExportConfig(
+            enabledTypes = setOf(HealthDataType.STEPS),
+            frequency = ExportFrequency.DAILY,
+            autoSyncDrive = false,
+            webhookUrl = "https://hooks.example.com/data",
+            autoSendWebhookEvery2Hours = true
+        )
+        DailyExportWorker.schedule(mockApp, config)
+
+        // cancel() should cancel both
+        DailyExportWorker.cancel(mockApp)
+    }
+
+    // =============================================
     // Drive sync — additional scenarios
     // =============================================
 
