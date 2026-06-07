@@ -14,16 +14,16 @@ User selects health data types and a date range, then exports to JSON files (one
 
 | Component | Technology |
 |---|---|
-| Language | Kotlin 2.1.20 |
+| Language | Kotlin 2.3.21 |
 | UI | Jetpack Compose + Material3 |
-| Build | Gradle KTS + AGP 9.1.1 |
+| Build | Gradle KTS + AGP 9.1.1 / Gradle 9.5.1 |
 | Health API | `androidx.health.connect:connect-client:1.1.0` |
-| Google Drive | `google-api-services-drive:v3`, `google-http-client-gson` |
-| Auth | `play-services-auth:21.0.0` (OAuth 2.0) |
-| Background | WorkManager (`work-runtime-ktx:2.9.0`) |
-| Serialization | `kotlinx-serialization-json:1.6.2` |
-| Testing | JUnit 4.13.2 + Mockito 5.11.0 |
-| Linting | ktlint 12.1.0 |
+| Google Drive | `google-api-services-drive:v3-rev20240123`, `google-http-client-gson:2.1.0` |
+| Auth | `play-services-auth:21.6.0` (OAuth 2.0) |
+| Background | WorkManager (`work-runtime-ktx:2.11.2`) |
+| Serialization | `kotlinx-serialization-json:1.11.0` |
+| Testing | JUnit 4.13.2 + Mockito 5.23.0 + mockito-kotlin 6.3.0 |
+| Linting | ktlint 14.2.0 |
 | Coverage | JaCoCo 0.8.11 (XML + HTML + CSV) |
 | CI | GitHub Actions |
 | minSdk / targetSdk / compileSdk | 28 / 36 / 36 |
@@ -82,10 +82,10 @@ healthconnect-export/
 │           │   └── DataModelsSerializationTest.kt
 │           ├── repository/
 │           │   ├── GoogleDriveRepositoryTest.kt
-│           │   ├── HealthConnectRepositoryTest.kt
 │           │   ├── LocalExportRepositoryTest.kt
 │           │   └── WebhookRepositoryTest.kt
 │           ├── ui/
+│           │   ├── DateRangeCardTest.kt
 │           │   └── HighlightJsonSyntaxTest.kt
 │           ├── usecase/
 │           │   └── ExportDataUseCaseTest.kt
@@ -94,7 +94,8 @@ healthconnect-export/
 │           ├── viewmodel/
 │           │   └── ExportViewModelTest.kt
 │           └── worker/
-│               └── DailyExportWorkerTest.kt
+│               ├── DailyExportWorkerTest.kt
+│               └── Every2HoursWebhookWorkerTest.kt
 ├── badges/                          # Coverage badge SVGs (auto-committed by CI)
 ├── build                            # Build script (bash)
 ├── build.gradle.kts
@@ -150,11 +151,10 @@ Every2HoursWebhookWorker (every 2h)
 
 ## Unit tests
 
-**Test files (295 tests total):**
+**Test files (262 tests total):**
 
 | File | Tests | Scope |
 |---|---|---|
-| `HealthConnectRepositoryTest.kt` | 53 | `readDay` with 8 data types (steps, sleep, weight, calories, speed, menstruation, exercise, hydration), `readAllPages` pagination, error propagation, empty types, edge cases |
 | `WebhookRepositoryTest.kt` | 39 | `sendRecords()` via local HTTP server: success (200/201/204), error (400/403/500), network exception, Bearer auth (token/null/blank/special chars), headers, JSON body, errorstream null. `isValidWebhookUrl()` (19). |
 | `DataModelsSerializationTest.kt` | 33 | Roundtrip serialization: DailyHealthRecord (5), ExportConfig (4), ExportFrequency (4), HealthDataType (2), ExportSummary (3), helper functions (3), edge cases (4), SpeedData (5), SerialName verification |
 | `HighlightJsonSyntaxTest.kt` | 31 | JSON syntax highlighting: strings, numbers (int/float/sci), booleans, null, nested objects, arrays, escaped quotes, adjacent tokens, realistic health record |
@@ -162,6 +162,7 @@ Every2HoursWebhookWorker (every 2h)
 | `DailyExportWorkerTest.kt` | 25 | `doWork()` (14): success, already exported, empty, exceptions, config defaults / `schedule()` (4): daily, weekly, manual, cancel / webhook auth test |
 | `LocalExportRepositoryTest.kt` | 24 | File operations: getExportDirectory (3), getFilenameForDate (2), isExported (3), saveDailyRecord (3), saveRecords (2), listExportedFiles (6), cleanupOldExports (4), deleteExport (2) |
 | `GoogleDriveRepositoryTest.kt` | 23 | Google Drive sync: upload (success, delete exception, special chars), download, list (folder found/not found, error after folder), delete, sign in/out, scopes |
+| `Every2HoursWebhookWorkerTest.kt` | 18 | doWork (happy path, blank URL, exceptions), schedule/cancel, constants |
 | `ExportDataUseCaseTest.kt` | 15 | Export steps flow: permissions (granted/denied), health check (available/not available/installed), progress, webhook, Drive sync, complete |
 | `ExportViewModelTest.kt` | 13 | UI state: loading, export, error, permissions, schedule, data sources |
 | `LocaleManagerTest.kt` | 12 | localeDisplayName (all branches + edge cases), saveLocale, getSavedLocale |
@@ -199,10 +200,10 @@ Every2HoursWebhookWorker (every 2h)
 
 | Package | Counter | Minimum |
 |---|---|---|
-| `com.healthconnect.export.worker.*` | LINE | ≥ 90% |
+| `com.healthconnect.export.worker.*` | LINE | ≥ 95% |
 | `com.healthconnect.export.data.*` | LINE | ≥ 70% |
-| `com.healthconnect.export.viewmodel.*` | LINE | ≥ 60% |
-| `com.healthconnect.export.util.*` | LINE | ≥ 15% |
+| `com.healthconnect.export.viewmodel.*` | LINE | ≥ 65% |
+| `com.healthconnect.export.util.*` | LINE | ≥ 50% |
 | `com.healthconnect.export.repository.*` | LINE | ≥ 35% |
 
 If coverage drops below any threshold, `jacocoTestCoverageVerification` fails with a `BUILD FAILED` error listing the violated rules. In CI, this makes the `coverage` job fail (blocking gate).

@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.5] — 2026-06-08
+
+### Added
+- **Every-2-hours webhook:** New `Every2HoursWebhookWorker` that reads today's data and sends to webhook every 2 hours (no local save, no Drive sync)
+- **Test webhook button:** Manual test of webhook connection with success/failure feedback
+- **File sorting descending:** Exported files list now shows newest files first (by `lastModified()`)
+- **Health Connect access limit warning:** Info text in DateRangeCard about 30-day data access limit for Health Connect
+- **Tests:** `Every2HoursWebhookWorkerTest` — 18 tests covering happy path, blank URL, exceptions, scheduling, constants
+- **HealthConnectRepository improvements:** Logging, `onPageProgress` callback, protection against 100+ page pagination loops
+
+### Fixed
+- **Webhook URL validation:** `setAutoSendWebhookEvery2Hours()` now checks for blank webhook URL before enabling with a helpful message
+- **Schedule cancellation:** `DailyExportWorker.cancel()` now also cancels the 2-hour webhook worker (was orphaned before)
+
+### Dependencies
+- Kotlin `2.1.20` → `2.3.21`
+- Gradle wrapper `9.4.1` → `9.5.1`
+- `core-ktx` `1.12.0` → `1.18.0`
+- `lifecycle-viewmodel-compose` `2.7.0` → `2.10.0`
+- `play-services-auth` `21.0.0` → `21.6.0`
+- `work-runtime-ktx` `2.9.0` → `2.11.2`
+- `kotlinx-serialization-json` `1.6.2` → `1.11.0`
+- `mockito-core` `5.11.0` → `5.23.0`
+- `mockito-kotlin` `6.3.0`
+- `ktlint` `12.1.0` → `14.2.0`
+- `androidx.test.ext:junit` `1.1.5` → `1.3.0`
+- CI actions: `setup-python` v5→v6, `git-auto-commit-action` v5→v7, `action-gh-release` v2→v3
+
+### Removed
+- `HealthConnectRepositoryTest.kt` (53 tests) — old API (`readPeriod`) replaced by day-by-day `readDay` loop
+
+---
+
 ## [1.4] — 2026-06-07
 
 ### Fixed
@@ -89,6 +122,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[1.5]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.5
 [1.4]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.4
 [1.3]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.3
 [1.2]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.2
