@@ -210,6 +210,7 @@ data class ExportConfig(
     val webhookUrl: String = "",
     val webhookAuthToken: String = "",
     val autoSendWebhook: Boolean = false,
+    val autoSendWebhookEvery2Hours: Boolean = false,
     val outputDirectory: String = "HealthConnectExport",
     val selectedSourcePackage: String? = null
 )

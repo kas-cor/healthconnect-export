@@ -56,13 +56,13 @@ class ExportDataUseCaseTest {
             )
         )
 
-    /** Assert that a given step is a Progress with the expected phase/current/total/date */
+    /** Assert that a given step is a Progress with the expected phase/current/total/dateOrType */
     private fun assertProgress(
         step: ExportStep,
         expectedPhase: String,
         expectedCurrent: Int,
         expectedTotal: Int,
-        expectedDate: String
+        expectedDateOrType: String
     ) {
         assertTrue("Expected Progress, got ${step::class.simpleName}", step is ExportStep.Progress)
         val msg = (step as ExportStep.Progress).message
@@ -70,7 +70,7 @@ class ExportDataUseCaseTest {
         assertEquals(expectedPhase, parts[0])
         assertEquals(expectedCurrent.toString(), parts[1])
         assertEquals(expectedTotal.toString(), parts[2])
-        assertEquals(expectedDate, parts[3])
+        assertEquals(expectedDateOrType, parts[3])
     }
 
     // ============================
@@ -86,21 +86,20 @@ class ExportDataUseCaseTest {
 
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(true)
-            // readDay called once per day in range (2 days)
-            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull())).thenReturn(record, record2)
+            // readPeriodInBatch returns all records for the full period
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
+                .thenReturn(listOf(record, record2))
             whenever(mockLocalRepo.saveDailyRecord(any(), any())).thenReturn(files[0], files[1])
 
             val steps = useCase.execute(mockContext, defaultConfig, startDate, endDate).toList()
 
-            // 1 checking + 4 progress (2 read + 2 save) + 1 complete = 6
-            assertEquals(6, steps.size)
+            // 1 checking + 2 save progress + 1 complete = 4
+            assertEquals(4, steps.size)
             assertTrue(steps[0] is ExportStep.CheckingPermissions)
-            assertProgress(steps[1], "read", 1, 2, "2026-05-24")
-            assertProgress(steps[2], "read", 2, 2, "2026-05-25")
-            assertProgress(steps[3], "save", 1, 2, "2026-05-24")
-            assertProgress(steps[4], "save", 2, 2, "2026-05-25")
-            assertTrue(steps[5] is ExportStep.Complete)
-            val complete = steps[5] as ExportStep.Complete
+            assertProgress(steps[1], "save", 1, 2, "2026-05-24")
+            assertProgress(steps[2], "save", 2, 2, "2026-05-25")
+            assertTrue(steps[3] is ExportStep.Complete)
+            val complete = steps[3] as ExportStep.Complete
             assertEquals(2, complete.records.size)
             assertEquals(2, complete.files.size)
             assertEquals(files, complete.files)
@@ -174,17 +173,16 @@ class ExportDataUseCaseTest {
         runBlocking {
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(true)
-            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull()))
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
                 .thenThrow(RuntimeException("Network failure"))
 
             val steps = useCase.execute(mockContext, defaultConfig, startDate, endDate).toList()
 
-            // 1 checking + 1 progress (read:1:2:2026-05-24) + error = 3
-            assertEquals(3, steps.size)
+            // 1 checking + error = 2
+            assertEquals(2, steps.size)
             assertTrue(steps[0] is ExportStep.CheckingPermissions)
-            assertTrue(steps[1] is ExportStep.Progress)
-            assertTrue(steps[2] is ExportStep.Error)
-            assertEquals("Network failure", (steps[2] as ExportStep.Error).message)
+            assertTrue(steps[1] is ExportStep.Error)
+            assertEquals("Network failure", (steps[1] as ExportStep.Error).message)
         }
     }
 
@@ -207,13 +205,14 @@ class ExportDataUseCaseTest {
 
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(true)
-            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull())).thenReturn(emptyRecord, emptyRecord2)
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
+                .thenReturn(listOf(emptyRecord, emptyRecord2))
             whenever(mockLocalRepo.saveDailyRecord(any(), any())).thenReturn(File("health_2026-05-24.json"), File("health_2026-05-25.json"))
 
             val steps = useCase.execute(mockContext, defaultConfig, startDate, endDate).toList()
 
-            // 1 checking + 4 progress + 1 complete = 6
-            assertEquals(6, steps.size)
+            // 1 checking + 2 save progress + 1 complete = 4
+            assertEquals(4, steps.size)
             assertTrue(steps.last() is ExportStep.Complete)
             val complete = steps.last() as ExportStep.Complete
             assertEquals(2, complete.records.size)
@@ -258,7 +257,8 @@ class ExportDataUseCaseTest {
 
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(true)
-            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull())).thenReturn(record1, record2)
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
+                .thenReturn(listOf(record1, record2))
             whenever(mockLocalRepo.saveDailyRecord(any(), any())).thenReturn(files[0], files[1])
 
             val steps = useCase.execute(mockContext, defaultConfig, startDate, endDate).toList()
@@ -292,7 +292,8 @@ class ExportDataUseCaseTest {
 
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(true)
-            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull())).thenReturn(record1, record2)
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
+                .thenReturn(listOf(record1, record2))
             whenever(mockLocalRepo.saveDailyRecord(any(), any())).thenReturn(File("h.json"), File("h2.json"))
 
             val steps = useCase.execute(mockContext, defaultConfig, startDate, endDate).toList()
@@ -337,7 +338,8 @@ class ExportDataUseCaseTest {
 
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(true)
-            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull())).thenReturn(record1, record2)
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
+                .thenReturn(listOf(record1, record2))
             whenever(mockLocalRepo.saveDailyRecord(any(), any())).thenReturn(files[0], files[1])
 
             val steps = useCase.execute(mockContext, defaultConfig, startDate, endDate).toList()
@@ -364,11 +366,13 @@ class ExportDataUseCaseTest {
         runBlocking {
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(true)
-            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull()))
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
                 .thenThrow(RuntimeException())
 
             val steps = useCase.execute(mockContext, defaultConfig, startDate, endDate).toList()
 
+            // 1 checking + error = 2
+            assertEquals(2, steps.size)
             val error = steps.last() as ExportStep.Error
             assertEquals("Unknown error", error.message)
         }
@@ -379,7 +383,7 @@ class ExportDataUseCaseTest {
     // ============================
 
     @Test
-    fun `selectedSourcePackage is forwarded to readDay`() {
+    fun `selectedSourcePackage is forwarded to readPeriodInBatch`() {
         runBlocking {
             val configWithSource = defaultConfig.copy(selectedSourcePackage = "com.mi.health")
             val record = recordForDate("2026-05-24")
@@ -387,19 +391,20 @@ class ExportDataUseCaseTest {
 
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(true)
-            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull())).thenReturn(record, record2)
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
+                .thenReturn(listOf(record, record2))
             whenever(mockLocalRepo.saveDailyRecord(any(), any())).thenReturn(File("h.json"), File("h2.json"))
 
             val steps = useCase.execute(mockContext, configWithSource, startDate, endDate).toList()
 
             assertTrue(steps.last() is ExportStep.Complete)
-            // readDay should be called with the selectedSourcePackage
-            verify(mockHealthRepo, times(2)).readDay(any(), any(), eq("com.mi.health"))
+            // readPeriodInBatch should be called with the selectedSourcePackage
+            verify(mockHealthRepo).readPeriodInBatch(any(), any(), any(), eq("com.mi.health"), anyOrNull())
         }
     }
 
     @Test
-    fun `null selectedSourcePackage is forwarded as null to readDay`() {
+    fun `null selectedSourcePackage is forwarded as null to readPeriodInBatch`() {
         runBlocking {
             val configWithNullSource = defaultConfig.copy(selectedSourcePackage = null)
             val record = recordForDate("2026-05-24")
@@ -407,13 +412,14 @@ class ExportDataUseCaseTest {
 
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(true)
-            whenever(mockHealthRepo.readDay(any(), any(), isNull())).thenReturn(record, record2)
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), isNull(), anyOrNull()))
+                .thenReturn(listOf(record, record2))
             whenever(mockLocalRepo.saveDailyRecord(any(), any())).thenReturn(File("h.json"), File("h2.json"))
 
             val steps = useCase.execute(mockContext, configWithNullSource, startDate, endDate).toList()
 
             assertTrue(steps.last() is ExportStep.Complete)
-            verify(mockHealthRepo, times(2)).readDay(any(), any(), isNull())
+            verify(mockHealthRepo).readPeriodInBatch(any(), any(), any(), isNull(), anyOrNull())
         }
     }
 
@@ -432,8 +438,8 @@ class ExportDataUseCaseTest {
             assertEquals(2, steps.size)
             assertTrue(steps[0] is ExportStep.CheckingPermissions)
             assertTrue(steps[1] is ExportStep.PermissionsRequired)
-            // readDay should never be called since permissions are missing
-            verify(mockHealthRepo, never()).readDay(any(), any(), anyOrNull())
+            // readPeriodInBatch should never be called since permissions are missing
+            verify(mockHealthRepo, never()).readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())
         }
     }
 
@@ -458,7 +464,8 @@ class ExportDataUseCaseTest {
 
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(true)
-            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull())).thenReturn(record, record2)
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
+                .thenReturn(listOf(record, record2))
             whenever(mockLocalRepo.saveDailyRecord(any(), any())).thenReturn(files[0], files[1])
 
             val steps = useCase.execute(mockContext, defaultConfig, startDate, endDate).toList()
@@ -486,48 +493,33 @@ class ExportDataUseCaseTest {
 
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(true)
-            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull())).thenReturn(record1, record2, record3)
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
+                .thenReturn(listOf(record1, record2, record3))
             whenever(mockLocalRepo.saveDailyRecord(any(), any())).thenReturn(
                 File("h1.json"), File("h2.json"), File("h3.json")
             )
 
             val steps = useCase.execute(mockContext, defaultConfig, threeDaysStart, threeDaysEnd).toList()
 
-            // 1 checking + 6 progress (3 read + 3 save) + 1 complete = 8
-            assertEquals(8, steps.size)
+            // 1 checking + 3 save + 1 complete = 5
+            assertEquals(5, steps.size)
             val progressSteps = steps.filterIsInstance<ExportStep.Progress>()
 
-            // Read phases
-            assertEquals("read", progressSteps[0].message.split(":")[0])
+            // Save phases (per day)
+            assertEquals("save", progressSteps[0].message.split(":")[0])
             assertEquals("1", progressSteps[0].message.split(":")[1])
             assertEquals("3", progressSteps[0].message.split(":")[2])
             assertEquals("2026-05-24", progressSteps[0].message.split(":")[3])
 
-            assertEquals("read", progressSteps[1].message.split(":")[0])
+            assertEquals("save", progressSteps[1].message.split(":")[0])
             assertEquals("2", progressSteps[1].message.split(":")[1])
             assertEquals("3", progressSteps[1].message.split(":")[2])
             assertEquals("2026-05-25", progressSteps[1].message.split(":")[3])
 
-            assertEquals("read", progressSteps[2].message.split(":")[0])
+            assertEquals("save", progressSteps[2].message.split(":")[0])
             assertEquals("3", progressSteps[2].message.split(":")[1])
             assertEquals("3", progressSteps[2].message.split(":")[2])
             assertEquals("2026-05-26", progressSteps[2].message.split(":")[3])
-
-            // Save phases
-            assertEquals("save", progressSteps[3].message.split(":")[0])
-            assertEquals("1", progressSteps[3].message.split(":")[1])
-            assertEquals("3", progressSteps[3].message.split(":")[2])
-            assertEquals("2026-05-24", progressSteps[3].message.split(":")[3])
-
-            assertEquals("save", progressSteps[4].message.split(":")[0])
-            assertEquals("2", progressSteps[4].message.split(":")[1])
-            assertEquals("3", progressSteps[4].message.split(":")[2])
-            assertEquals("2026-05-25", progressSteps[4].message.split(":")[3])
-
-            assertEquals("save", progressSteps[5].message.split(":")[0])
-            assertEquals("3", progressSteps[5].message.split(":")[1])
-            assertEquals("3", progressSteps[5].message.split(":")[2])
-            assertEquals("2026-05-26", progressSteps[5].message.split(":")[3])
         }
     }
 
@@ -545,16 +537,16 @@ class ExportDataUseCaseTest {
 
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(true)
-            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull())).thenReturn(record)
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
+                .thenReturn(listOf(record))
             whenever(mockLocalRepo.saveDailyRecord(any(), any())).thenReturn(file)
 
             val steps = useCase.execute(mockContext, defaultConfig, singleDayStart, singleDayEnd).toList()
 
-            // 1 checking + 2 progress (1 read + 1 save) + 1 complete = 4
-            assertEquals(4, steps.size)
-            assertProgress(steps[1], "read", 1, 1, "2026-05-24")
-            assertProgress(steps[2], "save", 1, 1, "2026-05-24")
-            assertTrue(steps[3] is ExportStep.Complete)
+            // 1 checking + 1 save + 1 complete = 3
+            assertEquals(3, steps.size)
+            assertProgress(steps[1], "save", 1, 1, "2026-05-24")
+            assertTrue(steps[2] is ExportStep.Complete)
         }
     }
 }

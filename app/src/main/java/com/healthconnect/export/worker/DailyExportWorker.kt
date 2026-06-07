@@ -3,6 +3,7 @@ package com.healthconnect.export.worker
 import android.content.Context
 import androidx.work.*
 import com.healthconnect.export.data.ExportConfig
+import com.healthconnect.export.data.ExportFrequency
 import com.healthconnect.export.data.HealthDataType
 import com.healthconnect.export.repository.HealthConnectRepository
 import com.healthconnect.export.repository.LocalExportRepository
@@ -14,7 +15,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
 import java.time.LocalDate
-import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 
 /**
@@ -33,8 +33,12 @@ class DailyExportWorker(
         fun schedule(context: Context, config: ExportConfig) {
             if (config.frequency == com.healthconnect.export.data.ExportFrequency.MANUAL) {
                 WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+                // Also cancel 2-hour webhook if manual is selected
+                Every2HoursWebhookWorker.cancel(context)
                 return
             }
+            // Schedule 2-hour webhook if enabled
+            scheduleEvery2HoursWebhook(context, config)
 
             val constraints = Constraints.Builder()
                 .setRequiresBatteryNotLow(true)
@@ -61,6 +65,22 @@ class DailyExportWorker(
 
         fun cancel(context: Context) {
             WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+            Every2HoursWebhookWorker.cancel(context)
+        }
+
+        /**
+         * Schedules or cancels the every-2-hours webhook periodic work.
+         */
+        fun scheduleEvery2HoursWebhook(context: Context, config: ExportConfig) {
+            if (config.autoSendWebhookEvery2Hours && config.webhookUrl.isNotBlank()) {
+                Every2HoursWebhookWorker.schedule(context, config)
+            } else {
+                Every2HoursWebhookWorker.cancel(context)
+            }
+        }
+
+        fun cancelEvery2HoursWebhook(context: Context) {
+            Every2HoursWebhookWorker.cancel(context)
         }
 
         fun getStatus(context: Context) =
@@ -85,23 +105,24 @@ class DailyExportWorker(
                 )
             }
 
-            // Export yesterday by default (complete day)
-            val yesterday = LocalDate.now().minusDays(1)
-
-            // Skip if already exported locally
-            if (localRepo.isExported(yesterday, config)) {
-                // Still try Drive sync if enabled and connected
-                if (config.autoSyncDrive && driveRepo.isSignedIn()) {
-                    syncToDrive(yesterday, config)
-                }
-                return@withContext Result.success()
+            // Export period ending today (captures current day)
+            val endDate = LocalDate.now()
+            val startDate = when (config.frequency) {
+                ExportFrequency.DAILY -> endDate.minusDays(1)  // yesterday + today
+                ExportFrequency.WEEKLY -> endDate.minusDays(6)  // past 7 days ending today
+                ExportFrequency.MANUAL -> endDate  // shouldn't happen via schedule, but just today
             }
 
-            // Export from Health Connect
-            val records = healthRepo.readPeriod(yesterday, yesterday, config.enabledTypes)
+            // Read health data for the period (batch mode: 1 API call per type)
+            val records = healthRepo.readPeriodInBatch(
+                startDate = startDate,
+                endDate = endDate,
+                types = config.enabledTypes,
+                selectedSourcePackage = config.selectedSourcePackage
+            )
 
             if (records.isEmpty()) {
-                return@withContext Result.success() // No data available yet
+                return@withContext Result.success()
             }
 
             // Save locally
@@ -126,16 +147,6 @@ class DailyExportWorker(
             Result.failure()
         } catch (e: Exception) {
             Result.retry()
-        }
-    }
-
-    private suspend fun syncToDrive(date: LocalDate, config: ExportConfig) {
-        val files = localRepo.listExportedFiles(config)
-            .filter { it.first == date }
-            .map { it.second }
-
-        files.forEach { file ->
-            driveRepo.uploadFile(file, "HealthConnectExport/${file.name}")
         }
     }
 }

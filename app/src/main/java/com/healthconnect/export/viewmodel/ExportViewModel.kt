@@ -45,6 +45,7 @@ data class ExportUiState(
     val webhookUrl: String = "",
     val webhookAuthToken: String = "",
     val autoSendWebhook: Boolean = false,
+    val autoSendWebhookEvery2Hours: Boolean = false,
     val webhookUrlError: String? = null,
     val message: String? = null,
     val isDarkTheme: Boolean? = null,
@@ -57,6 +58,7 @@ data class ExportUiState(
     val progressTotal: Int = 0,
     val progressDate: String = "",
     val progressPhase: String = "",
+    val isTestingWebhook: Boolean = false,
 )
 
 sealed class DriveStatus {
@@ -76,6 +78,7 @@ sealed class ScheduleStatus {
 class ExportViewModel(application: Application) : AndroidViewModel(application) {
 
     private var currentExportJob: Job? = null
+    private var currentTestWebhookJob: Job? = null
 
     private val healthRepo = HealthConnectRepository(getApplication())
     private val localRepo = LocalExportRepository(getApplication())
@@ -102,6 +105,7 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
         private const val KEY_WEBHOOK_URL = "webhook_url"
         private const val KEY_WEBHOOK_TOKEN = "webhook_auth_token"
         private const val KEY_AUTO_SEND_WEBHOOK = "auto_send_webhook"
+        private const val KEY_AUTO_SEND_WEBHOOK_EVERY_2_HOURS = "auto_send_webhook_every_2_hours"
         private const val KEY_AUTO_SYNC_DRIVE = "auto_sync_drive"
         private const val KEY_LOCALE = "app_locale"
         private const val KEY_SOURCE_PACKAGE = "selected_source_package"
@@ -185,8 +189,9 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
         val url = prefs.getString(KEY_WEBHOOK_URL, "") ?: ""
         val token = prefs.getString(KEY_WEBHOOK_TOKEN, "") ?: ""
         val autoSend = prefs.getBoolean(KEY_AUTO_SEND_WEBHOOK, false)
+        val autoSend2h = prefs.getBoolean(KEY_AUTO_SEND_WEBHOOK_EVERY_2_HOURS, false)
         val autoSync = prefs.getBoolean(KEY_AUTO_SYNC_DRIVE, true)
-        if (url.isNotBlank() || token.isNotBlank() || autoSend || !autoSync) {
+        if (url.isNotBlank() || token.isNotBlank() || autoSend || autoSend2h || !autoSync) {
             val error = if (url.isNotBlank() && !webhookRepo.isValidWebhookUrl(url)) {
                 str(R.string.vm_invalid_url)
             } else null
@@ -195,6 +200,7 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
                     webhookUrl = url,
                     webhookAuthToken = token,
                     autoSendWebhook = autoSend,
+                    autoSendWebhookEvery2Hours = autoSend2h,
                     webhookUrlError = error,
                     autoSyncDrive = autoSync
                 )
@@ -218,6 +224,12 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
         getApplication<Application>()
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putBoolean(KEY_AUTO_SEND_WEBHOOK, enabled).apply()
+    }
+
+    private fun saveAutoSendWebhookEvery2Hours(enabled: Boolean) {
+        getApplication<Application>()
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_AUTO_SEND_WEBHOOK_EVERY_2_HOURS, enabled).apply()
     }
 
     private fun loadSourcePreference() {
@@ -350,6 +362,37 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
         saveAutoSendWebhook(enabled)
     }
 
+    fun setAutoSendWebhookEvery2Hours(enabled: Boolean) {
+        val state = _uiState.value
+        if (enabled && state.webhookUrl.isBlank()) {
+            _uiState.update { it.copy(message = str(R.string.enter_url_first_every_2h)) }
+            return
+        }
+        _uiState.update { it.copy(autoSendWebhookEvery2Hours = enabled) }
+        saveAutoSendWebhookEvery2Hours(enabled)
+        // Schedule or cancel the 2-hour worker
+        val config = ExportConfig(
+            enabledTypes = state.selectedTypes,
+            frequency = state.frequency,
+            autoSyncDrive = state.autoSyncDrive,
+            webhookUrl = state.webhookUrl,
+            webhookAuthToken = state.webhookAuthToken,
+            autoSendWebhook = state.autoSendWebhook,
+            autoSendWebhookEvery2Hours = enabled,
+            selectedSourcePackage = state.selectedSourcePackage
+        )
+        DailyExportWorker.scheduleEvery2HoursWebhook(getApplication(), config)
+        if (enabled) {
+            _uiState.update {
+                it.copy(message = str(R.string.every_2_hours_enabled))
+            }
+        } else {
+            _uiState.update {
+                it.copy(message = str(R.string.every_2_hours_disabled))
+            }
+        }
+    }
+
     fun scheduleExport() {
         val state = _uiState.value
         val config = ExportConfig(
@@ -358,7 +401,9 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
             autoSyncDrive = state.autoSyncDrive,
             webhookUrl = state.webhookUrl,
             webhookAuthToken = state.webhookAuthToken,
-            autoSendWebhook = state.autoSendWebhook
+            autoSendWebhook = state.autoSendWebhook,
+            autoSendWebhookEvery2Hours = state.autoSendWebhookEvery2Hours,
+            selectedSourcePackage = state.selectedSourcePackage
         )
         DailyExportWorker.schedule(getApplication(), config)
         _uiState.update {
@@ -426,18 +471,34 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
                         }
                         is ExportStep.Progress -> {
                             val parts = step.message.split(":")
-                            if (parts.size == 4 && (parts[0] == "read" || parts[0] == "save")) {
-                                _uiState.update {
-                                    it.copy(
-                                        exportProgress = step.message,
-                                        progressPhase = parts[0],
-                                        progressCurrent = parts[1].toIntOrNull() ?: 0,
-                                        progressTotal = parts[2].toIntOrNull() ?: 0,
-                                        progressDate = parts[3]
-                                    )
+                            when {
+                                // Save progress: "save:current:total:date"
+                                parts.size == 4 && parts[0] == "save" -> {
+                                    _uiState.update {
+                                        it.copy(
+                                            exportProgress = step.message,
+                                            progressPhase = "save",
+                                            progressCurrent = parts[1].toIntOrNull() ?: 0,
+                                            progressTotal = parts[2].toIntOrNull() ?: 0,
+                                            progressDate = parts[3]
+                                        )
+                                    }
                                 }
-                            } else {
-                                _uiState.update { it.copy(exportProgress = step.message) }
+                                // Read page progress: "read:typeName:pageNumber"
+                                parts.size == 3 && parts[0] == "read" -> {
+                                    _uiState.update {
+                                        it.copy(
+                                            exportProgress = step.message,
+                                            progressPhase = "read",
+                                            progressCurrent = parts[2].toIntOrNull() ?: 0,
+                                            progressTotal = 0, // unknown total pages
+                                            progressDate = parts[1] // type name
+                                        )
+                                    }
+                                }
+                                else -> {
+                                    _uiState.update { it.copy(exportProgress = step.message) }
+                                }
                             }
                         }
                         is ExportStep.Complete -> {
@@ -597,6 +658,71 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
                     }
                 }
             }
+        }
+    }
+
+    fun testWebhook() {
+        val state = _uiState.value
+        if (state.webhookUrl.isBlank() || state.webhookUrlError != null) {
+            _uiState.update { it.copy(message = str(R.string.enter_url_first)) }
+            return
+        }
+
+        _uiState.update {
+            it.copy(isTestingWebhook = true, message = str(R.string.webhook_testing))
+        }
+
+        val job = viewModelScope.launch {
+            try {
+                val today = LocalDate.now()
+                val records = healthRepo.readPeriodInBatch(
+                    startDate = today,
+                    endDate = today,
+                    types = state.selectedTypes,
+                    selectedSourcePackage = state.selectedSourcePackage
+                )
+
+                if (records.isEmpty()) {
+                    _uiState.update {
+                        it.copy(message = str(R.string.vm_webhook_no_data))
+                    }
+                    return@launch
+                }
+
+                when (val result = webhookRepo.sendRecords(state.webhookUrl, records, state.webhookAuthToken)) {
+                    is WebhookResult.Success -> {
+                        _uiState.update {
+                            it.copy(message = str(R.string.vm_webhook_test_success, result.statusCode))
+                        }
+                    }
+                    is WebhookResult.Error -> {
+                        _uiState.update {
+                            it.copy(message = str(R.string.vm_webhook_test_error, result.statusCode, result.message))
+                        }
+                    }
+                }
+            } catch (e: CancellationException) {
+                // Test was cancelled — do nothing, cancelTestWebhook() already reset state
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(message = str(R.string.vm_webhook_test_error, 0, e.message ?: "Unknown error"))
+                }
+            } finally {
+                _uiState.update { it.copy(isTestingWebhook = false) }
+                currentTestWebhookJob = null
+            }
+        }
+        currentTestWebhookJob = job
+    }
+
+    fun cancelTestWebhook() {
+        currentTestWebhookJob?.cancel()
+        currentTestWebhookJob = null
+        _uiState.update {
+            it.copy(
+                isTestingWebhook = false,
+                message = str(R.string.vm_export_cancelled)
+            )
         }
     }
 
