@@ -134,7 +134,7 @@ tasks.register("jacocoTestReport", JacocoReport::class) {
 }
 
 tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification::class) {
-    dependsOn("testDebugUnitTest")
+    dependsOn("testDebugUnitTest", "jacocoTestReport")
 
     sourceDirectories.setFrom(files("src/main/java"))
     classDirectories.setFrom(files(kotlinDebugClasses))
