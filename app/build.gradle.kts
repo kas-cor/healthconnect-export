@@ -112,9 +112,15 @@ val fileFilter =
         "android/**/*.*",
     )
 
-// Kotlin classes location (AGP 9.x)
+// Kotlin classes location (AGP 9.x+) — try multiple possible paths
 val kotlinDebugClasses =
     fileTree("${layout.buildDirectory.get()}/intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes") {
+        exclude(fileFilter)
+    } +
+    fileTree("${layout.buildDirectory.get()}/intermediates/built_in_kotlinc/debug/classes") {
+        exclude(fileFilter)
+    } +
+    fileTree("${layout.buildDirectory.get()}/tmp/kotlin-classes/debug") {
         exclude(fileFilter)
     }
 
