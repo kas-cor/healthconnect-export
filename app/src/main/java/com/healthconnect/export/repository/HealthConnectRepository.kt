@@ -714,10 +714,13 @@ class HealthConnectRepository(private val context: Context) {
             }
         }
 
-        // Return sorted list
-        val result = startDate.datesUntil(endDate.plusDays(1))
-            .map { date -> daysMap[date.toString()] ?: DailyHealthRecord(date = date.toString(), metadata = metadata) }
-            .toList()
+        // Build sorted result list (compatible with minSdk 28)
+        val result = mutableListOf<DailyHealthRecord>()
+        var day = startDate
+        while (!day.isAfter(endDate)) {
+            result.add(daysMap[day.toString()] ?: DailyHealthRecord(date = day.toString(), metadata = metadata))
+            day = day.plusDays(1)
+        }
 
         val daysWithData = result.count { r ->
             r.steps != null || r.heartRate != null || r.sleep != null ||
