@@ -27,6 +27,8 @@ jobs:
         java-version: '21'
         distribution: 'temurin'
     - uses: android-actions/setup-android@v4
+      with:
+        api-level: 37
     - uses: actions/cache@v5
       with:
         path: |
@@ -54,6 +56,8 @@ jobs:
         java-version: '21'
         distribution: 'temurin'
     - uses: android-actions/setup-android@v4
+      with:
+        api-level: 37
     - uses: actions/cache@v5
       with:
         path: |
@@ -86,6 +90,8 @@ jobs:
         java-version: '21'
         distribution: 'temurin'
     - uses: android-actions/setup-android@v4
+      with:
+        api-level: 37
     - uses: actions/cache@v5
       with:
         path: |
@@ -153,6 +159,8 @@ jobs:
         java-version: '21'
         distribution: 'temurin'
     - uses: android-actions/setup-android@v4
+      with:
+        api-level: 37
     - uses: actions/cache@v5
       with:
         path: |
@@ -196,6 +204,8 @@ jobs:
         java-version: '21'
         distribution: 'temurin'
     - uses: android-actions/setup-android@v4
+      with:
+        api-level: 37
     - uses: actions/cache@v5
       with:
         path: |
