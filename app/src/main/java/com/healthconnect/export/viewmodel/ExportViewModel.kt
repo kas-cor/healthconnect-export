@@ -511,6 +511,9 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
                                     message = str(R.string.vm_export_complete, step.files.size)
                                 )
                             }
+                            // Refresh the full file list from disk so the UI shows all exported files,
+                            // not just the ones from this export run
+                            refreshLocalFiles()
                             // Post-export: auto-sync to Drive
                             if (state.autoSyncDrive && driveRepo.isSignedIn()) {
                                 syncToDrive(step.files)
