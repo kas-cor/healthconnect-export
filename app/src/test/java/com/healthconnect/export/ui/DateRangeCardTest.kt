@@ -5,6 +5,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.core.app.ApplicationProvider
 import com.healthconnect.export.R
+import com.healthconnect.export.ui.components.DateRangeCard
 import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test

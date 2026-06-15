@@ -7,6 +7,8 @@ import com.healthconnect.export.data.ExportSummary
 import com.healthconnect.export.data.HealthDataType
 import com.healthconnect.export.repository.HealthConnectRepository
 import com.healthconnect.export.repository.LocalExportRepository
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import java.io.File
@@ -56,7 +58,8 @@ sealed class ExportStep {
  */
 class ExportDataUseCase(
     private val healthRepo: HealthConnectRepository,
-    private val localRepo: LocalExportRepository
+    private val localRepo: LocalExportRepository,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     /**
      * Execute the export workflow, emitting progress events.

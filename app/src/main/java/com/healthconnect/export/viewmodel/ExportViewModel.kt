@@ -6,10 +6,6 @@ import android.util.Log
 import androidx.activity.result.ActivityResult
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount
-import com.google.android.gms.auth.api.signin.GoogleSignInClient
-import com.google.android.gms.common.api.ApiException
 import com.healthconnect.export.R
 import com.healthconnect.export.data.*
 import com.healthconnect.export.repository.HealthConnectRepository
@@ -17,18 +13,13 @@ import com.healthconnect.export.usecase.ExportDataUseCase
 import com.healthconnect.export.usecase.ExportStep
 import com.healthconnect.export.util.LocaleManager
 import com.healthconnect.export.repository.LocalExportRepository
-import com.healthconnect.export.repository.GoogleDriveRepository
-import com.healthconnect.export.repository.WebhookRepository
-import com.healthconnect.export.repository.WebhookResult
-import com.healthconnect.export.worker.DailyExportWorker
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.io.File
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
 
 
 data class ExportUiState(
@@ -69,28 +60,30 @@ sealed class DriveStatus {
     data class Error(val error: String) : DriveStatus()
 }
 
-sealed class ScheduleStatus {
-    object NotScheduled : ScheduleStatus()
-    data class Scheduled(val nextRun: String) : ScheduleStatus()
-    object Running : ScheduleStatus()
-}
-
 class ExportViewModel(application: Application) : AndroidViewModel(application) {
 
+    /** Scope for export operations. Made internal for testability. */
+    internal var exportScope: CoroutineScope = viewModelScope
+
     private var currentExportJob: Job? = null
-    private var currentTestWebhookJob: Job? = null
 
     private val healthRepo = HealthConnectRepository(getApplication())
     private val localRepo = LocalExportRepository(getApplication())
-    private val driveRepo = GoogleDriveRepository(getApplication())
-    private val webhookRepo = WebhookRepository()
     private val exportUseCase = ExportDataUseCase(healthRepo, localRepo)
-
-    val googleSignInClient: GoogleSignInClient =
-        GoogleSignIn.getClient(getApplication(), driveRepo.getSignInOptions())
 
     private val _uiState = MutableStateFlow(ExportUiState())
     val uiState = _uiState.asStateFlow()
+
+    val driveManager = DriveManager(getApplication())
+    val webhookManager = WebhookManager(
+        application = getApplication(),
+        _uiState = _uiState,
+        viewModelScope = viewModelScope,
+        healthRepo = healthRepo
+    )
+    val scheduleManager = ScheduleManager(getApplication()) { update ->
+        _uiState.update(update)
+    }
 
     /** Набор разрешений для запроса Health Connect */
     var pendingPermissions: Set<String>? = null
@@ -120,12 +113,12 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
         loadSelectedTypes()
         loadThemePreference()
         loadDateRange()
-        loadWebhookSettings()
+        webhookManager.loadSettings()
         loadLocale()
         loadSourcePreference()
-        refreshDriveStatus()
+        driveManager.refreshDriveStatus()
         refreshLocalFiles()
-        scheduleExport()
+        scheduleManager.scheduleExport(_uiState.value)
         fetchAvailableSources()
     }
 
@@ -182,54 +175,6 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
             .putString(KEY_START_DATE, start.toString())
             .putString(KEY_END_DATE, end.toString())
             .apply()
-    }
-
-    private fun loadWebhookSettings() {
-        val prefs = getApplication<Application>().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val url = prefs.getString(KEY_WEBHOOK_URL, "") ?: ""
-        val token = prefs.getString(KEY_WEBHOOK_TOKEN, "") ?: ""
-        val autoSend = prefs.getBoolean(KEY_AUTO_SEND_WEBHOOK, false)
-        val autoSend2h = prefs.getBoolean(KEY_AUTO_SEND_WEBHOOK_EVERY_2_HOURS, false)
-        val autoSync = prefs.getBoolean(KEY_AUTO_SYNC_DRIVE, true)
-        if (url.isNotBlank() || token.isNotBlank() || autoSend || autoSend2h || !autoSync) {
-            val error = if (url.isNotBlank() && !webhookRepo.isValidWebhookUrl(url)) {
-                str(R.string.vm_invalid_url)
-            } else null
-            _uiState.update {
-                it.copy(
-                    webhookUrl = url,
-                    webhookAuthToken = token,
-                    autoSendWebhook = autoSend,
-                    autoSendWebhookEvery2Hours = autoSend2h,
-                    webhookUrlError = error,
-                    autoSyncDrive = autoSync
-                )
-            }
-        }
-    }
-
-    private fun saveWebhookUrl(url: String) {
-        getApplication<Application>()
-            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putString(KEY_WEBHOOK_URL, url).apply()
-    }
-
-    private fun saveWebhookToken(token: String) {
-        getApplication<Application>()
-            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putString(KEY_WEBHOOK_TOKEN, token).apply()
-    }
-
-    private fun saveAutoSendWebhook(enabled: Boolean) {
-        getApplication<Application>()
-            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putBoolean(KEY_AUTO_SEND_WEBHOOK, enabled).apply()
-    }
-
-    private fun saveAutoSendWebhookEvery2Hours(enabled: Boolean) {
-        getApplication<Application>()
-            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putBoolean(KEY_AUTO_SEND_WEBHOOK_EVERY_2_HOURS, enabled).apply()
     }
 
     private fun loadSourcePreference() {
@@ -292,36 +237,19 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun handleSignInResult(result: ActivityResult) {
-        try {
-            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-            val account = task.getResult(ApiException::class.java)
-            if (account != null) {
-                _uiState.update {
-                    it.copy(
-                        driveStatus = DriveStatus.Connected,
-                        message = str(R.string.vm_drive_connected, account.email)
-                    )
-                }
-                refreshDriveStatus()
-            }
-        } catch (e: ApiException) {
-            _uiState.update {
-                it.copy(
-                    driveStatus = DriveStatus.Error(str(R.string.vm_drive_signin_error, e.statusCode)),
-                    message = str(R.string.vm_drive_signin_error, e.statusCode)
-                )
-            }
+        driveManager.handleSignInResult(result)
+        // Sync DriveManager's state back to our UI state
+        val driveState = driveManager.driveState.value
+        _uiState.update {
+            it.copy(driveStatus = driveState.status, message = driveState.message)
         }
     }
 
     fun signOut() {
-        googleSignInClient.signOut().addOnCompleteListener {
-            _uiState.update {
-                it.copy(
-                    driveStatus = DriveStatus.NotConnected,
-                    message = str(R.string.vm_drive_signed_out)
-                )
-            }
+        driveManager.signOut()
+        val driveState = driveManager.driveState.value
+        _uiState.update {
+            it.copy(driveStatus = driveState.status, message = driveState.message)
         }
     }
 
@@ -336,7 +264,7 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun setFrequency(freq: ExportFrequency) {
-        _uiState.update { it.copy(frequency = freq) }
+        scheduleManager.setFrequency(freq)
     }
 
     fun setAutoSyncDrive(enabled: Boolean) {
@@ -345,83 +273,27 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun setWebhookUrl(url: String) {
-        val error = if (url.isNotBlank() && !webhookRepo.isValidWebhookUrl(url)) {
-            str(R.string.vm_invalid_url)
-        } else null
-        _uiState.update { it.copy(webhookUrl = url, webhookUrlError = error) }
-        saveWebhookUrl(url)
+        webhookManager.setWebhookUrl(url)
     }
 
     fun setWebhookAuthToken(token: String) {
-        _uiState.update { it.copy(webhookAuthToken = token) }
-        saveWebhookToken(token)
+        webhookManager.setWebhookAuthToken(token)
     }
 
     fun setAutoSendWebhook(enabled: Boolean) {
-        _uiState.update { it.copy(autoSendWebhook = enabled) }
-        saveAutoSendWebhook(enabled)
+        webhookManager.setAutoSendWebhook(enabled)
     }
 
     fun setAutoSendWebhookEvery2Hours(enabled: Boolean) {
-        val state = _uiState.value
-        if (enabled && state.webhookUrl.isBlank()) {
-            _uiState.update { it.copy(message = str(R.string.enter_url_first_every_2h)) }
-            return
-        }
-        _uiState.update { it.copy(autoSendWebhookEvery2Hours = enabled) }
-        saveAutoSendWebhookEvery2Hours(enabled)
-        // Schedule or cancel the 2-hour worker
-        val config = ExportConfig(
-            enabledTypes = state.selectedTypes,
-            frequency = state.frequency,
-            autoSyncDrive = state.autoSyncDrive,
-            webhookUrl = state.webhookUrl,
-            webhookAuthToken = state.webhookAuthToken,
-            autoSendWebhook = state.autoSendWebhook,
-            autoSendWebhookEvery2Hours = enabled,
-            selectedSourcePackage = state.selectedSourcePackage
-        )
-        DailyExportWorker.scheduleEvery2HoursWebhook(getApplication(), config)
-        if (enabled) {
-            _uiState.update {
-                it.copy(message = str(R.string.every_2_hours_enabled))
-            }
-        } else {
-            _uiState.update {
-                it.copy(message = str(R.string.every_2_hours_disabled))
-            }
-        }
+        webhookManager.setAutoSendWebhookEvery2Hours(enabled)
     }
 
     fun scheduleExport() {
-        val state = _uiState.value
-        val config = ExportConfig(
-            enabledTypes = state.selectedTypes,
-            frequency = state.frequency,
-            autoSyncDrive = state.autoSyncDrive,
-            webhookUrl = state.webhookUrl,
-            webhookAuthToken = state.webhookAuthToken,
-            autoSendWebhook = state.autoSendWebhook,
-            autoSendWebhookEvery2Hours = state.autoSendWebhookEvery2Hours,
-            selectedSourcePackage = state.selectedSourcePackage
-        )
-        DailyExportWorker.schedule(getApplication(), config)
-        _uiState.update {
-            it.copy(
-                scheduleStatus = ScheduleStatus.Scheduled(str(R.string.next_run)),
-                message = str(R.string.schedule_set, config.frequency.displayName)
-            )
-        }
+        scheduleManager.scheduleExport(_uiState.value)
     }
 
     fun cancelSchedule() {
-        DailyExportWorker.cancel(getApplication())
-        _uiState.update {
-            it.copy(
-                scheduleStatus = ScheduleStatus.NotScheduled,
-                message = str(R.string.schedule_cancelled)
-            )
-        }
+        scheduleManager.cancelSchedule()
     }
 
     fun exportNow() {
@@ -432,7 +304,7 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
 
-        val job = viewModelScope.launch {
+        val job = exportScope.launch {
             try {
                 val state = _uiState.value
 
@@ -515,12 +387,12 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
                             // not just the ones from this export run
                             refreshLocalFiles()
                             // Post-export: auto-sync to Drive
-                            if (state.autoSyncDrive && driveRepo.isSignedIn()) {
+                            if (state.autoSyncDrive && driveManager.driveRepo.isSignedIn()) {
                                 syncToDrive(step.files)
                             }
                             // Post-export: send to webhook
                             if (state.autoSendWebhook && state.webhookUrl.isNotBlank()) {
-                                sendToWebhook(state.webhookUrl, state.webhookAuthToken, step.records)
+                                webhookManager.sendToWebhook(state.webhookUrl, state.webhookAuthToken, step.records)
                             }
                         }
                         is ExportStep.Error -> {
@@ -593,42 +465,18 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun syncToDrive(files: List<File> = _uiState.value.exportedFiles) {
-        if (!driveRepo.isSignedIn()) {
-            _uiState.update {
-                it.copy(
-                    driveStatus = DriveStatus.NotConnected,
-                    message = str(R.string.vm_drive_not_connected)
-                )
-            }
-            return
-        }
-
-        viewModelScope.launch {
-            _uiState.update { it.copy(driveStatus = DriveStatus.Syncing) }
-            try {
-                val results = driveRepo.syncFiles(files)
-                val syncedCount = results.count { it != null }
-                _uiState.update {
-                    it.copy(
-                        driveStatus = DriveStatus.Synced(syncedCount),
-                        message = str(R.string.vm_drive_synced, syncedCount)
-                    )
-                }
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(driveStatus = DriveStatus.Error(e.message ?: "Unknown error"))
-                }
-            }
+        driveManager.syncToDrive(files)
+        val driveState = driveManager.driveState.value
+        _uiState.update {
+            it.copy(driveStatus = driveState.status, message = driveState.message)
         }
     }
 
     fun refreshDriveStatus() {
-        if (driveRepo.isSignedIn()) {
-            _uiState.update { it.copy(driveStatus = DriveStatus.Connected) }
-            viewModelScope.launch {
-                val driveFiles = driveRepo.listDriveFiles()
-                _uiState.update { it.copy(driveStatus = DriveStatus.Synced(driveFiles.size)) }
-            }
+        driveManager.refreshDriveStatus()
+        val driveState = driveManager.driveState.value
+        _uiState.update {
+            it.copy(driveStatus = driveState.status)
         }
     }
 
@@ -642,91 +490,12 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.update { it.copy(exportedFiles = files) }
     }
 
-    private fun sendToWebhook(url: String, authToken: String, records: List<DailyHealthRecord>) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(exportProgress = str(R.string.vm_sending_webhook)) }
-            when (val result = webhookRepo.sendRecords(url, records, authToken)) {
-                is WebhookResult.Success -> {
-                    _uiState.update {
-                        it.copy(
-                            message = str(R.string.vm_webhook_success, result.statusCode)
-                        )
-                    }
-                }
-                is WebhookResult.Error -> {
-                    _uiState.update {
-                        it.copy(
-                            message = str(R.string.vm_webhook_error, result.statusCode, result.message)
-                        )
-                    }
-                }
-            }
-        }
-    }
-
     fun testWebhook() {
-        val state = _uiState.value
-        if (state.webhookUrl.isBlank() || state.webhookUrlError != null) {
-            _uiState.update { it.copy(message = str(R.string.enter_url_first)) }
-            return
-        }
-
-        _uiState.update {
-            it.copy(isTestingWebhook = true, message = str(R.string.webhook_testing))
-        }
-
-        val job = viewModelScope.launch {
-            try {
-                val today = LocalDate.now()
-                val records = healthRepo.readPeriodInBatch(
-                    startDate = today,
-                    endDate = today,
-                    types = state.selectedTypes,
-                    selectedSourcePackage = state.selectedSourcePackage
-                )
-
-                if (records.isEmpty()) {
-                    _uiState.update {
-                        it.copy(message = str(R.string.vm_webhook_no_data))
-                    }
-                    return@launch
-                }
-
-                when (val result = webhookRepo.sendRecords(state.webhookUrl, records, state.webhookAuthToken)) {
-                    is WebhookResult.Success -> {
-                        _uiState.update {
-                            it.copy(message = str(R.string.vm_webhook_test_success, result.statusCode))
-                        }
-                    }
-                    is WebhookResult.Error -> {
-                        _uiState.update {
-                            it.copy(message = str(R.string.vm_webhook_test_error, result.statusCode, result.message))
-                        }
-                    }
-                }
-            } catch (e: CancellationException) {
-                // Test was cancelled — do nothing, cancelTestWebhook() already reset state
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(message = str(R.string.vm_webhook_test_error, 0, e.message ?: "Unknown error"))
-                }
-            } finally {
-                _uiState.update { it.copy(isTestingWebhook = false) }
-                currentTestWebhookJob = null
-            }
-        }
-        currentTestWebhookJob = job
+        webhookManager.testWebhook()
     }
 
     fun cancelTestWebhook() {
-        currentTestWebhookJob?.cancel()
-        currentTestWebhookJob = null
-        _uiState.update {
-            it.copy(
-                isTestingWebhook = false,
-                message = str(R.string.vm_export_cancelled)
-            )
-        }
+        webhookManager.cancelTestWebhook()
     }
 
     fun clearMessage() {

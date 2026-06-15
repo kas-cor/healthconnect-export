@@ -54,32 +54,33 @@ class WebhookRepositoryTest {
 
         val serverThread = Thread {
             try {
-                val client = server.accept()
-                client.use { socket ->
-                    // Read full request (headers + body) to prevent connection hanging
-                    val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
-                    val requestLines = mutableListOf<String>()
-                    var line = reader.readLine()
-                    while (line != null && line.isNotEmpty()) {
-                        requestLines.add(line)
-                        line = reader.readLine()
-                    }
+                // Accept up to 2 connections (to handle retry)
+                for (i in 1..2) {
+                    val client = try { server.accept() } catch (_: Exception) { break }
+                    client.use { socket ->
+                        val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
+                        val requestLines = mutableListOf<String>()
+                        var line = reader.readLine()
+                        while (line != null && line.isNotEmpty()) {
+                            requestLines.add(line)
+                            line = reader.readLine()
+                        }
 
-                    // Read body if Content-Length is present
-                    val contentLength = requestLines
-                        .firstOrNull { it.startsWith("Content-Length:", ignoreCase = true) }
-                        ?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
-                    if (contentLength > 0) {
-                        val body = CharArray(contentLength)
-                        reader.read(body, 0, contentLength)
-                        requestLines.add(String(body))
-                    }
+                        val contentLength = requestLines
+                            .firstOrNull { it.startsWith("Content-Length:", ignoreCase = true) }
+                            ?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
+                        if (contentLength > 0) {
+                            val body = CharArray(contentLength)
+                            reader.read(body, 0, contentLength)
+                            requestLines.add(String(body))
+                        }
 
-                    val responseBytes =
-                        "HTTP/1.1 $responseCode \r\nContent-Length: ${responseBody.toByteArray().size}\r\nConnection: close\r\n\r\n$responseBody"
-                            .toByteArray()
-                    socket.getOutputStream().write(responseBytes)
-                    socket.getOutputStream().flush()
+                        val responseBytes =
+                            "HTTP/1.1 $responseCode \r\nContent-Length: ${responseBody.toByteArray().size}\r\nConnection: close\r\n\r\n$responseBody"
+                                .toByteArray()
+                        socket.getOutputStream().write(responseBytes)
+                        socket.getOutputStream().flush()
+                    }
                 }
             } catch (_: Exception) {
                 // Server closed — ignore
@@ -113,33 +114,36 @@ class WebhookRepositoryTest {
 
         val serverThread = Thread {
             try {
-                val client = server.accept()
-                client.use { socket ->
-                    val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
-                    val requestLines = mutableListOf<String>()
-                    var line = reader.readLine()
-                    while (line != null && line.isNotEmpty()) {
-                        requestLines.add(line)
-                        line = reader.readLine()
+                // Accept up to 2 connections (to handle retry)
+                for (i in 1..2) {
+                    val client = try { server.accept() } catch (_: Exception) { break }
+                    client.use { socket ->
+                        val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
+                        val requestLines = mutableListOf<String>()
+                        var line = reader.readLine()
+                        while (line != null && line.isNotEmpty()) {
+                            requestLines.add(line)
+                            line = reader.readLine()
+                        }
+
+                        val contentLength = requestLines
+                            .firstOrNull { it.startsWith("Content-Length:", ignoreCase = true) }
+                            ?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
+                        var bodyString = ""
+                        if (contentLength > 0) {
+                            val body = CharArray(contentLength)
+                            reader.read(body, 0, contentLength)
+                            bodyString = String(body)
+                        }
+
+                        capturedRequest = requestLines.joinToString("\n") + "\n\n" + bodyString
+
+                        val responseBytes =
+                            "HTTP/1.1 $responseCode \r\nContent-Length: ${responseBody.toByteArray().size}\r\nConnection: close\r\n\r\n$responseBody"
+                                .toByteArray()
+                        socket.getOutputStream().write(responseBytes)
+                        socket.getOutputStream().flush()
                     }
-
-                    val contentLength = requestLines
-                        .firstOrNull { it.startsWith("Content-Length:", ignoreCase = true) }
-                        ?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
-                    var bodyString = ""
-                    if (contentLength > 0) {
-                        val body = CharArray(contentLength)
-                        reader.read(body, 0, contentLength)
-                        bodyString = String(body)
-                    }
-
-                    capturedRequest = requestLines.joinToString("\n") + "\n\n" + bodyString
-
-                    val responseBytes =
-                        "HTTP/1.1 $responseCode \r\nContent-Length: ${responseBody.toByteArray().size}\r\nConnection: close\r\n\r\n$responseBody"
-                            .toByteArray()
-                    socket.getOutputStream().write(responseBytes)
-                    socket.getOutputStream().flush()
                 }
             } catch (_: Exception) {
                 // Server closed — ignore
