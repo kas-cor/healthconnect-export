@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.5.1] — 2026-06-15
+
+### Added
+- **Full localization via `stringResource()`:** All hardcoded English strings in UI components replaced with `stringResource()` calls:
+  - `DataTypeCard` — 25+ strings (categories, data type names, buttons, content descriptions)
+  - `DateRangeCard` — export period labels, date picker, 30-day limit warning
+  - `DriveStatusCard` — connection status, sync state, sign-in/sync/sign-out buttons
+  - `ScheduleCard` — scheduling mode labels, enable/disable, every-2-hours checkbox
+  - `ExportScreen` — progress page counter ("page" / "стр.")
+- **Russian localization section in README:** Full documentation section in Russian for Russian-speaking users
+- **Locale validation script:** `scripts/locale-validator.py` added for CI
+- **Locale validation job in CI:** New `locale` workflow step that validates translations on every push
+
+### Changed
+- **String length optimization:** Shortened `health_connect_access_limit` and `every_2_hours_webhook` to prevent layout breaking on narrow screens
+- **ExportScreen:** `ExportScreen` refactored to use separate manager classes (`DriveManager`, `WebhookManager`, `ScheduleManager`) and `ExportDataUseCase` — cleaner MVVM
+- **HealthConnectRepository:** TypeHandler pattern introduced for batch data type processing, `onPageProgress` callback, protection against 100+ page pagination loops
+- **UI:** File refresh now reads from disk after export to show all files immediately
+- **Tests:** `DateRangeCardTest` added — 8 Compose UI tests for presets, custom dates, date picker interaction; total test count **262 → 323**
+- **Docs:** AGENTS.md fully synced with current architecture, README.md localization section updated
+
+### Fixed
+- **Git stash corruption:** Restored 5 files corrupted by `git stash pop` during development (`HealthConnectRepository.kt`, `DailyExportWorker.kt`, `ExportViewModel.kt`, `ExportScreen.kt`, `ExportViewModelTest.kt`)
+- **Hardcoded Russian string:** `"стр."` → `stringResource(R.string.export_progress_page)` in `ExportScreen.kt`
+- **Stale files:** Cleaned up orphaned `HealthConnectRepositoryTest.kt`
+
+### Removed
+- `HealthConnectRepositoryTest.kt` (53 tests) — old API (`readPeriod`) replaced by day-by-day `readDay` loop
+
 ## [1.5] — 2026-06-08
 
 ### Added
@@ -30,7 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `work-runtime-ktx` `2.9.0` → `2.11.2`
 - `kotlinx-serialization-json` `1.6.2` → `1.11.0`
 - `mockito-core` `5.11.0` → `5.23.0`
-- `mockito-kotlin` `6.3.0`
+- `mockito-kotlin` `5.11.0` → `5.23.0`
 - `ktlint` `12.1.0` → `14.2.0`
 - `androidx.test.ext:junit` `1.1.5` → `1.3.0`
 - CI actions: `setup-python` v5→v6, `git-auto-commit-action` v5→v7, `action-gh-release` v2→v3
@@ -122,6 +151,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[1.5.1]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.5.1
 [1.5]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.5
 [1.4]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.4
 [1.3]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.3

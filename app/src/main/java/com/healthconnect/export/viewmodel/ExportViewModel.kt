@@ -469,7 +469,12 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
         driveManager.syncToDrive(files)
         val driveState = driveManager.driveState.value
         _uiState.update {
-            it.copy(driveStatus = driveState.status, message = driveState.message)
+            it.copy(
+                driveStatus = driveState.status,
+                // Only overwrite message if Drive has one to show;
+                // preserves messages set by the caller (e.g. export complete)
+                message = driveState.message ?: it.message
+            )
         }
     }
 
