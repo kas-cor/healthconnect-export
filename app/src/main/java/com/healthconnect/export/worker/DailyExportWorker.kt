@@ -1,6 +1,7 @@
 package com.healthconnect.export.worker
 
 import android.content.Context
+import android.util.Log
 import androidx.work.*
 import com.healthconnect.export.data.ExportConfig
 import com.healthconnect.export.data.ExportFrequency
@@ -28,6 +29,7 @@ class DailyExportWorker(
     companion object {
         const val WORK_NAME = "daily_health_export"
         const val KEY_CONFIG = "export_config"
+        private const val TAG = "DailyExportWorker"
         private val json = Json { ignoreUnknownKeys = true }
 
         fun schedule(context: Context, config: ExportConfig) {
@@ -122,6 +124,7 @@ class DailyExportWorker(
             )
 
             if (records.isEmpty()) {
+                Log.w(TAG, "doWork: no health data returned for period $startDate..$endDate")
                 return@withContext Result.success()
             }
 

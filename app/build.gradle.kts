@@ -18,6 +18,12 @@ android {
         versionName = "1.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField(
+            "String",
+            "GOOGLE_CLIENT_ID",
+            "\"730530422387-dveo97h089iesh4etmj74q9dn8j221f1.apps.googleusercontent.com\""
+        )
     }
 
     aaptOptions {
@@ -26,6 +32,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     compileOptions {

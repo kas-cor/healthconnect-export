@@ -2,6 +2,7 @@ package com.healthconnect.export.ui
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import com.healthconnect.export.ui.components.highlightJsonSyntax
 import org.junit.Test
 import org.junit.Assert.*
 

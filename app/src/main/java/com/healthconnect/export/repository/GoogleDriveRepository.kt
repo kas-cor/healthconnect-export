@@ -2,6 +2,7 @@ package com.healthconnect.export.repository
 
 import android.content.Context
 import android.util.Log
+import com.healthconnect.export.BuildConfig
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -47,7 +48,7 @@ class GoogleDriveRepository(private val context: Context) {
     fun getSignInOptions(): GoogleSignInOptions {
         return GoogleSignInOptions.Builder()
             .requestEmail()
-            .requestIdToken("730530422387-dveo97h089iesh4etmj74q9dn8j221f1.apps.googleusercontent.com")
+            .requestIdToken(BuildConfig.GOOGLE_CLIENT_ID)
             .requestScopes(com.google.android.gms.common.api.Scope(DriveScopes.DRIVE_FILE))
             .build()
     }

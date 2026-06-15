@@ -83,7 +83,7 @@ class MainActivity : ComponentActivity() {
             }
 
             val onSignInClick: () -> Unit = {
-                val signIntent = viewModel.googleSignInClient.signInIntent
+                val signIntent = viewModel.driveManager.googleSignInClient.signInIntent
                 signInLauncher.launch(signIntent)
             }
 

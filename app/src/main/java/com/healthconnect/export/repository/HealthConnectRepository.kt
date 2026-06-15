@@ -15,6 +15,7 @@ import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import com.healthconnect.export.data.*
+import kotlin.reflect.KClass
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Instant
@@ -31,21 +32,10 @@ class HealthConnectRepository(private val context: Context) {
 
         /**
          * Пакеты приложений для фильтрации dataOrigin, упорядоченные по приоритету.
+         * Берётся из KNOWN_SOURCE_PACKAGES в DataModels.kt.
          * Если данные есть от нескольких источников, берётся первый из списка.
          */
-        val PREFERRED_PACKAGES = listOf(
-            "com.mi.health",              // Xiaomi Mi Fitness
-            "com.xiaomi.hm.health",       // Xiaomi Wear / Mi Band
-            "com.google.android.apps.fitness", // Google Fit
-            "com.samsung.android.wearable.health", // Samsung Health
-            "com.fitbit.FitbitMobile",    // Fitbit
-            "com.mobvoi.companion.at",    // Mobvoi / TicWatch
-            "com.huawei.health",          // Huawei Health
-            "com.hmdm.wearable.health",   // Nokia Health
-            "com.sec.android.app.shealth", // Samsung S Health
-            "com.htc.fitness",            // HTC
-            "com.sonymobile.advancedwidget.health" // Sony
-        )
+        val PREFERRED_PACKAGES: List<String> = com.healthconnect.export.data.KNOWN_SOURCE_PACKAGES.keys.toList()
     }
 
     private var client: HealthConnectClient? = null
@@ -542,6 +532,146 @@ class HealthConnectRepository(private val context: Context) {
      * For each data type, makes ONE API call to read ALL records for the full period,
      * then groups results by day. This avoids rate limiting from N×M calls (N=days, M=types).
      */
+    // ── Type handler for data-type-agnostic batch processing ──
+
+    private class TypeHandler(
+        val recordClass: KClass<out Record>,
+        val timeSelector: (Any) -> Instant,
+        val extract: (List<*>, String?) -> Any?,
+        val updateRecord: (DailyHealthRecord, Any?) -> DailyHealthRecord
+    )
+
+    private val typeHandlers: Map<HealthDataType, TypeHandler> = mapOf(
+        HealthDataType.STEPS to TypeHandler(
+            StepsRecord::class, { (it as StepsRecord).startTime },
+            { r, p -> extractSteps(r as List<StepsRecord>, p) },
+            { r, d -> r.copy(steps = d as StepsData?) }
+        ),
+        HealthDataType.HEART_RATE to TypeHandler(
+            HeartRateRecord::class, { (it as HeartRateRecord).startTime },
+            { r, _ -> extractHeartRate(r as List<HeartRateRecord>) },
+            { r, d -> r.copy(heartRate = d as HeartRateData?) }
+        ),
+        HealthDataType.SLEEP to TypeHandler(
+            SleepSessionRecord::class, { (it as SleepSessionRecord).startTime },
+            { r, _ -> extractSleep(r as List<SleepSessionRecord>) },
+            { r, d -> r.copy(sleep = d as SleepData?) }
+        ),
+        HealthDataType.CALORIES to TypeHandler(
+            TotalCaloriesBurnedRecord::class, { (it as TotalCaloriesBurnedRecord).startTime },
+            { r, p -> extractCalories(r as List<TotalCaloriesBurnedRecord>, p) },
+            { r, d -> r.copy(calories = d as CaloriesData?) }
+        ),
+        HealthDataType.DISTANCE to TypeHandler(
+            DistanceRecord::class, { (it as DistanceRecord).startTime },
+            { r, p -> extractDistance(r as List<DistanceRecord>, p) },
+            { r, d -> r.copy(distance = d as DistanceData?) }
+        ),
+        HealthDataType.FLOORS_CLIMBED to TypeHandler(
+            FloorsClimbedRecord::class, { (it as FloorsClimbedRecord).startTime },
+            { r, p -> extractFloorsClimbed(r as List<FloorsClimbedRecord>, p) },
+            { r, d -> r.copy(floorsClimbed = d as FloorsClimbedData?) }
+        ),
+        HealthDataType.ACTIVE_CALORIES to TypeHandler(
+            ActiveCaloriesBurnedRecord::class, { (it as ActiveCaloriesBurnedRecord).startTime },
+            { r, p -> extractActiveCalories(r as List<ActiveCaloriesBurnedRecord>, p) },
+            { r, d -> r.copy(activeCalories = d as ActiveCaloriesData?) }
+        ),
+        HealthDataType.WEIGHT to TypeHandler(
+            WeightRecord::class, { (it as WeightRecord).time },
+            { r, _ -> extractWeight(r as List<WeightRecord>) },
+            { r, d -> r.copy(weight = d as WeightData?) }
+        ),
+        HealthDataType.BODY_FAT to TypeHandler(
+            BodyFatRecord::class, { (it as BodyFatRecord).time },
+            { r, _ -> extractBodyFat(r as List<BodyFatRecord>) },
+            { r, d -> r.copy(bodyFat = d as BodyFatData?) }
+        ),
+        HealthDataType.BLOOD_PRESSURE to TypeHandler(
+            BloodPressureRecord::class, { (it as BloodPressureRecord).time },
+            { r, _ -> extractBloodPressure(r as List<BloodPressureRecord>) },
+            { r, d -> r.copy(bloodPressure = d as BloodPressureData?) }
+        ),
+        HealthDataType.BLOOD_GLUCOSE to TypeHandler(
+            BloodGlucoseRecord::class, { (it as BloodGlucoseRecord).time },
+            { r, _ -> extractBloodGlucose(r as List<BloodGlucoseRecord>) },
+            { r, d -> r.copy(bloodGlucose = d as BloodGlucoseData?) }
+        ),
+        HealthDataType.OXYGEN_SATURATION to TypeHandler(
+            OxygenSaturationRecord::class, { (it as OxygenSaturationRecord).time },
+            { r, _ -> extractOxygenSaturation(r as List<OxygenSaturationRecord>) },
+            { r, d -> r.copy(oxygenSaturation = d as OxygenSaturationData?) }
+        ),
+        HealthDataType.BODY_TEMPERATURE to TypeHandler(
+            BodyTemperatureRecord::class, { (it as BodyTemperatureRecord).time },
+            { r, _ -> extractBodyTemperature(r as List<BodyTemperatureRecord>) },
+            { r, d -> r.copy(bodyTemperature = d as BodyTemperatureData?) }
+        ),
+        HealthDataType.RESPIRATORY_RATE to TypeHandler(
+            RespiratoryRateRecord::class, { (it as RespiratoryRateRecord).time },
+            { r, _ -> extractRespiratoryRate(r as List<RespiratoryRateRecord>) },
+            { r, d -> r.copy(respiratoryRate = d as RespiratoryRateData?) }
+        ),
+        HealthDataType.HYDRATION to TypeHandler(
+            HydrationRecord::class, { (it as HydrationRecord).startTime },
+            { r, _ -> extractHydration(r as List<HydrationRecord>) },
+            { r, d -> r.copy(hydration = d as HydrationData?) }
+        ),
+        HealthDataType.RESTING_HEART_RATE to TypeHandler(
+            RestingHeartRateRecord::class, { (it as RestingHeartRateRecord).time },
+            { r, _ -> extractRestingHeartRate(r as List<RestingHeartRateRecord>) },
+            { r, d -> r.copy(restingHeartRate = d as RestingHeartRateData?) }
+        ),
+        HealthDataType.EXERCISE to TypeHandler(
+            ExerciseSessionRecord::class, { (it as ExerciseSessionRecord).startTime },
+            { r, _ -> extractExercises(r as List<ExerciseSessionRecord>) },
+            { r, d -> r.copy(exercises = d as List<ExerciseData>?) }
+        ),
+        HealthDataType.NUTRITION to TypeHandler(
+            NutritionRecord::class, { (it as NutritionRecord).startTime },
+            { r, _ -> extractNutrition(r as List<NutritionRecord>) },
+            { r, d -> r.copy(nutrition = d as List<NutritionData>?) }
+        ),
+        HealthDataType.SPEED to TypeHandler(
+            SpeedRecord::class, { (it as SpeedRecord).startTime },
+            { r, _ -> extractSpeed(r as List<SpeedRecord>) },
+            { r, d -> r.copy(speed = d as SpeedData?) }
+        ),
+        HealthDataType.MENSTRUATION to TypeHandler(
+            MenstruationFlowRecord::class, { (it as MenstruationFlowRecord).time },
+            { r, _ -> extractMenstruation(r as List<MenstruationFlowRecord>) },
+            { r, d -> r.copy(menstruation = d as MenstruationData?) }
+        )
+    )
+
+    /**
+     * Processes a single health data type: reads all pages, groups by day,
+     * extracts aggregated data, and updates the daysMap.
+     */
+    private suspend fun processTypeData(
+        handler: TypeHandler,
+        type: HealthDataType,
+        daysMap: MutableMap<String, DailyHealthRecord>,
+        timeFilter: TimeRangeFilter,
+        selectedSourcePackage: String?,
+        onPageProgress: ((typeName: String, pageNumber: Int) -> Unit)?
+    ) {
+        val typeName = type.displayName
+        val allRecords = readAllPages(
+            ReadRecordsRequest(handler.recordClass, timeRangeFilter = timeFilter)
+        ) { _, page -> onPageProgress?.invoke(typeName, page) }
+
+        val byDay = allRecords.groupBy {
+            handler.timeSelector(it).atZone(ZoneId.systemDefault()).toLocalDate().toString()
+        }
+        byDay.forEach { (dateStr, records) ->
+            val existing = requireNotNull(daysMap[dateStr]) { "Date $dateStr not pre-populated in daysMap" }
+            daysMap[dateStr] = handler.updateRecord(existing, handler.extract(records, selectedSourcePackage))
+        }
+
+        Log.d(TAG, "readPeriodInBatch ${type.name}: total=${allRecords.size}, days=${byDay.size}")
+    }
+
     suspend fun readPeriodInBatch(
         startDate: LocalDate,
         endDate: LocalDate,
@@ -563,7 +693,7 @@ class HealthConnectRepository(private val context: Context) {
             sourceDevice = android.os.Build.MODEL
         )
 
-        // Build a map: date -> builder, pre-populated
+        // Build a map: date -> record, pre-populated for every day in range
         val daysMap = mutableMapOf<String, DailyHealthRecord>()
         var current = startDate
         while (!current.isAfter(endDate)) {
@@ -574,276 +704,13 @@ class HealthConnectRepository(private val context: Context) {
             current = current.plusDays(1)
         }
 
-        // Group by day helper (selector must provide the timestamp property for each record type)
-
-        // Helper to map HealthDataType to a user-friendly display name
-        fun displayName(type: HealthDataType): String = type.displayName
-
-        // Process each data type with a single API call
-        if (types.contains(HealthDataType.STEPS)) {
-            val typeName = displayName(HealthDataType.STEPS)
-            val allRecords = readAllPages(ReadRecordsRequest(StepsRecord::class, timeRangeFilter = timeFilter)) { _, page ->
-                onPageProgress?.invoke(typeName, page)
-            }
-
-            val byDay = allRecords.groupBy { it.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
-            byDay.forEach { (dateStr, records) ->
-                daysMap[dateStr] = daysMap[dateStr]!!.copy(
-                    steps = extractSteps(records, selectedSourcePackage)
-                )
-            }
-
-            Log.d(TAG, "readPeriodInBatch STEPS: total=${allRecords.size}, days=${byDay.size}")
-        }
-
-        if (types.contains(HealthDataType.HEART_RATE)) {
-            val typeName = displayName(HealthDataType.HEART_RATE)
-            val allRecords = readAllPages(ReadRecordsRequest(HeartRateRecord::class, timeRangeFilter = timeFilter)) { _, page ->
-                onPageProgress?.invoke(typeName, page)
-            }
-
-            val byDay = allRecords.groupBy { it.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
-            byDay.forEach { (dateStr, records) ->
-                daysMap[dateStr] = daysMap[dateStr]!!.copy(
-                    heartRate = extractHeartRate(records)
-                )
-            }
-
-            Log.d(TAG, "readPeriodInBatch HEART_RATE: total=${allRecords.size}, days=${byDay.size}")
-        }
-
-        if (types.contains(HealthDataType.SLEEP)) {
-            val typeName = displayName(HealthDataType.SLEEP)
-            val allRecords = readAllPages(ReadRecordsRequest(SleepSessionRecord::class, timeRangeFilter = timeFilter)) { _, page ->
-                onPageProgress?.invoke(typeName, page)
-            }
-            val byDay = allRecords.groupBy { it.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
-            byDay.forEach { (dateStr, records) ->
-                daysMap[dateStr] = daysMap[dateStr]!!.copy(
-                    sleep = extractSleep(records)
-                )
-            }
-            Log.d(TAG, "readPeriodInBatch SLEEP: total=${allRecords.size}, days=${byDay.size}")
-        }
-
-        if (types.contains(HealthDataType.CALORIES)) {
-            val typeName = displayName(HealthDataType.CALORIES)
-            val allRecords = readAllPages(ReadRecordsRequest(TotalCaloriesBurnedRecord::class, timeRangeFilter = timeFilter)) { _, page ->
-                onPageProgress?.invoke(typeName, page)
-            }
-            val byDay = allRecords.groupBy { it.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
-            byDay.forEach { (dateStr, records) ->
-                daysMap[dateStr] = daysMap[dateStr]!!.copy(
-                    calories = extractCalories(records, selectedSourcePackage)
-                )
-            }
-        }
-
-        if (types.contains(HealthDataType.DISTANCE)) {
-            val typeName = displayName(HealthDataType.DISTANCE)
-            val allRecords = readAllPages(ReadRecordsRequest(DistanceRecord::class, timeRangeFilter = timeFilter)) { _, page ->
-                onPageProgress?.invoke(typeName, page)
-            }
-            val byDay = allRecords.groupBy { it.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
-            byDay.forEach { (dateStr, records) ->
-                daysMap[dateStr] = daysMap[dateStr]!!.copy(
-                    distance = extractDistance(records, selectedSourcePackage)
-                )
-            }
-        }
-
-        if (types.contains(HealthDataType.FLOORS_CLIMBED)) {
-            val typeName = displayName(HealthDataType.FLOORS_CLIMBED)
-            val allRecords = readAllPages(ReadRecordsRequest(FloorsClimbedRecord::class, timeRangeFilter = timeFilter)) { _, page ->
-                onPageProgress?.invoke(typeName, page)
-            }
-            val byDay = allRecords.groupBy { it.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
-            byDay.forEach { (dateStr, records) ->
-                daysMap[dateStr] = daysMap[dateStr]!!.copy(
-                    floorsClimbed = extractFloorsClimbed(records, selectedSourcePackage)
-                )
-            }
-        }
-
-        if (types.contains(HealthDataType.ACTIVE_CALORIES)) {
-            val typeName = displayName(HealthDataType.ACTIVE_CALORIES)
-            val allRecords = readAllPages(ReadRecordsRequest(ActiveCaloriesBurnedRecord::class, timeRangeFilter = timeFilter)) { _, page ->
-                onPageProgress?.invoke(typeName, page)
-            }
-            val byDay = allRecords.groupBy { it.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
-            byDay.forEach { (dateStr, records) ->
-                daysMap[dateStr] = daysMap[dateStr]!!.copy(
-                    activeCalories = extractActiveCalories(records, selectedSourcePackage)
-                )
-            }
-        }
-
-        if (types.contains(HealthDataType.WEIGHT)) {
-            val typeName = displayName(HealthDataType.WEIGHT)
-            val allRecords = readAllPages(ReadRecordsRequest(WeightRecord::class, timeRangeFilter = timeFilter)) { _, page ->
-                onPageProgress?.invoke(typeName, page)
-            }
-            val byDay = allRecords.groupBy { it.time.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
-            byDay.forEach { (dateStr, records) ->
-                daysMap[dateStr] = daysMap[dateStr]!!.copy(
-                    weight = extractWeight(records)
-                )
-            }
-        }
-
-        if (types.contains(HealthDataType.BODY_FAT)) {
-            val typeName = displayName(HealthDataType.BODY_FAT)
-            val allRecords = readAllPages(ReadRecordsRequest(BodyFatRecord::class, timeRangeFilter = timeFilter)) { _, page ->
-                onPageProgress?.invoke(typeName, page)
-            }
-            val byDay = allRecords.groupBy { it.time.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
-            byDay.forEach { (dateStr, records) ->
-                daysMap[dateStr] = daysMap[dateStr]!!.copy(
-                    bodyFat = extractBodyFat(records)
-                )
-            }
-        }
-
-        if (types.contains(HealthDataType.BLOOD_PRESSURE)) {
-            val typeName = displayName(HealthDataType.BLOOD_PRESSURE)
-            val allRecords = readAllPages(ReadRecordsRequest(BloodPressureRecord::class, timeRangeFilter = timeFilter)) { _, page ->
-                onPageProgress?.invoke(typeName, page)
-            }
-            val byDay = allRecords.groupBy { it.time.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
-            byDay.forEach { (dateStr, records) ->
-                daysMap[dateStr] = daysMap[dateStr]!!.copy(
-                    bloodPressure = extractBloodPressure(records)
-                )
-            }
-        }
-
-        if (types.contains(HealthDataType.BLOOD_GLUCOSE)) {
-            val typeName = displayName(HealthDataType.BLOOD_GLUCOSE)
-            val allRecords = readAllPages(ReadRecordsRequest(BloodGlucoseRecord::class, timeRangeFilter = timeFilter)) { _, page ->
-                onPageProgress?.invoke(typeName, page)
-            }
-            val byDay = allRecords.groupBy { it.time.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
-            byDay.forEach { (dateStr, records) ->
-                daysMap[dateStr] = daysMap[dateStr]!!.copy(
-                    bloodGlucose = extractBloodGlucose(records)
-                )
-            }
-        }
-
-        if (types.contains(HealthDataType.OXYGEN_SATURATION)) {
-            val typeName = displayName(HealthDataType.OXYGEN_SATURATION)
-            val allRecords = readAllPages(ReadRecordsRequest(OxygenSaturationRecord::class, timeRangeFilter = timeFilter)) { _, page ->
-                onPageProgress?.invoke(typeName, page)
-            }
-            val byDay = allRecords.groupBy { it.time.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
-            byDay.forEach { (dateStr, records) ->
-                daysMap[dateStr] = daysMap[dateStr]!!.copy(
-                    oxygenSaturation = extractOxygenSaturation(records)
-                )
-            }
-        }
-
-        if (types.contains(HealthDataType.BODY_TEMPERATURE)) {
-            val typeName = displayName(HealthDataType.BODY_TEMPERATURE)
-            val allRecords = readAllPages(ReadRecordsRequest(BodyTemperatureRecord::class, timeRangeFilter = timeFilter)) { _, page ->
-                onPageProgress?.invoke(typeName, page)
-            }
-            val byDay = allRecords.groupBy { it.time.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
-            byDay.forEach { (dateStr, records) ->
-                daysMap[dateStr] = daysMap[dateStr]!!.copy(
-                    bodyTemperature = extractBodyTemperature(records)
-                )
-            }
-        }
-
-        if (types.contains(HealthDataType.RESPIRATORY_RATE)) {
-            val typeName = displayName(HealthDataType.RESPIRATORY_RATE)
-            val allRecords = readAllPages(ReadRecordsRequest(RespiratoryRateRecord::class, timeRangeFilter = timeFilter)) { _, page ->
-                onPageProgress?.invoke(typeName, page)
-            }
-            val byDay = allRecords.groupBy { it.time.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
-            byDay.forEach { (dateStr, records) ->
-                daysMap[dateStr] = daysMap[dateStr]!!.copy(
-                    respiratoryRate = extractRespiratoryRate(records)
-                )
-            }
-        }
-
-        if (types.contains(HealthDataType.HYDRATION)) {
-            val typeName = displayName(HealthDataType.HYDRATION)
-            val allRecords = readAllPages(ReadRecordsRequest(HydrationRecord::class, timeRangeFilter = timeFilter)) { _, page ->
-                onPageProgress?.invoke(typeName, page)
-            }
-            val byDay = allRecords.groupBy { it.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
-            byDay.forEach { (dateStr, records) ->
-                daysMap[dateStr] = daysMap[dateStr]!!.copy(
-                    hydration = extractHydration(records)
-                )
-            }
-        }
-
-        if (types.contains(HealthDataType.RESTING_HEART_RATE)) {
-            val typeName = displayName(HealthDataType.RESTING_HEART_RATE)
-            val allRecords = readAllPages(ReadRecordsRequest(RestingHeartRateRecord::class, timeRangeFilter = timeFilter)) { _, page ->
-                onPageProgress?.invoke(typeName, page)
-            }
-            val byDay = allRecords.groupBy { it.time.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
-            byDay.forEach { (dateStr, records) ->
-                daysMap[dateStr] = daysMap[dateStr]!!.copy(
-                    restingHeartRate = extractRestingHeartRate(records)
-                )
-            }
-        }
-
-        if (types.contains(HealthDataType.EXERCISE)) {
-            val typeName = displayName(HealthDataType.EXERCISE)
-            val allRecords = readAllPages(ReadRecordsRequest(ExerciseSessionRecord::class, timeRangeFilter = timeFilter)) { _, page ->
-                onPageProgress?.invoke(typeName, page)
-            }
-            val byDay = allRecords.groupBy { it.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
-            byDay.forEach { (dateStr, records) ->
-                daysMap[dateStr] = daysMap[dateStr]!!.copy(
-                    exercises = extractExercises(records)
-                )
-            }
-        }
-
-        if (types.contains(HealthDataType.NUTRITION)) {
-            val typeName = displayName(HealthDataType.NUTRITION)
-            val allRecords = readAllPages(ReadRecordsRequest(NutritionRecord::class, timeRangeFilter = timeFilter)) { _, page ->
-                onPageProgress?.invoke(typeName, page)
-            }
-            val byDay = allRecords.groupBy { it.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
-            byDay.forEach { (dateStr, records) ->
-                daysMap[dateStr] = daysMap[dateStr]!!.copy(
-                    nutrition = extractNutrition(records)
-                )
-            }
-        }
-
-        if (types.contains(HealthDataType.SPEED)) {
-            val typeName = displayName(HealthDataType.SPEED)
-            val allRecords = readAllPages(ReadRecordsRequest(SpeedRecord::class, timeRangeFilter = timeFilter)) { _, page ->
-                onPageProgress?.invoke(typeName, page)
-            }
-            val byDay = allRecords.groupBy { it.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
-            byDay.forEach { (dateStr, records) ->
-                daysMap[dateStr] = daysMap[dateStr]!!.copy(
-                    speed = extractSpeed(records)
-                )
-            }
-        }
-
-        if (types.contains(HealthDataType.MENSTRUATION)) {
-            val typeName = displayName(HealthDataType.MENSTRUATION)
-            val allRecords = readAllPages(ReadRecordsRequest(MenstruationFlowRecord::class, timeRangeFilter = timeFilter)) { _, page ->
-                onPageProgress?.invoke(typeName, page)
-            }
-            val byDay = allRecords.groupBy { it.time.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
-            byDay.forEach { (dateStr, records) ->
-                daysMap[dateStr] = daysMap[dateStr]!!.copy(
-                    menstruation = extractMenstruation(records)
-                )
+        // Process each requested data type through its registered handler
+        types.forEach { type ->
+            val handler = typeHandlers[type]
+            if (handler != null) {
+                processTypeData(handler, type, daysMap, timeFilter, selectedSourcePackage, onPageProgress)
+            } else {
+                Log.w(TAG, "readPeriodInBatch: no handler registered for $type")
             }
         }
 
@@ -852,7 +719,10 @@ class HealthConnectRepository(private val context: Context) {
             .map { date -> daysMap[date.toString()] ?: DailyHealthRecord(date = date.toString(), metadata = metadata) }
             .toList()
 
-        val daysWithData = result.count { r -> r.steps != null || r.heartRate != null || r.sleep != null || r.calories != null || r.distance != null || r.weight != null }
+        val daysWithData = result.count { r ->
+            r.steps != null || r.heartRate != null || r.sleep != null ||
+            r.calories != null || r.distance != null || r.weight != null
+        }
         Log.d(TAG, "readPeriodInBatch: completed, ${result.size} days total, $daysWithData days with data")
         result
     }
