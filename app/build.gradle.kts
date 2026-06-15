@@ -8,12 +8,12 @@ plugins {
 
 android {
     namespace = "com.healthconnect.export"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.healthconnect.export"
         minSdk = 28
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 7
         versionName = "1.5.2"
 
@@ -97,6 +97,14 @@ kotlin {
     jvmToolchain(21)
 }
 
+// Workaround for Gradle 9.x no-daemon mode: ensure binary results directory exists
+tasks.withType<Test>().configureEach {
+    doFirst {
+        val binaryDir = File(project.layout.buildDirectory.get().asFile, "test-results/$name/binary")
+        binaryDir.mkdirs()
+    }
+}
+
 // JaCoCo coverage configuration
 jacoco {
     toolVersion = "0.8.12"
@@ -130,7 +138,9 @@ tasks.register("jacocoTestReport", JacocoReport::class) {
 
     sourceDirectories.setFrom(files("src/main/java"))
     classDirectories.setFrom(files(kotlinDebugClasses))
-    executionData.setFrom(files("${layout.buildDirectory.get()}/jacoco/testDebugUnitTest.exec"))
+    executionData.setFrom(fileTree("${layout.buildDirectory.get()}/outputs/unit_test_code_coverage") {
+        include("**/*.exec")
+    })
 }
 
 tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification::class) {
@@ -138,7 +148,9 @@ tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification::cla
 
     sourceDirectories.setFrom(files("src/main/java"))
     classDirectories.setFrom(files(kotlinDebugClasses))
-    executionData.setFrom(files("${layout.buildDirectory.get()}/jacoco/testDebugUnitTest.exec"))
+    executionData.setFrom(fileTree("${layout.buildDirectory.get()}/outputs/unit_test_code_coverage") {
+        include("**/*.exec")
+    })
 
     violationRules {
         // ── Global project-wide thresholds ──
