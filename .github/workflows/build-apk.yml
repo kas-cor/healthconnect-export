@@ -64,7 +64,7 @@ jobs:
           ${{ runner.os }}-gradle-
     - run: echo "sdk.dir=${ANDROID_HOME}" > local.properties
     - name: Unit tests
-      run: ./gradlew testDebugUnitTest 2>&1 | tail -30
+      run: ./gradlew testDebugUnitTest 2>&1
     - name: Upload test results
       if: always()
       uses: actions/upload-artifact@v7
@@ -96,7 +96,7 @@ jobs:
           ${{ runner.os }}-gradle-
     - run: echo "sdk.dir=${ANDROID_HOME}" > local.properties
     - name: JaCoCo coverage report & verification
-      run: ./gradlew jacocoTestReport jacocoTestCoverageVerification 2>&1 | tail -40
+      run: ./gradlew jacocoTestReport jacocoTestCoverageVerification 2>&1
     - name: Generate coverage badge
       if: github.ref == 'refs/heads/main'
       uses: cicirello/jacoco-badge-generator@v2.12.1
