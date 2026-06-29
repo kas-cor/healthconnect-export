@@ -29,7 +29,7 @@ jobs:
     - uses: android-actions/setup-android@v4
       with:
         accept-android-sdk-licenses: true
-    - uses: actions/cache@v5
+    - uses: actions/cache@v6
       with:
         path: |
           ~/.gradle/caches
@@ -58,7 +58,7 @@ jobs:
     - uses: android-actions/setup-android@v4
       with:
         accept-android-sdk-licenses: true
-    - uses: actions/cache@v5
+    - uses: actions/cache@v6
       with:
         path: |
           ~/.gradle/caches
@@ -92,7 +92,7 @@ jobs:
     - uses: android-actions/setup-android@v4
       with:
         accept-android-sdk-licenses: true
-    - uses: actions/cache@v5
+    - uses: actions/cache@v6
       with:
         path: |
           ~/.gradle/caches
@@ -161,7 +161,7 @@ jobs:
     - uses: android-actions/setup-android@v4
       with:
         accept-android-sdk-licenses: true
-    - uses: actions/cache@v5
+    - uses: actions/cache@v6
       with:
         path: |
           ~/.gradle/caches
@@ -206,7 +206,7 @@ jobs:
     - uses: android-actions/setup-android@v4
       with:
         accept-android-sdk-licenses: true
-    - uses: actions/cache@v5
+    - uses: actions/cache@v6
       with:
         path: |
           ~/.gradle/caches
