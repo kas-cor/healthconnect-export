@@ -429,6 +429,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full release history.
 
 | Version | Date | Highlights |
 |---|---|---|
+| [v1.6](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.6) | 2026-07-17 | Build script (`build.sh`), Russian README (`README.ru.md`), README sync validation |
 | [v1.5](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.5) | 2026-06-08 | Every-2-hours webhook worker, test webhook button, file sorting descending, dependency updates (Kotlin 2.3.21, Gradle 9.5.1) |
 | [v1.4](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.4) | 2026-06-07 | Date range fix: endDate includes today, 7/30 day presets corrected |
 | [v1.3](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.3) | 2026-05-27 | Webhook payload format `{\"messages\": [...]}`, export progress with per-day bars, cancel button, day-by-day read |

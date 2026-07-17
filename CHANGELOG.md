@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6] — 2026-07-17
+
+### Added
+- **Build script (`build.sh`):** Multi-purpose CLI with `--run`, `--release`, `--install`, `--pull`, `--test`, `--logs`, `--help` flags
+- **Russian README (`README.ru.md`):** Full 437-line translation of README into Russian
+- **README sync validator:** `scripts/locale-validator.py` now checks section alignment between `README.md` and `README.ru.md`
+- **English badge in README.ru.md:** Symmetric `[![English](README.md)](README.md)` link
+
+### Changed
+- **README.md:** Added Russian badge, `build.sh` documentation table, step-by-step translation guide for new locales
+- **AGENTS.md:** Updated build command references from `./build` to `./build.sh`
+
+---
+
 ## [1.5.1] — 2026-06-15
 
 ### Added
@@ -151,6 +165,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[1.6]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.6
 [1.5.1]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.5.1
 [1.5]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.5
 [1.4]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.4
