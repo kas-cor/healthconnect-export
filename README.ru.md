@@ -425,6 +425,7 @@ cp README.md README.fr.md
 
 | Версия | Дата | Что нового |
 |---|---|---|
+| [v1.6](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.6) | 2026-07-17 | Build-скрипт (`build.sh`), русский README (`README.ru.md`), проверка синхронизации README |
 | [v1.5](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.5) | 2026-06-08 | Webhook-воркер каждые 2 часа, кнопка теста webhook, сортировка файлов по убыванию, обновление зависимостей (Kotlin 2.3.21, Gradle 9.5.1) |
 | [v1.4](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.4) | 2026-06-07 | Исправление диапазона дат: endDate включает сегодня, исправлены пресеты 7/30 дней |
 | [v1.3](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.3) | 2026-05-27 | Формат webhook `{\"messages\": [...]}`, прогресс экспорта с барами по дням, кнопка отмены, чтение по дням |
