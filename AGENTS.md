@@ -349,13 +349,13 @@ git push origin v1.2
 
 ```bash
 # Debug build only
-./build
+./build.sh
 
 # Build, install, launch
-./build --run
+./build.sh --run
 
 # Pull exported JSON files from device
-./build --pull
+./build.sh --pull
 
 # Direct gradle commands
 ./gradlew assembleDebug

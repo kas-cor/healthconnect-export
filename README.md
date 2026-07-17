@@ -5,6 +5,7 @@
 [![Branches](https://raw.githubusercontent.com/kas-cor/healthconnect-export/main/badges/branches.svg)](https://github.com/kas-cor/healthconnect-export/actions/workflows/build-apk.yml)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Kotlin](https://img.shields.io/badge/kotlin-2.3.21-purple)](https://kotlinlang.org)
+[![Русский](https://img.shields.io/badge/README-%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-blue)](README.ru.md)
 
 > Coverage badge auto-updates on every push to `main` via CI.
 
@@ -47,15 +48,42 @@ MainActivity → ExportScreen (Compose) → ExportViewModel
 
 ## Quick start 🚀
 
+### Build script (`./build.sh`)
+
+Скрипт для сборки, установки, запуска и тестирования приложения.
+
+| Flag | Описание |
+|---|---|
+| *(без флагов)* | Собрать debug APK |
+| `--run` | Собрать debug APK, установить на устройство и запустить |
+| `--release` | Собрать release APK (подпись продакшн-ключом или debug-ключом) |
+| `--install [apk]` | Установить APK на устройство (по умолч. debug APK) |
+| `--pull` | Вытянуть экспортированные JSON-файлы (`health_*.json`) с устройства |
+| `--test <url> [token]` | Отправить тестовый POST с демо-данными Health Connect на webhook |
+| `--logs` | Показать logcat, отфильтрованный по приложению (`ExportScreen`, `HealthConnect`, `DriveManager`, etc.) |
+| `--help` | Показать справку |
+
 ```bash
-# Debug build
-./build
+# Debug build only
+./build.sh
 
 # Build, install, launch
-./build --run
+./build.sh --run
 
-# Pull exported JSON files
-./build --pull
+# Release build (signed or debug-signed)
+./build.sh --release
+
+# Pull exported JSON files from device
+./build.sh --pull
+
+# Send test health data to webhook
+./build.sh --test https://example.com/webhook
+
+# With Bearer token
+./build.sh --test https://example.com/webhook my-token
+
+# Show app logs
+./build.sh --logs
 
 # Direct gradle
 ./gradlew assembleDebug
@@ -292,6 +320,80 @@ Each element in the `messages` array is a `DailyHealthRecord` — one per export
 ```bash
 python3 scripts/locale-validator.py
 ```
+
+### How to add a new language 🌍
+
+Want to translate the app into your language? Here's a step-by-step guide.
+
+#### 1. Create a translation file
+
+Copy the English `strings.xml` into a new folder named with your language code.
+
+For example, for German:
+
+```bash
+# Create the new locale directory
+mkdir -p app/src/main/res/values-de
+
+# Copy the English strings
+cp app/src/main/res/values/strings.xml app/src/main/res/values-de/strings.xml
+```
+
+Use your own [language code](https://developer.android.com/guide/topics/resources/providing-resources#LocaleQualifier) instead of `de`.
+
+#### 2. Translate all strings
+
+Edit `app/src/main/res/values-de/strings.xml` — translate **all** values (`<string>...</string>`), but **keep** the `name` attributes unchanged.
+
+Important:
+- Preserve format placeholders (`%d`, `%s`, `%.1f`) — they are filled programmatically
+- Brand names (`HealthConnect Export`, `Google Drive`, `Health Connect`, `WorkManager`) can stay in English
+- Technical terms (`JSON`, `URL`, `Bearer`, `Webhook`) are typically left untranslated
+
+#### 3. Run the validator
+
+```bash
+python3 scripts/locale-validator.py
+```
+
+The validator checks that all strings are translated and no keys are missing.
+
+#### 4. Add the locale to the app UI
+
+Edit `LocaleManager.kt` (`app/src/main/java/com/healthconnect/export/util/LocaleManager.kt`):
+
+```kotlin
+// Add your language to the available locales
+enum class AppLocale(val code: String, val displayName: String) {
+    SYSTEM("", "System"),
+    EN("en", "English"),
+    RU("ru", "Русский"),
+    DE("de", "Deutsch"),  // ← your language
+}
+```
+
+#### 5. Create a README in your language
+
+Copy and translate `README.md`:
+
+```bash
+cp README.md README.de.md
+# Translate the content to German
+```
+
+Add a badge link in `README.md`:
+
+```markdown
+[![Deutsch](https://img.shields.io/badge/README-Deutsch-blue)](README.de.md)
+```
+
+#### 6. Open a Pull Request
+
+Create a PR on GitHub with your translation files. After merging:
+- The new language will appear in the language switcher 🌐 in the app
+- Your README will be accessible via the badge in the main README
+
+**Thank you for your contribution!** 🙌
 
 ## Permissions
 
