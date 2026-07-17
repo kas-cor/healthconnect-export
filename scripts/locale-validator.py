@@ -14,7 +14,13 @@ from pathlib import Path
 
 # Brand names, acronyms, and other terms that are allowed to stay in Latin
 # in the Russian locale
+# Sections in README.md that are intentionally not duplicated in README.ru.md
+# (e.g., the Help section from build script, or license references)
+README_SECTION_ALLOWLIST: set[str] = set()
+
 ALLOWED_ENGLISH_IN_RU = {
+    # TODO: Add sections here if they're intentionally omitted from README.ru.md
+    # Example: "help", "troubleshooting"
     "HealthConnect Export",
     "Google Drive",
     "Health Connect",
@@ -141,6 +147,72 @@ def check_russian_locale(strings: dict[str, str], en_strings: dict[str, str], pa
     return errors
 
 
+def extract_headers(md_path: Path) -> list[str]:
+    """Extract level-2 (##) section headers from a markdown file.
+
+    Returns headers as a list of cleaned text (emoji stripped, lowercased).
+    """
+    headers = []
+    content = md_path.read_text(encoding="utf-8")
+    for line in content.splitlines():
+        stripped = line.strip()
+        if re.match(r'^#{2,3}\s', stripped):
+            # Remove heading markers, emoji, and trailing badges
+            header = re.sub(r'^#+\s*', '', stripped)
+            # Remove emoji and icon characters
+            header = re.sub(r'[\U0001F300-\U0001FAFF\U0001F600-\U0001F64F\U0001F680-\U0001F6FF\U0001F1E0-\U0001F1FF' +
+                           '\u2600-\u26FF\u2700-\u27BF\uFE00-\uFE0F]', '', header).strip()
+            # Remove trailing markdown links like [Workflow](...)
+            header = re.sub(r'\[[^\]]+\]\([^)]+\)', '', header).strip()
+            if header:
+                headers.append(header.lower())
+    return headers
+
+
+def check_readme_sync(project_root: Path) -> list[str]:
+    """Check that README.ru.md has the same sections as README.md.
+
+    Returns a list of warnings (non-fatal). Does not return errors because
+    README structure can intentionally differ between languages.
+    """
+    en_readme = project_root / "README.md"
+    ru_readme = project_root / "README.ru.md"
+
+    if not en_readme.exists():
+        return [f"{en_readme} not found — skipping README sync check"]
+    if not ru_readme.exists():
+        return [f"{ru_readme} not found — skipping README sync check"]
+
+    en_headers = extract_headers(en_readme)
+    ru_headers = extract_headers(ru_readme)
+
+    en_set = set(en_headers)
+    ru_set = set(ru_headers)
+
+    warnings = []
+
+    # Sections in English that are missing in Russian
+    missing = en_set - ru_set - README_SECTION_ALLOWLIST
+    if missing:
+        # Filter out sections that exist but under a different translation
+        # For example, if RU has a section with a different but valid translation
+        for section in sorted(missing):
+            warnings.append(
+                f"{ru_readme}: Missing section (or different translation): \"{section}\""
+                f" (found in {en_readme})"
+            )
+
+    # Extra sections in Russian that don't exist in English
+    extra = ru_set - en_set
+    if extra:
+        for section in sorted(extra):
+            warnings.append(
+                f"{ru_readme}: Extra section not in {en_readme}: \"{section}\""
+            )
+
+    return warnings
+
+
 def main():
     project_root = Path(__file__).resolve().parent.parent
     en_xml = project_root / "app" / "src" / "main" / "res" / "values" / "strings.xml"
@@ -157,6 +229,7 @@ def main():
     ru_strings = extract_strings(ru_xml)
 
     all_errors = []
+    all_warnings = []
 
     # Check English locale for Cyrillic
     en_errors = check_english_locale(en_strings, en_xml)
@@ -173,6 +246,9 @@ def main():
             f"{ru_xml}: Missing translations for keys: {', '.join(sorted(missing_keys))}"
         )
 
+    # Check README sync (warnings only, non-fatal)
+    all_warnings.extend(check_readme_sync(project_root))
+
     if all_errors:
         print("❌ Locale validation FAILED:")
         for err in all_errors:
@@ -185,6 +261,14 @@ def main():
         print(f"   • No Cyrillic in English locale")
         print(f"   • No untranslated strings in Russian locale")
         print(f"   • All keys are present in both locales")
+
+    if all_warnings:
+        print()
+        print("⚠️  README sync warnings:")
+        for w in all_warnings:
+            print(f"   • {w}")
+        print()
+        print("   These are non-fatal — review README.ru.md and update if needed.")
         sys.exit(0)
 
 
