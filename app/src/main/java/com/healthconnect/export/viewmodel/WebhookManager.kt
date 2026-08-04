@@ -30,7 +30,7 @@ class WebhookManager(
     internal var healthRepo: HealthConnectRepository
 ) {
 
-    private val webhookRepo = WebhookRepository()
+    private val webhookRepo = WebhookRepository(application)
     private var currentTestWebhookJob: Job? = null
 
     companion object {

@@ -58,7 +58,7 @@ class Every2HoursWebhookWorker(
     }
 
     private val healthRepo = HealthConnectRepository(applicationContext)
-    private val webhookRepo = WebhookRepository()
+    private val webhookRepo = WebhookRepository(applicationContext)
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
@@ -75,13 +75,15 @@ class Every2HoursWebhookWorker(
 
             // Read today's data
             val today = LocalDate.now()
-            val record = healthRepo.readDay(
-                today, config.enabledTypes,
+            val records = healthRepo.readPeriodInBatch(
+                startDate = today,
+                endDate = today,
+                types = config.enabledTypes,
                 selectedSourcePackage = config.selectedSourcePackage
             )
 
             // Send to webhook (no local save, no Drive sync)
-            webhookRepo.sendRecords(config.webhookUrl, listOf(record), config.webhookAuthToken)
+            webhookRepo.sendRecords(config.webhookUrl, records, config.webhookAuthToken)
 
             Result.success()
         } catch (e: SecurityException) {

@@ -92,7 +92,7 @@ class DailyExportWorker(
     private val healthRepo = HealthConnectRepository(applicationContext)
     private val localRepo = LocalExportRepository(applicationContext)
     private val driveRepo = GoogleDriveRepository(applicationContext)
-    private val webhookRepo = WebhookRepository()
+    private val webhookRepo = WebhookRepository(applicationContext)
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {

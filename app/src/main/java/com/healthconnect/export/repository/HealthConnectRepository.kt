@@ -14,6 +14,7 @@ import androidx.health.connect.client.records.metadata.DataOrigin
 import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import com.healthconnect.export.BuildConfig
 import com.healthconnect.export.data.*
 import kotlin.reflect.KClass
 import kotlinx.coroutines.Dispatchers
@@ -180,84 +181,6 @@ class HealthConnectRepository(private val context: Context) {
 
         Log.d(TAG, "getAvailableSources: $origins")
         origins
-    }
-
-    /**
-     * Reads all specified health data types for a single day
-     */
-    suspend fun readDay(
-        date: LocalDate,
-        types: Set<HealthDataType>,
-        selectedSourcePackage: String? = null
-    ): DailyHealthRecord = withContext(Dispatchers.IO) {
-        val start = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
-        val end = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
-        val timeFilter = TimeRangeFilter.between(start, end)
-
-        Log.d(TAG, "readDay($date): start=$start, end=$end, types=$types, source=$selectedSourcePackage")
-
-        val metadata = ExportMetadata(
-            appVersion = "1.0.0",
-            exportTimestamp = Instant.now().toDateTimeString(),
-            timezone = ZoneId.systemDefault().id,
-            sourceDevice = android.os.Build.MODEL
-        )
-
-        val record = DailyHealthRecord(
-            date = date.toString(),
-            steps = if (types.contains(HealthDataType.STEPS)) readSteps(timeFilter, selectedSourcePackage) else null,
-            heartRate = if (types.contains(HealthDataType.HEART_RATE)) readHeartRate(timeFilter) else null,
-            sleep = if (types.contains(HealthDataType.SLEEP)) readSleep(timeFilter) else null,
-            calories = if (types.contains(HealthDataType.CALORIES)) readCalories(timeFilter, selectedSourcePackage) else null,
-            distance = if (types.contains(HealthDataType.DISTANCE)) readDistance(timeFilter, selectedSourcePackage) else null,
-            floorsClimbed = if (types.contains(HealthDataType.FLOORS_CLIMBED)) readFloorsClimbed(timeFilter, selectedSourcePackage) else null,
-            activeCalories = if (types.contains(HealthDataType.ACTIVE_CALORIES)) readActiveCalories(timeFilter, selectedSourcePackage) else null,
-            weight = if (types.contains(HealthDataType.WEIGHT)) readWeight(timeFilter) else null,
-            bodyFat = if (types.contains(HealthDataType.BODY_FAT)) readBodyFat(timeFilter) else null,
-            bloodPressure = if (types.contains(HealthDataType.BLOOD_PRESSURE)) readBloodPressure(timeFilter) else null,
-            bloodGlucose = if (types.contains(HealthDataType.BLOOD_GLUCOSE)) readBloodGlucose(timeFilter) else null,
-            oxygenSaturation = if (types.contains(HealthDataType.OXYGEN_SATURATION)) readOxygenSaturation(timeFilter) else null,
-            bodyTemperature = if (types.contains(HealthDataType.BODY_TEMPERATURE)) readBodyTemperature(timeFilter) else null,
-            respiratoryRate = if (types.contains(HealthDataType.RESPIRATORY_RATE)) readRespiratoryRate(timeFilter) else null,
-            hydration = if (types.contains(HealthDataType.HYDRATION)) readHydration(timeFilter) else null,
-            restingHeartRate = if (types.contains(HealthDataType.RESTING_HEART_RATE)) readRestingHeartRate(timeFilter) else null,
-            exercises = if (types.contains(HealthDataType.EXERCISE)) readExercises(timeFilter) else null,
-            nutrition = if (types.contains(HealthDataType.NUTRITION)) readNutrition(timeFilter) else null,
-            speed = if (types.contains(HealthDataType.SPEED)) readSpeed(timeFilter) else null,
-            menstruation = if (types.contains(HealthDataType.MENSTRUATION)) readMenstruation(timeFilter) else null,
-            metadata = metadata
-        )
-
-        // Log summary of which data types returned results
-        val nonNullFields = mutableListOf<String>()
-        if (record.steps != null) nonNullFields.add("steps")
-        if (record.heartRate != null) nonNullFields.add("heartRate")
-        if (record.sleep != null) nonNullFields.add("sleep")
-        if (record.calories != null) nonNullFields.add("calories")
-        if (record.distance != null) nonNullFields.add("distance")
-        if (record.floorsClimbed != null) nonNullFields.add("floorsClimbed")
-        if (record.activeCalories != null) nonNullFields.add("activeCalories")
-        if (record.weight != null) nonNullFields.add("weight")
-        if (record.bodyFat != null) nonNullFields.add("bodyFat")
-        if (record.bloodPressure != null) nonNullFields.add("bloodPressure")
-        if (record.bloodGlucose != null) nonNullFields.add("bloodGlucose")
-        if (record.oxygenSaturation != null) nonNullFields.add("oxygenSaturation")
-        if (record.bodyTemperature != null) nonNullFields.add("bodyTemperature")
-        if (record.respiratoryRate != null) nonNullFields.add("respiratoryRate")
-        if (record.hydration != null) nonNullFields.add("hydration")
-        if (record.restingHeartRate != null) nonNullFields.add("restingHeartRate")
-        if (record.exercises != null) nonNullFields.add("exercises")
-        if (record.nutrition != null) nonNullFields.add("nutrition")
-        if (record.speed != null) nonNullFields.add("speed")
-        if (record.menstruation != null) nonNullFields.add("menstruation")
-
-        if (nonNullFields.isEmpty()) {
-            Log.w(TAG, "readDay($date): ALL data types returned null! types=$types")
-        } else {
-            Log.d(TAG, "readDay($date): non-null fields: $nonNullFields")
-        }
-
-        record
     }
 
     // ===== Pagination helper =====
@@ -657,9 +580,20 @@ class HealthConnectRepository(private val context: Context) {
         onPageProgress: ((typeName: String, pageNumber: Int) -> Unit)?
     ) {
         val typeName = type.displayName
-        val allRecords = readAllPages(
-            ReadRecordsRequest(handler.recordClass, timeRangeFilter = timeFilter)
-        ) { _, page -> onPageProgress?.invoke(typeName, page) }
+        // When a specific source is selected, push the filter down to the API so we don't
+        // read (and then discard) records from every other source. In auto mode we still
+        // read all sources and let filterByPreferredOrigin pick the best one.
+        val originFilter: Set<DataOrigin>? = selectedSourcePackage?.takeIf { it.isNotBlank() }
+            ?.let { setOf(DataOrigin(it)) }
+        val allRecords = if (originFilter != null) {
+            readAllPages(
+                ReadRecordsRequest(handler.recordClass, timeRangeFilter = timeFilter, dataOriginFilter = originFilter)
+            ) { _, page -> onPageProgress?.invoke(typeName, page) }
+        } else {
+            readAllPages(
+                ReadRecordsRequest(handler.recordClass, timeRangeFilter = timeFilter)
+            ) { _, page -> onPageProgress?.invoke(typeName, page) }
+        }
 
         val byDay = allRecords.groupBy {
             handler.timeSelector(it).atZone(ZoneId.systemDefault()).toLocalDate().toString()
@@ -687,7 +621,7 @@ class HealthConnectRepository(private val context: Context) {
         Log.d(TAG, "readPeriodInBatch: timeFilter start=$start, end=$end")
 
         val metadata = ExportMetadata(
-            appVersion = "1.0.0",
+            appVersion = BuildConfig.VERSION_NAME,
             exportTimestamp = Instant.now().toDateTimeString(),
             timezone = ZoneId.systemDefault().id,
             sourceDevice = android.os.Build.MODEL
@@ -731,12 +665,6 @@ class HealthConnectRepository(private val context: Context) {
     }
 
     // ===== Private readers (now delegate to extraction functions) =====
-
-    private suspend fun readSteps(filter: TimeRangeFilter, selectedSourcePackage: String? = null): StepsData? {
-        val c = client ?: return null
-        val allRecords = readAllPages(ReadRecordsRequest(StepsRecord::class, timeRangeFilter = filter))
-        return extractSteps(allRecords, selectedSourcePackage)
-    }
 
     /**
      * Фильтрует записи по предпочитаемому пакету-источнику данных.
@@ -785,119 +713,5 @@ class HealthConnectRepository(private val context: Context) {
         }
 
         return records
-    }
-
-    private suspend fun readHeartRate(filter: TimeRangeFilter): HeartRateData? {
-        val c = client ?: return null
-        val allRecords = readAllPages(ReadRecordsRequest(HeartRateRecord::class, timeRangeFilter = filter))
-        return extractHeartRate(allRecords)
-    }
-
-    private suspend fun readSleep(filter: TimeRangeFilter): SleepData? {
-        val c = client ?: return null
-        val allRecords = readAllPages(ReadRecordsRequest(SleepSessionRecord::class, timeRangeFilter = filter))
-        return extractSleep(allRecords)
-    }
-
-    private suspend fun readCalories(filter: TimeRangeFilter, selectedSourcePackage: String? = null): CaloriesData? {
-        val c = client ?: return null
-        val allRecords = readAllPages(ReadRecordsRequest(TotalCaloriesBurnedRecord::class, timeRangeFilter = filter))
-        return extractCalories(allRecords, selectedSourcePackage)
-    }
-
-    private suspend fun readDistance(filter: TimeRangeFilter, selectedSourcePackage: String? = null): DistanceData? {
-        val c = client ?: return null
-        val allRecords = readAllPages(ReadRecordsRequest(DistanceRecord::class, timeRangeFilter = filter))
-        return extractDistance(allRecords, selectedSourcePackage)
-    }
-
-    private suspend fun readFloorsClimbed(filter: TimeRangeFilter, selectedSourcePackage: String? = null): FloorsClimbedData? {
-        val c = client ?: return null
-        val allRecords = readAllPages(ReadRecordsRequest(FloorsClimbedRecord::class, timeRangeFilter = filter))
-        return extractFloorsClimbed(allRecords, selectedSourcePackage)
-    }
-
-    private suspend fun readActiveCalories(filter: TimeRangeFilter, selectedSourcePackage: String? = null): ActiveCaloriesData? {
-        val c = client ?: return null
-        val allRecords = readAllPages(ReadRecordsRequest(ActiveCaloriesBurnedRecord::class, timeRangeFilter = filter))
-        return extractActiveCalories(allRecords, selectedSourcePackage)
-    }
-
-    private suspend fun readWeight(filter: TimeRangeFilter): WeightData? {
-        val c = client ?: return null
-        val allRecords = readAllPages(ReadRecordsRequest(WeightRecord::class, timeRangeFilter = filter))
-        return extractWeight(allRecords)
-    }
-
-    private suspend fun readBodyFat(filter: TimeRangeFilter): BodyFatData? {
-        val c = client ?: return null
-        val allRecords = readAllPages(ReadRecordsRequest(BodyFatRecord::class, timeRangeFilter = filter))
-        return extractBodyFat(allRecords)
-    }
-
-    private suspend fun readBloodPressure(filter: TimeRangeFilter): BloodPressureData? {
-        val c = client ?: return null
-        val allRecords = readAllPages(ReadRecordsRequest(BloodPressureRecord::class, timeRangeFilter = filter))
-        return extractBloodPressure(allRecords)
-    }
-
-    private suspend fun readBloodGlucose(filter: TimeRangeFilter): BloodGlucoseData? {
-        val c = client ?: return null
-        val allRecords = readAllPages(ReadRecordsRequest(BloodGlucoseRecord::class, timeRangeFilter = filter))
-        return extractBloodGlucose(allRecords)
-    }
-
-    private suspend fun readOxygenSaturation(filter: TimeRangeFilter): OxygenSaturationData? {
-        val c = client ?: return null
-        val allRecords = readAllPages(ReadRecordsRequest(OxygenSaturationRecord::class, timeRangeFilter = filter))
-        return extractOxygenSaturation(allRecords)
-    }
-
-    private suspend fun readBodyTemperature(filter: TimeRangeFilter): BodyTemperatureData? {
-        val c = client ?: return null
-        val allRecords = readAllPages(ReadRecordsRequest(BodyTemperatureRecord::class, timeRangeFilter = filter))
-        return extractBodyTemperature(allRecords)
-    }
-
-    private suspend fun readRespiratoryRate(filter: TimeRangeFilter): RespiratoryRateData? {
-        val c = client ?: return null
-        val allRecords = readAllPages(ReadRecordsRequest(RespiratoryRateRecord::class, timeRangeFilter = filter))
-        return extractRespiratoryRate(allRecords)
-    }
-
-    private suspend fun readHydration(filter: TimeRangeFilter): HydrationData? {
-        val c = client ?: return null
-        val allRecords = readAllPages(ReadRecordsRequest(HydrationRecord::class, timeRangeFilter = filter))
-        return extractHydration(allRecords)
-    }
-
-    private suspend fun readRestingHeartRate(filter: TimeRangeFilter): RestingHeartRateData? {
-        val c = client ?: return null
-        val allRecords = readAllPages(ReadRecordsRequest(RestingHeartRateRecord::class, timeRangeFilter = filter))
-        return extractRestingHeartRate(allRecords)
-    }
-
-    private suspend fun readExercises(filter: TimeRangeFilter): List<ExerciseData>? {
-        val c = client ?: return null
-        val allRecords = readAllPages(ReadRecordsRequest(ExerciseSessionRecord::class, timeRangeFilter = filter))
-        return extractExercises(allRecords)
-    }
-
-    private suspend fun readNutrition(filter: TimeRangeFilter): List<NutritionData>? {
-        val c = client ?: return null
-        val allRecords = readAllPages(ReadRecordsRequest(NutritionRecord::class, timeRangeFilter = filter))
-        return extractNutrition(allRecords)
-    }
-
-    private suspend fun readSpeed(filter: TimeRangeFilter): SpeedData? {
-        val c = client ?: return null
-        val allRecords = readAllPages(ReadRecordsRequest(SpeedRecord::class, timeRangeFilter = filter))
-        return extractSpeed(allRecords)
-    }
-
-    private suspend fun readMenstruation(filter: TimeRangeFilter): MenstruationData? {
-        val c = client ?: return null
-        val allRecords = readAllPages(ReadRecordsRequest(MenstruationFlowRecord::class, timeRangeFilter = filter))
-        return extractMenstruation(allRecords)
     }
 }

@@ -89,6 +89,10 @@
     <string name="enter_url_first">Enter a webhook URL first</string>
     <string name="send_json">Send JSON to webhook after export</string>
 
+    <!-- Webhook errors -->
+    <string name="webhook_server_error">Server returned code %1$d: %2$s</string>
+    <string name="webhook_unknown_error">Unknown error</string>
+
     <!-- Locale selector -->
     <string name="locale_switch">Language</string>
     <string name="locale_system">System</string>

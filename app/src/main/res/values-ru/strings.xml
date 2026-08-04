@@ -89,6 +89,10 @@
     <string name="enter_url_first">Сначала введите URL вебхука</string>
     <string name="send_json">Отправлять JSON на вебхук после экспорта</string>
 
+    <!-- Webhook errors -->
+    <string name="webhook_server_error">Сервер вернул код %1$d: %2$s</string>
+    <string name="webhook_unknown_error">Неизвестная ошибка</string>
+
     <!-- Locale selector -->
     <string name="locale_switch">Язык</string>
     <string name="locale_system">Системный</string>
