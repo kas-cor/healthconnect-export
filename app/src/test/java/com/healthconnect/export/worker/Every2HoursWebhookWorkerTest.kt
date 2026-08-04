@@ -142,9 +142,9 @@ class Every2HoursWebhookWorkerTest {
                 autoSendWebhookEvery2Hours = true
             )
 
-            whenever(mockHealthRepo.readDay(
-                any(), eq(config.enabledTypes), eq(config.selectedSourcePackage)
-            )).thenReturn(todayRecord)
+            whenever(mockHealthRepo.readPeriodInBatch(
+                any(), any(), eq(config.enabledTypes), eq(config.selectedSourcePackage), anyOrNull()
+            )).thenReturn(listOf(todayRecord))
             whenever(mockWebhookRepo.sendRecords(
                 eq(config.webhookUrl), any(), eq(config.webhookAuthToken)
             )).thenReturn(WebhookResult.Success(200, "OK"))
@@ -154,8 +154,8 @@ class Every2HoursWebhookWorkerTest {
 
             assertEquals(ListenableWorker.Result.success(), result)
 
-            verify(mockHealthRepo).readDay(
-                eq(LocalDate.now()), eq(config.enabledTypes), eq(config.selectedSourcePackage)
+            verify(mockHealthRepo).readPeriodInBatch(
+                any(), any(), eq(config.enabledTypes), eq(config.selectedSourcePackage), anyOrNull()
             )
             verify(mockWebhookRepo).sendRecords(
                 eq(config.webhookUrl), eq(listOf(todayRecord)), eq(config.webhookAuthToken)
@@ -174,14 +174,14 @@ class Every2HoursWebhookWorkerTest {
                 autoSendWebhookEvery2Hours = true
             )
 
-            // readDay should not be called because webhookUrl is blank
+            // readPeriodInBatch should not be called because webhookUrl is blank
             // The worker checks config.webhookUrl.isBlank() early
             val worker = createWorker(config)
             val result = worker.doWork()
 
             assertEquals(ListenableWorker.Result.success(), result)
 
-            verify(mockHealthRepo, never()).readDay(any(), any(), anyOrNull())
+            verify(mockHealthRepo, never()).readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())
             verify(mockWebhookRepo, never()).sendRecords(any(), any(), anyOrNull())
         }
     }
@@ -202,7 +202,7 @@ class Every2HoursWebhookWorkerTest {
 
             assertEquals(ListenableWorker.Result.success(), result)
 
-            verify(mockHealthRepo, never()).readDay(any(), any(), anyOrNull())
+            verify(mockHealthRepo, never()).readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())
             verify(mockWebhookRepo, never()).sendRecords(any(), any(), anyOrNull())
         }
     }
@@ -216,7 +216,7 @@ class Every2HoursWebhookWorkerTest {
 
             assertEquals(ListenableWorker.Result.failure(), result)
 
-            verify(mockHealthRepo, never()).readDay(any(), any(), anyOrNull())
+            verify(mockHealthRepo, never()).readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())
             verify(mockWebhookRepo, never()).sendRecords(any(), any(), anyOrNull())
         }
     }
@@ -236,7 +236,7 @@ class Every2HoursWebhookWorkerTest {
         // which is a RuntimeException) → caught by catch (e: Exception) → retry
         assertEquals(ListenableWorker.Result.retry(), result)
 
-            verify(mockHealthRepo, never()).readDay(any(), any(), anyOrNull())
+            verify(mockHealthRepo, never()).readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())
             verify(mockWebhookRepo, never()).sendRecords(any(), any(), anyOrNull())
         }
     }
@@ -256,7 +256,7 @@ class Every2HoursWebhookWorkerTest {
                 autoSendWebhookEvery2Hours = true
             )
 
-            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull()))
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
                 .thenThrow(SecurityException("No permission"))
 
             val worker = createWorker(config)
@@ -277,7 +277,7 @@ class Every2HoursWebhookWorkerTest {
                 autoSendWebhookEvery2Hours = true
             )
 
-            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull()))
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
                 .thenThrow(IllegalStateException("Health Connect not available"))
 
             val worker = createWorker(config)
@@ -298,7 +298,7 @@ class Every2HoursWebhookWorkerTest {
                 autoSendWebhookEvery2Hours = true
             )
 
-            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull()))
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
                 .thenThrow(RuntimeException("Network error"))
 
             val worker = createWorker(config)
@@ -319,7 +319,7 @@ class Every2HoursWebhookWorkerTest {
                 autoSendWebhookEvery2Hours = true
             )
 
-            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull())).thenReturn(todayRecord)
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())).thenReturn(listOf(todayRecord))
             whenever(mockWebhookRepo.sendRecords(any(), any(), anyOrNull()))
                 .thenThrow(RuntimeException("Webhook timeout"))
 
@@ -328,7 +328,7 @@ class Every2HoursWebhookWorkerTest {
 
             assertEquals(ListenableWorker.Result.retry(), result)
 
-            verify(mockHealthRepo).readDay(any(), any(), anyOrNull())
+            verify(mockHealthRepo).readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())
             verify(mockWebhookRepo).sendRecords(eq(config.webhookUrl), eq(listOf(todayRecord)), anyOrNull())
         }
     }
@@ -348,7 +348,7 @@ class Every2HoursWebhookWorkerTest {
                 autoSendWebhookEvery2Hours = true
             )
 
-            whenever(mockHealthRepo.readDay(eq(LocalDate.now()), any(), anyOrNull())).thenReturn(todayRecord)
+            whenever(mockHealthRepo.readPeriodInBatch(eq(LocalDate.now()), eq(LocalDate.now()), any(), anyOrNull(), anyOrNull())).thenReturn(listOf(todayRecord))
             whenever(mockWebhookRepo.sendRecords(any(), any(), anyOrNull()))
                 .thenReturn(WebhookResult.Success(200, "OK"))
 
@@ -358,7 +358,7 @@ class Every2HoursWebhookWorkerTest {
             assertEquals(ListenableWorker.Result.success(), result)
 
             // Verify it reads only today, not any other date
-            verify(mockHealthRepo).readDay(eq(LocalDate.now()), any(), anyOrNull())
+            verify(mockHealthRepo).readPeriodInBatch(eq(LocalDate.now()), eq(LocalDate.now()), any(), anyOrNull(), anyOrNull())
         }
     }
 
@@ -374,7 +374,7 @@ class Every2HoursWebhookWorkerTest {
                 autoSendWebhookEvery2Hours = true
             )
 
-            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull())).thenReturn(todayRecord)
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())).thenReturn(listOf(todayRecord))
             whenever(mockWebhookRepo.sendRecords(any(), any(), anyOrNull()))
                 .thenReturn(WebhookResult.Success(200, "OK"))
 
@@ -399,7 +399,7 @@ class Every2HoursWebhookWorkerTest {
                 autoSendWebhookEvery2Hours = true
             )
 
-            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull())).thenReturn(todayRecord)
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())).thenReturn(listOf(todayRecord))
             whenever(mockWebhookRepo.sendRecords(any(), any(), anyOrNull()))
                 .thenReturn(WebhookResult.Success(200, "OK"))
 
@@ -408,7 +408,7 @@ class Every2HoursWebhookWorkerTest {
 
             assertEquals(ListenableWorker.Result.success(), result)
 
-            verify(mockHealthRepo).readDay(any(), eq(HealthDataType.entries.toSet()), anyOrNull())
+            verify(mockHealthRepo).readPeriodInBatch(any(), any(), eq(HealthDataType.entries.toSet()), anyOrNull(), anyOrNull())
         }
     }
 
@@ -424,7 +424,7 @@ class Every2HoursWebhookWorkerTest {
                 selectedSourcePackage = "com.example.health"
             )
 
-            whenever(mockHealthRepo.readDay(any(), any(), anyOrNull())).thenReturn(todayRecord)
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())).thenReturn(listOf(todayRecord))
             whenever(mockWebhookRepo.sendRecords(any(), any(), anyOrNull()))
                 .thenReturn(WebhookResult.Success(200, "OK"))
 
@@ -433,7 +433,7 @@ class Every2HoursWebhookWorkerTest {
 
             assertEquals(ListenableWorker.Result.success(), result)
 
-            verify(mockHealthRepo).readDay(any(), any(), eq("com.example.health"))
+            verify(mockHealthRepo).readPeriodInBatch(any(), any(), any(), eq("com.example.health"), anyOrNull())
         }
     }
 

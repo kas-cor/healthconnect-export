@@ -1,18 +1,26 @@
 package com.healthconnect.export.repository
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
 import com.healthconnect.export.data.DailyHealthRecord
 import com.healthconnect.export.data.ExportMetadata
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.ServerSocket
 
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class WebhookRepositoryTest {
 
-    private val repo = WebhookRepository()
+    private val context = ApplicationProvider.getApplicationContext<Context>()
+    private val repo = WebhookRepository(context)
 
     // =============================================
     // Helper: create test records

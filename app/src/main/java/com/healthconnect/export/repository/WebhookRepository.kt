@@ -1,6 +1,8 @@
 package com.healthconnect.export.repository
 
+import android.content.Context
 import android.util.Log
+import com.healthconnect.export.R
 import com.healthconnect.export.data.DailyHealthRecord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -17,10 +19,29 @@ data class WebhookPayload(
     val messages: List<DailyHealthRecord>
 )
 
-class WebhookRepository {
+class WebhookRepository(
+    private val context: Context
+) {
 
     companion object {
         private const val TAG = "WebhookRepo"
+        // Cap response body read to 1 MB to avoid OOM on a misbehaving/gigantic response.
+        private const val MAX_RESPONSE_BYTES = 1_048_576
+    }
+
+    private fun readBounded(reader: java.io.Reader): String {
+        val buffer = CharArray(8192)
+        val out = StringBuilder()
+        var read = 0
+        var total = 0
+        while (total < MAX_RESPONSE_BYTES && reader.read(buffer).also { read = it } != -1) {
+            if (read == 0) continue
+            val room = MAX_RESPONSE_BYTES - total
+            out.append(buffer, 0, minOf(read, room))
+            total += minOf(read, room)
+            if (total >= MAX_RESPONSE_BYTES) break
+        }
+        return out.toString()
     }
 
     private val json = Json {
@@ -86,9 +107,9 @@ class WebhookRepository {
 
             val responseCode = connection.responseCode
             val responseBody = if (responseCode in 200..299) {
-                connection.inputStream.bufferedReader().use { it.readText() }
+                connection.inputStream.bufferedReader().use { readBounded(it) }
             } else {
-                connection.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+                connection.errorStream?.bufferedReader()?.use { readBounded(it) } ?: ""
             }
 
             connection.disconnect()
@@ -101,13 +122,13 @@ class WebhookRepository {
             } else {
                 WebhookResult.Error(
                     statusCode = responseCode,
-                    message = "Сервер вернул код $responseCode: $responseBody"
+                    message = context.getString(R.string.webhook_server_error, responseCode, responseBody)
                 )
             }
         } catch (e: Exception) {
             WebhookResult.Error(
                 statusCode = 0,
-                message = e.message ?: "Неизвестная ошибка"
+                message = e.message ?: context.getString(R.string.webhook_unknown_error)
             )
         }
     }
