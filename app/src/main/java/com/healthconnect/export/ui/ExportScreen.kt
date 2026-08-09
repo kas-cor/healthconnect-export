@@ -232,6 +232,7 @@ fun ExportScreen(
                 DateRangeCard(
                     startDate = uiState.startDate,
                     endDate = uiState.endDate,
+                    onPresetChange = { preset -> viewModel.setDateRange(preset) },
                     onDateRangeChange = { start, end -> viewModel.setDateRange(start, end) },
                     onStartDateChange = { viewModel.setDateRange(it, uiState.endDate) },
                     onEndDateChange = { viewModel.setDateRange(uiState.startDate, it) }

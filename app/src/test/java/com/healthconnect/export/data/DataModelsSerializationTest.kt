@@ -8,6 +8,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Test
 import org.junit.Assert.*
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 
 /**
@@ -589,5 +590,48 @@ class DataModelsSerializationTest {
         assertEquals("1.0.0", restored.appVersion)
         assertEquals("UTC", restored.timezone)
         assertNull(restored.sourceDevice)
+    }
+
+    // =============================================
+    // DateRangePreset sliding window
+    // =============================================
+
+    @Test
+    fun `LAST_7_DAYS calcRange returns last 7 days including reference date`() {
+        val ref = LocalDate.of(2026, 6, 7)
+        val (start, end) = DateRangePreset.LAST_7_DAYS.calcRange(ref)
+
+        assertEquals(LocalDate.of(2026, 6, 1), start)
+        assertEquals(LocalDate.of(2026, 6, 7), end)
+    }
+
+    @Test
+    fun `LAST_30_DAYS calcRange returns last 30 days including reference date`() {
+        val ref = LocalDate.of(2026, 6, 7)
+        val (start, end) = DateRangePreset.LAST_30_DAYS.calcRange(ref)
+
+        assertEquals(LocalDate.of(2026, 5, 9), start)
+        assertEquals(LocalDate.of(2026, 6, 7), end)
+    }
+
+    @Test
+    fun `LAST_7_DAYS window slides as reference date moves`() {
+        val (startDay1, endDay1) = DateRangePreset.LAST_7_DAYS.calcRange(LocalDate.of(2026, 6, 7))
+        val (startDay4, endDay4) = DateRangePreset.LAST_7_DAYS.calcRange(LocalDate.of(2026, 6, 10))
+
+        // The window must move forward with the reference date, not stay frozen.
+        assertEquals(LocalDate.of(2026, 6, 4), startDay4)
+        assertEquals(LocalDate.of(2026, 6, 10), endDay4)
+        assertTrue(startDay4 > startDay1)
+        assertTrue(endDay4 > endDay1)
+    }
+
+    @Test
+    fun `DateRangePreset enum values serialize and deserialize`() {
+        for (preset in DateRangePreset.entries) {
+            val jsonString = json.encodeToString(DateRangePreset.serializer(), preset)
+            val restored = json.decodeFromString<DateRangePreset>(jsonString)
+            assertEquals(preset, restored)
+        }
     }
 }

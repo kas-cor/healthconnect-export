@@ -31,6 +31,7 @@ class DateRangeCardTest {
             DateRangeCard(
                 startDate = LocalDate.now().minusDays(6),
                 endDate = LocalDate.now(),
+                onPresetChange = { },
                 onDateRangeChange = { _, _ -> },
                 onStartDateChange = { },
                 onEndDateChange = { }
@@ -48,6 +49,7 @@ class DateRangeCardTest {
             DateRangeCard(
                 startDate = LocalDate.of(2026, 5, 1),
                 endDate = LocalDate.of(2026, 5, 27),
+                onPresetChange = { },
                 onDateRangeChange = { _, _ -> },
                 onStartDateChange = { },
                 onEndDateChange = { }
@@ -68,6 +70,7 @@ class DateRangeCardTest {
             DateRangeCard(
                 startDate = LocalDate.now().minusDays(6),
                 endDate = LocalDate.now(),
+                onPresetChange = { },
                 onDateRangeChange = { _, _ -> },
                 onStartDateChange = { },
                 onEndDateChange = { }

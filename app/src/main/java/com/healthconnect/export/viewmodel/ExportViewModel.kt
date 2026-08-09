@@ -29,6 +29,7 @@ data class ExportUiState(
     val driveStatus: DriveStatus = DriveStatus.NotConnected,
     val scheduleStatus: ScheduleStatus = ScheduleStatus.NotScheduled,
     val selectedTypes: Set<HealthDataType> = HealthDataType.entries.toSet(),
+    val dateRangePreset: DateRangePreset = DateRangePreset.NONE,
     val startDate: LocalDate = LocalDate.now().minusDays(7),
     val endDate: LocalDate = LocalDate.now(),
     val frequency: ExportFrequency = ExportFrequency.DAILY,
@@ -96,6 +97,7 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
         private const val KEY_DARK_THEME = "dark_theme"
         private const val KEY_START_DATE = "start_date"
         private const val KEY_END_DATE = "end_date"
+        private const val KEY_DATE_RANGE_PRESET = "date_range_preset"
         private const val KEY_WEBHOOK_URL = "webhook_url"
         private const val KEY_WEBHOOK_TOKEN = "webhook_auth_token"
         private const val KEY_AUTO_SEND_WEBHOOK = "auto_send_webhook"
@@ -159,23 +161,75 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun loadDateRange() {
         val prefs = getApplication<Application>().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+        // Load the preset selection. If a sliding preset (7/30 days) is active,
+        // recompute the window from the current date instead of restoring frozen dates.
+        val presetName = prefs.getString(KEY_DATE_RANGE_PRESET, null)
+        val preset = presetName?.let {
+            try { DateRangePreset.valueOf(it) } catch (_: IllegalArgumentException) { null }
+        }
+
+        if (preset != null && preset != DateRangePreset.NONE) {
+            val (start, end) = preset.calcRange(LocalDate.now())
+            _uiState.update {
+                it.copy(dateRangePreset = preset, startDate = start, endDate = end)
+            }
+            return
+        }
+
         val startStr = prefs.getString(KEY_START_DATE, null)
         val endStr = prefs.getString(KEY_END_DATE, null)
         if (startStr != null && endStr != null) {
             try {
                 val start = LocalDate.parse(startStr)
                 val end = LocalDate.parse(endStr)
-                _uiState.update { it.copy(startDate = start, endDate = end) }
+                _uiState.update {
+                    it.copy(dateRangePreset = DateRangePreset.NONE, startDate = start, endDate = end)
+                }
             } catch (_: Exception) { /* ignore invalid dates */ }
         }
     }
 
-    private fun saveDateRange(start: LocalDate, end: LocalDate) {
+    private fun saveDateRange(preset: DateRangePreset, start: LocalDate, end: LocalDate) {
         val prefs = getApplication<Application>().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit()
+            .putString(KEY_DATE_RANGE_PRESET, preset.name)
             .putString(KEY_START_DATE, start.toString())
             .putString(KEY_END_DATE, end.toString())
             .apply()
+    }
+
+    /**
+     * Applies a preset (or custom) date range to the UI state and persists it.
+     *
+     * When a sliding preset is chosen, dates are recomputed from the current date
+     * immediately and on every subsequent launch/export.
+     */
+    fun setDateRange(preset: DateRangePreset) {
+        val (start, end) = if (preset == DateRangePreset.NONE) {
+            _uiState.value.startDate to _uiState.value.endDate
+        } else {
+            preset.calcRange(LocalDate.now())
+        }
+        _uiState.update {
+            it.copy(dateRangePreset = preset, startDate = start, endDate = end)
+        }
+        saveDateRange(preset, start, end)
+    }
+
+    /**
+     * Before an export, if a sliding preset is active, recompute the window from the
+     * current date so the period keeps moving as days pass (e.g. a 7-day preset exports
+     * the last 7 days every time, not the frozen dates picked weeks ago).
+     */
+    fun refreshSlidingDateRange() {
+        val preset = _uiState.value.dateRangePreset
+        if (preset == null || preset == DateRangePreset.NONE) return
+        val (start, end) = preset.calcRange(LocalDate.now())
+        if (start != _uiState.value.startDate || end != _uiState.value.endDate) {
+            _uiState.update { it.copy(startDate = start, endDate = end) }
+            saveDateRange(preset, start, end)
+        }
     }
 
     private fun loadSourcePreference() {
@@ -260,8 +314,10 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun setDateRange(start: LocalDate, end: LocalDate) {
-        _uiState.update { it.copy(startDate = start, endDate = end) }
-        saveDateRange(start, end)
+        _uiState.update {
+            it.copy(dateRangePreset = DateRangePreset.NONE, startDate = start, endDate = end)
+        }
+        saveDateRange(DateRangePreset.NONE, start, end)
     }
 
     fun setFrequency(freq: ExportFrequency) {
@@ -304,6 +360,10 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
             cancelExport()
             return
         }
+
+        // If a sliding preset (7/30 days) is active, recompute the window from today
+        // before exporting so the period moves as days pass.
+        refreshSlidingDateRange()
 
         val job = exportScope.launch {
             try {
