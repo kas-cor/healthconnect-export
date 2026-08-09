@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.healthconnect.export.R
+import com.healthconnect.export.data.DateRangePreset
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Calendar
@@ -38,6 +39,7 @@ import java.util.Calendar
 fun DateRangeCard(
     startDate: LocalDate,
     endDate: LocalDate,
+    onPresetChange: (DateRangePreset) -> Unit,
     onDateRangeChange: (LocalDate, LocalDate) -> Unit,
     onStartDateChange: (LocalDate) -> Unit,
     onEndDateChange: (LocalDate) -> Unit
@@ -61,13 +63,13 @@ fun DateRangeCard(
                 // 7 days preset
                 if (is7dPreset) {
                     Button(
-                        onClick = { onDateRangeChange(preset7dStart, preset7dEnd) }
+                        onClick = { onPresetChange(DateRangePreset.LAST_7_DAYS) }
                     ) {
                         Text(stringResource(R.string.days_7))
                     }
                 } else {
                     OutlinedButton(
-                        onClick = { onDateRangeChange(preset7dStart, preset7dEnd) }
+                        onClick = { onPresetChange(DateRangePreset.LAST_7_DAYS) }
                     ) {
                         Text(stringResource(R.string.days_7))
                     }
@@ -75,13 +77,13 @@ fun DateRangeCard(
                 // 30 days preset
                 if (is30dPreset) {
                     Button(
-                        onClick = { onDateRangeChange(preset30dStart, preset30dEnd) }
+                        onClick = { onPresetChange(DateRangePreset.LAST_30_DAYS) }
                     ) {
                         Text(stringResource(R.string.days_30))
                     }
                 } else {
                     OutlinedButton(
-                        onClick = { onDateRangeChange(preset30dStart, preset30dEnd) }
+                        onClick = { onPresetChange(DateRangePreset.LAST_30_DAYS) }
                     ) {
                         Text(stringResource(R.string.days_30))
                     }

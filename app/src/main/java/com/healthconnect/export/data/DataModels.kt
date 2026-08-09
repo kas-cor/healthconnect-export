@@ -3,6 +3,7 @@ package com.healthconnect.export.data
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -200,6 +201,31 @@ enum class ExportFrequency(val displayName: String, val hours: Long) {
     MANUAL("Manual", 0),
     DAILY("Daily", 24),
     WEEKLY("Weekly", 168)
+}
+
+/**
+ * Preset period selection for the export date range.
+ *
+ * When [LAST_7_DAYS] or [LAST_30_DAYS] is active, the actual start/end dates are
+ * recomputed from the current date on every launch and before each export, so the
+ * window keeps sliding instead of freezing on the dates first picked.
+ */
+@Serializable
+enum class DateRangePreset(val displayName: String) {
+    NONE("Custom"),
+    LAST_7_DAYS("Last 7 days"),
+    LAST_30_DAYS("Last 30 days");
+
+    /**
+     * Computes the [start, end] date window for this preset relative to [referenceDate].
+     * 7 days → last 7 days including today; 30 days → last 30 days including today.
+     * [NONE] is a custom range and has no meaning here — callers must handle it separately.
+     */
+    fun calcRange(referenceDate: LocalDate): Pair<LocalDate, LocalDate> = when (this) {
+        LAST_7_DAYS -> referenceDate.minusDays(6) to referenceDate
+        LAST_30_DAYS -> referenceDate.minusDays(29) to referenceDate
+        NONE -> referenceDate to referenceDate
+    }
 }
 
 @Serializable
