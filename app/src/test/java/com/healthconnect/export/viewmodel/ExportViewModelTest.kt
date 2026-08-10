@@ -41,12 +41,18 @@ import org.mockito.kotlin.*
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Status
+import com.google.android.gms.tasks.OnCompleteListener
+import com.google.android.gms.tasks.OnFailureListener
+import com.google.android.gms.tasks.OnSuccessListener
 import com.google.android.gms.tasks.Task
 import com.healthconnect.export.data.*
 import com.healthconnect.export.repository.*
 import com.healthconnect.export.usecase.ExportDataUseCase
 import com.healthconnect.export.usecase.ExportStep
+import java.io.BufferedReader
 import java.io.File
+import java.io.InputStreamReader
+import java.net.ServerSocket
 import java.lang.reflect.Field
 import java.time.LocalDate
 import kotlinx.coroutines.CoroutineScope
@@ -147,6 +153,12 @@ class ExportViewModelTest {
         mockedGoogleSignIn!!.`when`<GoogleSignInAccount?> {
             GoogleSignIn.getLastSignedInAccount(any<Context>())
         }.thenReturn(null)
+
+        // Default: silent sign-in and sign-out task mocks — their listeners
+        // never fire, so the init block stays deterministic and keeps
+        // DriveStatus.NotConnected.
+        silentSignInTask()
+        signOutTask()
 
         // Create ViewModel (init block runs here)
         viewModel = ExportViewModel(mockApp)
@@ -689,6 +701,536 @@ class ExportViewModelTest {
 
         val state = viewModel.uiState.value
         assertTrue(state.driveStatus is DriveStatus.NotConnected)
+    }
+
+    // =============================================
+    // silentSignIn() / Drive auto-restore Tests
+    // =============================================
+
+    @Test
+    fun `refreshDriveStatus silently restores session and connects`() {
+        runTest {
+            whenever(mockDriveRepo.isSignedIn()).thenReturn(false)
+            whenever(mockDriveRepo.listDriveFiles()).thenReturn(emptyList())
+            val task = silentSignInTask()
+
+            viewModel.refreshDriveStatus()
+
+            // Fire the success listener as Google would after a silent restore
+            argumentCaptor<OnSuccessListener<GoogleSignInAccount>>().apply {
+                verify(task).addOnSuccessListener(capture())
+                firstValue.onSuccess(mock<GoogleSignInAccount>())
+            }
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            // Called once in ViewModel init (setup) and once here
+            verify(mockGoogleSignInClient, atLeastOnce()).silentSignIn()
+            val state = viewModel.uiState.value
+            assertTrue(state.driveStatus is DriveStatus.Synced)
+            // The silent restore must not surface any snackbar/message
+            assertNull(state.message)
+        }
+    }
+
+    @Test
+    fun `refreshDriveStatus stays not connected when silent sign-in fails`() {
+        runTest {
+            whenever(mockDriveRepo.isSignedIn()).thenReturn(false)
+            val task = silentSignInTask()
+
+            viewModel.refreshDriveStatus()
+
+            // Fire the failure listener (no cached session)
+            argumentCaptor<OnFailureListener>().apply {
+                verify(task).addOnFailureListener(capture())
+                firstValue.onFailure(Exception("no cached session"))
+            }
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            // Called once in ViewModel init (setup) and once here
+            verify(mockGoogleSignInClient, atLeastOnce()).silentSignIn()
+            val state = viewModel.uiState.value
+            assertTrue(state.driveStatus is DriveStatus.NotConnected)
+            // The silent failure must not surface any snackbar/message
+            assertNull(state.message)
+        }
+    }
+
+    @Test
+    fun `silent sign-in failure at launch shows not connected without a message`() {
+        runTest {
+            whenever(mockDriveRepo.isSignedIn()).thenReturn(false)
+            val task = silentSignInTask()
+
+            // Recreate the ViewModel so the init block runs the silent sign-in
+            val vm = ExportViewModel(mockApp)
+            vm.driveManager.scope = CoroutineScope(testDispatcher)
+            setField(vm.driveManager, "driveRepo", mockDriveRepo)
+            setField(vm, "healthRepo", mockHealthRepo)
+            setField(vm, "localRepo", mockLocalRepo)
+            setField(vm.webhookManager, "webhookRepo", mockWebhookRepo)
+            setField(vm.webhookManager, "healthRepo", mockHealthRepo)
+            setField(vm, "exportUseCase", ExportDataUseCase(mockHealthRepo, mockLocalRepo, testDispatcher))
+            vm.exportScope = CoroutineScope(testDispatcher)
+
+            // The silent sign-in started during init fails (no cached session)
+            argumentCaptor<OnFailureListener>().apply {
+                verify(task).addOnFailureListener(capture())
+                firstValue.onFailure(Exception("no cached session"))
+            }
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            val state = vm.uiState.value
+            assertTrue(state.driveStatus is DriveStatus.NotConnected)
+            // No confusing snackbar at startup — just the regular card state
+            assertNull(state.message)
+        }
+    }
+
+    @Test
+    fun `sign out prevents silent sign-in for the rest of the session`() {
+        runTest {
+            whenever(mockDriveRepo.isSignedIn()).thenReturn(false)
+            val signOutTask = signOutTask()
+
+            viewModel.signOut()
+            argumentCaptor<OnCompleteListener<Void>>().apply {
+                verify(signOutTask).addOnCompleteListener(capture())
+                firstValue.onComplete(mock())
+            }
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            // A status refresh after sign-out must NOT trigger a silent sign-in
+            viewModel.refreshDriveStatus()
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            // silentSignIn was called once in setup init — no new call after sign-out
+            verify(mockGoogleSignInClient, times(1)).silentSignIn()
+            val state = viewModel.uiState.value
+            assertTrue(state.driveStatus is DriveStatus.NotConnected)
+        }
+    }
+
+    @Test
+    fun `stale silent sign-in success after sign out does not reconnect`() {
+        runTest {
+            whenever(mockDriveRepo.isSignedIn()).thenReturn(false)
+            whenever(mockDriveRepo.listDriveFiles()).thenReturn(emptyList())
+            val task = silentSignInTask()
+            val signOutTask = signOutTask()
+
+            // A silent sign-in attempt starts (as at app start)
+            viewModel.refreshDriveStatus()
+
+            // The user signs out while the silent attempt is still in flight
+            viewModel.signOut()
+            argumentCaptor<OnCompleteListener<Void>>().apply {
+                verify(signOutTask).addOnCompleteListener(capture())
+                firstValue.onComplete(mock())
+            }
+
+            // The stale silent sign-in completes successfully — must NOT reconnect
+            argumentCaptor<OnSuccessListener<GoogleSignInAccount>>().apply {
+                verify(task).addOnSuccessListener(capture())
+                firstValue.onSuccess(mock<GoogleSignInAccount>())
+            }
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertTrue(state.driveStatus is DriveStatus.NotConnected)
+        }
+    }
+
+    @Test
+    fun `manual sign in after sign out re-enables silent sign-in`() {
+        runTest {
+            val signOutTask = signOutTask()
+
+            viewModel.signOut()
+            argumentCaptor<OnCompleteListener<Void>>().apply {
+                verify(signOutTask).addOnCompleteListener(capture())
+                firstValue.onComplete(mock())
+            }
+
+            // A fresh manual sign-in clears the session signed-out flag
+            val mockAccount = mock<GoogleSignInAccount>()
+            whenever(mockAccount.email).thenReturn("test@example.com")
+            val mockTask = mock<Task<GoogleSignInAccount>>()
+            whenever(mockTask.getResult(ApiException::class.java)).thenReturn(mockAccount)
+            mockedGoogleSignIn!!.`when`<Task<GoogleSignInAccount>> {
+                GoogleSignIn.getSignedInAccountFromIntent(any())
+            }.thenReturn(mockTask)
+            whenever(mockDriveRepo.isSignedIn()).thenReturn(true)
+            whenever(mockDriveRepo.listDriveFiles()).thenReturn(emptyList())
+            viewModel.handleSignInResult(ActivityResult(Activity.RESULT_OK, mock<Intent>()))
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            // After re-signing in, silent sign-in is allowed again
+            whenever(mockDriveRepo.isSignedIn()).thenReturn(false)
+            val task = silentSignInTask()
+            viewModel.refreshDriveStatus()
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            verify(task).addOnSuccessListener(any<OnSuccessListener<GoogleSignInAccount>>())
+        }
+    }
+
+    @Test
+    fun `init silently restores drive session when account is cached`() {
+        runTest {
+            // Stub a cached session: silent sign-in succeeds without UI
+            val task = silentSignInTask()
+
+            // Recreate the ViewModel so the init block runs with the stub in place
+            val vm = ExportViewModel(mockApp)
+            vm.driveManager.scope = CoroutineScope(testDispatcher)
+            setField(vm.driveManager, "driveRepo", mockDriveRepo)
+            setField(vm, "healthRepo", mockHealthRepo)
+            setField(vm, "localRepo", mockLocalRepo)
+            setField(vm.webhookManager, "webhookRepo", mockWebhookRepo)
+            setField(vm.webhookManager, "healthRepo", mockHealthRepo)
+            setField(vm, "exportUseCase", ExportDataUseCase(mockHealthRepo, mockLocalRepo, testDispatcher))
+            vm.exportScope = CoroutineScope(testDispatcher)
+            whenever(mockDriveRepo.listDriveFiles()).thenReturn(emptyList())
+
+            // Fire the silent sign-in success listener captured during init
+            argumentCaptor<OnSuccessListener<GoogleSignInAccount>>().apply {
+                verify(task).addOnSuccessListener(capture())
+                firstValue.onSuccess(mock<GoogleSignInAccount>())
+            }
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            // Called once in the setup ViewModel init and once in the recreated one
+            verify(mockGoogleSignInClient, atLeastOnce()).silentSignIn()
+            val state = vm.uiState.value
+            assertTrue(
+                state.driveStatus is DriveStatus.Connected || state.driveStatus is DriveStatus.Synced
+            )
+        }
+    }
+
+    // =============================================
+    // isVersionNewer() Tests
+    // =============================================
+
+    @Test
+    fun `isVersionNewer returns true when latest is newer`() {
+        assertTrue(viewModel.isVersionNewer("1.7", "1.6"))
+        assertTrue(viewModel.isVersionNewer("2.0", "1.9.9"))
+        assertTrue(viewModel.isVersionNewer("1.6.1", "1.6"))
+        assertTrue(viewModel.isVersionNewer("10.0", "9.99"))
+    }
+
+    @Test
+    fun `isVersionNewer returns false when latest is older or equal`() {
+        assertFalse(viewModel.isVersionNewer("1.6", "1.7"))
+        assertFalse(viewModel.isVersionNewer("1.6", "1.6"))
+        assertFalse(viewModel.isVersionNewer("1.6", "1.6.1"))
+        assertFalse(viewModel.isVersionNewer("0.9", "1.0"))
+    }
+
+    @Test
+    fun `isVersionNewer handles non-numeric segments`() {
+        assertFalse(viewModel.isVersionNewer("1.beta", "1.0"))
+        assertTrue(viewModel.isVersionNewer("1.5", "1.beta"))
+        assertFalse(viewModel.isVersionNewer("", "1.0"))
+    }
+
+    // =============================================
+    // fetchLatestRelease() Tests (local HTTP server)
+    // =============================================
+
+    @Test
+    fun `fetchLatestRelease returns Available when redirect points to newer version`() {
+        withRedirectServer(location = "/kas-cor/healthconnect-export/releases/tag/v9.9.9") { url ->
+            val result = viewModel.fetchLatestRelease(url)
+
+            assertTrue(result is UpdateCheckState.Available)
+            val available = result as UpdateCheckState.Available
+            assertEquals("9.9.9", available.latestVersion)
+            assertEquals(
+                "https://github.com/kas-cor/healthconnect-export/releases/tag/v9.9.9",
+                available.downloadUrl
+            )
+        }
+    }
+
+    @Test
+    fun `fetchLatestRelease resolves absolute redirect location`() {
+        withRedirectServer(
+            location = "https://github.com/kas-cor/healthconnect-export/releases/tag/v9.9.9"
+        ) { url ->
+            val result = viewModel.fetchLatestRelease(url)
+
+            assertTrue(result is UpdateCheckState.Available)
+            val available = result as UpdateCheckState.Available
+            assertEquals("9.9.9", available.latestVersion)
+            assertEquals(
+                "https://github.com/kas-cor/healthconnect-export/releases/tag/v9.9.9",
+                available.downloadUrl
+            )
+        }
+    }
+
+    @Test
+    fun `fetchLatestRelease returns UpToDate when tag is not newer`() {
+        // v0.1.0 is always older than any installed release version
+        withRedirectServer(location = "/kas-cor/healthconnect-export/releases/tag/v0.1.0") { url ->
+            val result = viewModel.fetchLatestRelease(url)
+
+            assertTrue(result is UpdateCheckState.UpToDate)
+        }
+    }
+
+    @Test
+    fun `fetchLatestRelease returns Error when response is not a redirect`() {
+        withRedirectServer(responseCode = 200, location = null) { url ->
+            val result = viewModel.fetchLatestRelease(url)
+
+            assertTrue(result is UpdateCheckState.Error)
+        }
+    }
+
+    @Test
+    fun `fetchLatestRelease returns Error when redirect points to releases page without a tag`() {
+        // GitHub redirects /releases/latest to /releases when the repo has no releases
+        withRedirectServer(location = "/kas-cor/healthconnect-export/releases") { url ->
+            val result = viewModel.fetchLatestRelease(url)
+
+            assertTrue(result is UpdateCheckState.Error)
+        }
+    }
+
+    @Test
+    fun `fetchLatestRelease returns Error on invalid url`() {
+        val result = viewModel.fetchLatestRelease("not-a-url")
+
+        assertTrue(result is UpdateCheckState.Error)
+    }
+
+    @Test
+    fun `fetchLatestRelease returns Error on network exception`() {
+        val result = viewModel.fetchLatestRelease("http://127.0.0.1:1/releases/latest")
+
+        assertTrue(result is UpdateCheckState.Error)
+    }
+
+    // =============================================
+    // checkForUpdates() Tests
+    // =============================================
+
+    @Test
+    fun `checkForUpdates sets state to Checking synchronously and completes to Available`() {
+        runTest {
+            withRedirectServer(location = "/kas-cor/healthconnect-export/releases/tag/v9.9.9") { url ->
+                viewModel.checkForUpdates(url)
+
+                // State flips to Checking before the coroutine runs
+                assertTrue(viewModel.uiState.value.updateCheckState is UpdateCheckState.Checking)
+
+                // Drive the coroutine through the real IO hop to completion
+                val deadline = System.currentTimeMillis() + 5_000
+                while (viewModel.uiState.value.updateCheckState is UpdateCheckState.Checking) {
+                    if (System.currentTimeMillis() > deadline) {
+                        fail("Timed out waiting for update check to complete")
+                    }
+                    testDispatcher.scheduler.advanceUntilIdle()
+                    Thread.sleep(10)
+                }
+
+                val state = viewModel.uiState.value.updateCheckState
+                assertTrue(state is UpdateCheckState.Available)
+                assertEquals("9.9.9", (state as UpdateCheckState.Available).latestVersion)
+            }
+        }
+    }
+
+    @Test
+    fun `checkForUpdates ignores calls while already checking and reset returns to idle`() {
+        runTest {
+            viewModel.checkForUpdates("http://127.0.0.1:1/releases/latest")
+            assertTrue(viewModel.uiState.value.updateCheckState is UpdateCheckState.Checking)
+
+            // Second call while Checking must be ignored (no new coroutine state)
+            viewModel.checkForUpdates("http://127.0.0.1:1/releases/latest")
+            assertTrue(viewModel.uiState.value.updateCheckState is UpdateCheckState.Checking)
+
+            viewModel.resetUpdateCheck()
+            assertTrue(viewModel.uiState.value.updateCheckState is UpdateCheckState.Idle)
+
+            // Let the queued coroutines finish (connection to port 1 fails instantly)
+            testDispatcher.scheduler.advanceUntilIdle()
+            Thread.sleep(50)
+            testDispatcher.scheduler.advanceUntilIdle()
+        }
+    }
+
+    // =============================================
+    // fetchLatestReleaseNotes() Tests (local HTTP server)
+    // =============================================
+
+    @Test
+    fun `fetchLatestReleaseNotes returns release body on success`() {
+        val releaseJson = """{"tag_name":"v9.9.9","name":"v9.9.9","body":"New feature A\nFixed bug B"}"""
+        withHttpServer(body = releaseJson) { url ->
+            val notes = viewModel.fetchLatestReleaseNotes(url)
+
+            assertNotNull(notes)
+            assertTrue(notes!!.contains("New feature A"))
+            assertTrue(notes.contains("Fixed bug B"))
+        }
+    }
+
+    @Test
+    fun `fetchLatestReleaseNotes returns null on server error`() {
+        withHttpServer(responseCode = 500, body = "") { url ->
+            val notes = viewModel.fetchLatestReleaseNotes(url)
+
+            assertNull(notes)
+        }
+    }
+
+    @Test
+    fun `fetchLatestReleaseNotes returns null when body is blank`() {
+        withHttpServer(body = """{"tag_name":"v9.9.9","body":""}""") { url ->
+            val notes = viewModel.fetchLatestReleaseNotes(url)
+
+            assertNull(notes)
+        }
+    }
+
+    @Test
+    fun `fetchLatestReleaseNotes returns null on invalid url`() {
+        val notes = viewModel.fetchLatestReleaseNotes("not-a-url")
+
+        assertNull(notes)
+    }
+
+    @Test
+    fun `fetchLatestReleaseNotes returns null on network exception`() {
+        val notes = viewModel.fetchLatestReleaseNotes("http://127.0.0.1:1/releases/latest")
+
+        assertNull(notes)
+    }
+
+    @Test
+    fun `checkForUpdates attaches release notes when update available`() {
+        runTest {
+            val releaseJson = """{"tag_name":"v9.9.9","body":"Brand new UI\nLots of fixes"}"""
+            withHttpServer(body = releaseJson) { apiUrl ->
+                withRedirectServer(location = "/kas-cor/healthconnect-export/releases/tag/v9.9.9") { url ->
+                    viewModel.checkForUpdates(url, apiUrl)
+
+                    val deadline = System.currentTimeMillis() + 5_000
+                    while (viewModel.uiState.value.updateCheckState is UpdateCheckState.Checking) {
+                        if (System.currentTimeMillis() > deadline) {
+                            fail("Timed out waiting for update check to complete")
+                        }
+                        testDispatcher.scheduler.advanceUntilIdle()
+                        Thread.sleep(10)
+                    }
+
+                    val state = viewModel.uiState.value.updateCheckState
+                    assertTrue(state is UpdateCheckState.Available)
+                    val available = state as UpdateCheckState.Available
+                    assertEquals("9.9.9", available.latestVersion)
+                    assertNotNull(available.releaseNotes)
+                    assertTrue(available.releaseNotes!!.contains("Brand new UI"))
+                }
+            }
+        }
+    }
+
+    // =============================================
+    // Helpers: local HTTP servers
+    // =============================================
+
+    /**
+     * Starts a local HTTP server on a random port that answers a single request
+     * with the given status code, body and headers, then runs [block].
+     */
+    private fun withHttpServer(
+        responseCode: Int = 200,
+        body: String = "",
+        headers: Map<String, String> = emptyMap(),
+        block: (url: String) -> Unit,
+    ) {
+        val server = ServerSocket(0)
+        server.soTimeout = 5_000
+        val port = server.localPort
+        val url = "http://127.0.0.1:$port/releases/latest"
+
+        val serverThread = Thread {
+            try {
+                val client = try { server.accept() } catch (_: Exception) { return@Thread }
+                client.use { socket ->
+                    val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
+                    while (true) {
+                        val line = reader.readLine() ?: break
+                        if (line.isEmpty()) break
+                    }
+                    val headerBlock = headers.map { (k, v) -> "$k: $v\r\n" }.joinToString("")
+                    val response = "HTTP/1.1 $responseCode \r\n$headerBlock" +
+                        "Content-Length: ${body.toByteArray().size}\r\nConnection: close\r\n\r\n$body"
+                    socket.getOutputStream().write(response.toByteArray())
+                    socket.getOutputStream().flush()
+                }
+            } catch (_: Exception) {
+                // Server closed — ignore
+            }
+        }
+        serverThread.start()
+
+        try {
+            block(url)
+        } finally {
+            serverThread.join(2_000)
+            server.close()
+        }
+    }
+
+    /**
+     * Starts a local HTTP server that answers with a redirect (Location header).
+     */
+    private fun withRedirectServer(
+        responseCode: Int = 302,
+        location: String? = null,
+        block: (url: String) -> Unit,
+    ) {
+        val headers = if (location != null) mapOf("Location" to location) else emptyMap()
+        withHttpServer(responseCode = responseCode, body = "", headers = headers, block = block)
+    }
+
+    // =============================================
+    // Helper: silent sign-in task mock
+    // =============================================
+
+    /**
+     * Stubs googleSignInClient.silentSignIn() to return a mock Task whose
+     * listeners can be captured and fired manually. Real Google Tasks require
+     * a Looper, which plain-JVM Mockito tests don't have.
+     */
+    private fun silentSignInTask(): Task<GoogleSignInAccount> {
+        val task = mock<Task<GoogleSignInAccount>>()
+        whenever(task.addOnSuccessListener(any<OnSuccessListener<GoogleSignInAccount>>()))
+            .thenReturn(task)
+        whenever(task.addOnFailureListener(any<OnFailureListener>()))
+            .thenReturn(task)
+        whenever(mockGoogleSignInClient.silentSignIn()).thenReturn(task)
+        return task
+    }
+
+    /**
+     * Stubs googleSignInClient.signOut() to return a mock Task whose completion
+     * listener can be captured and fired manually (real Google Tasks require
+     * a Looper, which plain-JVM Mockito tests don't have).
+     */
+    private fun signOutTask(): Task<Void> {
+        val task = mock<Task<Void>>()
+        whenever(task.addOnCompleteListener(any<OnCompleteListener<Void>>()))
+            .thenReturn(task)
+        whenever(mockGoogleSignInClient.signOut()).thenReturn(task)
+        return task
     }
 
     // =============================================

@@ -29,20 +29,12 @@ fun WebhookCard(
 ) {
     val urlHasError = webhookUrl.isNotBlank() && webhookUrlError != null
 
-    Card {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Http, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    stringResource(R.string.webhook),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f)
-                )
-            }
+    MaterialCard {
+        Column {
+            MaterialSectionHeader(
+                icon = Icons.Default.Http,
+                title = stringResource(R.string.webhook),
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
 

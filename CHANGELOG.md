@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7] — 2026-08-10
+
+### Added
+- **Update check:** New version check against GitHub Releases with a notification dot in the app bar; `What's new` dialog shows the latest release notes, with a download button
+- **Tabbed navigation:** App redesigned with a bottom navigation bar (Export / History / Integrations / Schedule / Settings)
+- **Google Drive auto sign-in:** Previous session is restored silently at app start — no extra "Sign in to Google" tap; a session-only signed-out flag prevents silent reconnection after an explicit sign-out
+- **History:** "Show all files (N)" toggle reveals every exported file (all rows clickable), rendered lazily with a bounded-height list; card header now shows total file count and combined size
+- **Settings tab:** Theme (system/light/dark) and language selection moved to a dedicated Settings screen; About card with GitHub link and update check
+- **Tests:** silent sign-in / signed-out flag / update check / release notes / file-slicing tests (ExportViewModelTest, ExportedFilesCardTest)
+
+### Changed
+- **Drive status:** `ExportViewModel` now collects `DriveManager` state, so the connection status is correct immediately at launch
+- **Schedule:** No "Scheduled export set" snackbar at every app start — confirmation appears only on explicit action
+- **History:** Shows the newest 10 files with an expand toggle (previously a fixed list with "… and N more")
+
+### Fixed
+- **"Show all files" button:** The `%1$d` placeholder now shows the actual file count
+
+---
+
 ## [1.6] — 2026-07-17
 
 ### Added
@@ -165,6 +185,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[1.7]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.7
 [1.6]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.6
 [1.5.1]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.5.1
 [1.5]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.5

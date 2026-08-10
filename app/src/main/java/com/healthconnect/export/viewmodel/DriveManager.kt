@@ -42,6 +42,15 @@ class DriveManager(
     private val _driveState = MutableStateFlow(DriveState())
     val driveState: StateFlow<DriveState> = _driveState.asStateFlow()
 
+    /**
+     * True while the user has explicitly signed out in this app session.
+     * While set, the silent sign-in is not attempted, so a sign-out is not
+     * silently undone. The flag is session-only: it resets on app restart
+     * (where the silent sign-in is allowed to try again) and is cleared as
+     * soon as the user signs in again.
+     */
+    private var signedOutThisSession = false
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private fun str(id: Int): String = application.getString(id)
@@ -59,6 +68,8 @@ class DriveManager(
             val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
             val account = task.getResult(ApiException::class.java)
             if (account != null) {
+                // A fresh manual sign-in re-enables silent sign-in for this session
+                signedOutThisSession = false
                 _driveState.value = DriveState(
                     status = DriveStatus.Connected,
                     message = str(R.string.vm_drive_connected, account.email)
@@ -78,6 +89,9 @@ class DriveManager(
      * Updates [driveState] to reflect the disconnected state.
      */
     fun signOut() {
+        // Block silent sign-in for the rest of this session, so an explicit
+        // sign-out is not silently undone (e.g. by a status refresh).
+        signedOutThisSession = true
         googleSignInClient.signOut().addOnCompleteListener {
             _driveState.value = DriveState(
                 status = DriveStatus.NotConnected,
@@ -126,17 +140,57 @@ class DriveManager(
      * Refresh the current Drive connection status.
      *
      * If signed in, queries Drive for the list of previously uploaded files
-     * and reports the count. Otherwise sets status to [DriveStatus.NotConnected].
+     * and reports the count. Otherwise tries to silently restore a previous
+     * sign-in session (no UI); if that fails, sets status to [DriveStatus.NotConnected].
      */
     fun refreshDriveStatus() {
         if (driveRepo.isSignedIn()) {
-            _driveState.value = DriveState(status = DriveStatus.Connected)
-            scope.launch {
-                val driveFiles = driveRepo.listDriveFiles()
-                _driveState.value = DriveState(status = DriveStatus.Synced(driveFiles.size))
-            }
+            updateConnectedState()
         } else {
             _driveState.value = DriveState(status = DriveStatus.NotConnected)
+            if (!signedOutThisSession) {
+                silentSignIn()
+            }
+        }
+    }
+
+    /**
+     * Restores a previous Google sign-in session without showing any UI.
+     *
+     * Called automatically (e.g. at app start and on every status refresh)
+     * so returning users are reconnected to Drive without having to tap
+     * "Sign in to Google" again. If no cached session exists, the status
+     * stays [DriveStatus.NotConnected] and the regular sign-in flow remains
+     * available.
+     */
+    fun silentSignIn() {
+        googleSignInClient.silentSignIn()
+            .addOnSuccessListener { account ->
+                // Guard against a stale attempt reconnecting the user after an
+                // explicit sign-out completed while the attempt was in flight.
+                if (account != null && !signedOutThisSession) {
+                    signedOutThisSession = false
+                    updateConnectedState()
+                }
+            }
+            .addOnFailureListener {
+                // No cached session (or the token expired) — keep NotConnected.
+                // Guard against a stale failure clobbering a fresh manual sign-in
+                // that completed while the silent attempt was in flight.
+                if (!driveRepo.isSignedIn()) {
+                    _driveState.value = DriveState(status = DriveStatus.NotConnected)
+                }
+            }
+    }
+
+    /**
+     * Marks the user as connected and refreshes the list of files on Drive.
+     */
+    private fun updateConnectedState() {
+        _driveState.value = DriveState(status = DriveStatus.Connected)
+        scope.launch {
+            val driveFiles = driveRepo.listDriveFiles()
+            _driveState.value = DriveState(status = DriveStatus.Synced(driveFiles.size))
         }
     }
 }

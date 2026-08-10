@@ -31,12 +31,11 @@ fun ExportSummaryCard(
     summary: ExportSummary,
     onDismiss: () -> Unit
 ) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-        )
+    MaterialCard(
+        prominent = true,
+        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column {
             // Header
             Row(
                 verticalAlignment = Alignment.CenterVertically,

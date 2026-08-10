@@ -73,7 +73,9 @@
     <!-- Export Button -->
     <string name="export_data_types">Export %d data types</string>
     <string name="exported_files_title">Exported files (%d)</string>
-    <string name="exported_files_more">… and %d more</string>
+    <string name="exported_files_total_size">Total: %1$s</string>
+    <string name="exported_files_show_all">Show all files (%1$d)</string>
+    <string name="exported_files_show_less">Show fewer</string>
 
     <!-- File sizes -->
     <string name="file_size_bytes">%d B</string>
@@ -183,4 +185,43 @@
 
     <!-- Health Connect access limitation -->
     <string name="health_connect_access_limit">Health data may be limited to the last 30 days</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_export">Export</string>
+    <string name="nav_history">History</string>
+    <string name="nav_integrations">Links</string>
+    \1Plan\2
+    <string name="nav_settings">Settings</string>
+    <string name="history_empty_title">No exports yet</string>
+    <string name="history_empty_description">Completed exports will appear here.</string>
+    <string name="appearance">Appearance</string>
+    <string name="health_connect_access">Health Connect access</string>
+
+
+
+    <string name="theme_label">Theme</string>
+    <string name="theme_system">System</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="language_label">Language</string>
+    <string name="about">About</string>
+    <string name="app_description">Export Health Connect data to JSON, Google Drive and webhooks.</string>
+    <string name="version_format">Version %1$s</string>
+    <string name="check_for_updates">Check for updates</string>
+    <string name="checking_for_updates">Checking for updates…</string>
+    <string name="up_to_date">Up to date</string>
+    <string name="update_available">Update available: %1$s</string>
+    <string name="update_download">Download</string>
+    <string name="update_check_error">Couldn\'t check for updates</string>
+    <string name="retry">Retry</string>
+    <string name="whats_new">What\'s new</string>
+    <string name="whats_new_title">What\'s new in %1$s</string>
+    <string name="update_available_badge">Update available. Tap to view release notes.</string>
+    <string name="release_notes_unavailable">Release notes are unavailable.</string>
+    <string name="close">Close</string>
+    <string name="github_repository">Open repository</string>
+    <string name="github_url" translatable="false">https://github.com/kas-cor/healthconnect-export</string>
+    <string name="releases_url" translatable="false">https://github.com/kas-cor/healthconnect-export/releases/latest</string>
+    <string name="api_releases_url" translatable="false">https://api.github.com/repos/kas-cor/healthconnect-export/releases/latest</string>
+    <string name="nav_schedule">Plan</string>
 </resources>

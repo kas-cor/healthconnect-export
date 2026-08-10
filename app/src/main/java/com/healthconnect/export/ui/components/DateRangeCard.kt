@@ -54,9 +54,12 @@ fun DateRangeCard(
     val is7dPreset = startDate == preset7dStart && endDate == preset7dEnd
     val is30dPreset = startDate == preset30dStart && endDate == preset30dEnd
 
-    Card {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(stringResource(R.string.export_period), style = MaterialTheme.typography.titleMedium)
+    MaterialCard {
+        Column {
+            MaterialSectionHeader(
+                icon = Icons.Default.CalendarMonth,
+                title = stringResource(R.string.export_period),
+            )
             Spacer(modifier = Modifier.height(8.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -21,23 +21,12 @@ fun DataSourceCard(
     onSourceSelected: (String?) -> Unit,
     onRefresh: () -> Unit
 ) {
-    Card {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = null
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    stringResource(R.string.data_source),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f)
-                )
-            }
+    MaterialCard {
+        Column {
+            MaterialSectionHeader(
+                icon = Icons.Default.Refresh,
+                title = stringResource(R.string.data_source),
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 
