@@ -73,7 +73,9 @@
     <!-- Export Button -->
     <string name="export_data_types">Экспорт %d типов данных</string>
     <string name="exported_files_title">Экспортировано файлов (%d)</string>
-    <string name="exported_files_more">… и ещё %d</string>
+    <string name="exported_files_total_size">Итого: %1$s</string>
+    <string name="exported_files_show_all">Показать все файлы (%1$d)</string>
+    <string name="exported_files_show_less">Свернуть</string>
 
     <!-- File sizes -->
     <string name="file_size_bytes">%d Б</string>
@@ -183,4 +185,43 @@
 
     <!-- Health Connect access limitation -->
     <string name="health_connect_access_limit">Данные могут быть ограничены последними 30 днями</string>
+
+    <!-- Нижняя навигация -->
+    <string name="nav_export">Экспорт</string>
+    <string name="nav_history">История</string>
+    <string name="nav_integrations">Связи</string>
+    \1План\2
+    <string name="nav_settings">Настройки</string>
+    <string name="history_empty_title">Экспортов пока нет</string>
+    <string name="history_empty_description">Завершённые экспорты появятся здесь.</string>
+    <string name="appearance">Внешний вид</string>
+    <string name="health_connect_access">Доступ к Health Connect</string>
+
+
+
+    <string name="theme_label">Тема</string>
+    <string name="theme_system">Системная</string>
+    <string name="theme_light">Светлая</string>
+    <string name="theme_dark">Тёмная</string>
+    <string name="language_label">Язык</string>
+    <string name="about">О приложении</string>
+    <string name="app_description">Экспорт данных Health Connect в JSON, Google Drive и webhook.</string>
+    <string name="version_format">Версия %1$s</string>
+    <string name="check_for_updates">Проверить обновления</string>
+    <string name="checking_for_updates">Проверка обновлений…</string>
+    <string name="up_to_date">Установлена актуальная версия</string>
+    <string name="update_available">Доступно обновление: %1$s</string>
+    <string name="update_download">Скачать</string>
+    <string name="update_check_error">Не удалось проверить обновления</string>
+    <string name="retry">Повторить</string>
+    <string name="whats_new">Что нового</string>
+    <string name="whats_new_title">Что нового в %1$s</string>
+    <string name="update_available_badge">Доступно обновление. Нажмите, чтобы посмотреть.</string>
+    <string name="release_notes_unavailable">Описание обновления недоступно.</string>
+    <string name="close">Закрыть</string>
+    <string name="github_repository">Открыть репозиторий</string>
+    <string name="github_url" translatable="false">https://github.com/kas-cor/healthconnect-export</string>
+    <string name="releases_url" translatable="false">https://github.com/kas-cor/healthconnect-export/releases/latest</string>
+    <string name="api_releases_url" translatable="false">https://api.github.com/repos/kas-cor/healthconnect-export/releases/latest</string>
+    <string name="nav_schedule">План</string>
 </resources>

@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.activity.result.ActivityResult
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.healthconnect.export.BuildConfig
 import com.healthconnect.export.R
 import com.healthconnect.export.data.*
 import com.healthconnect.export.repository.HealthConnectRepository
@@ -15,10 +16,17 @@ import com.healthconnect.export.util.LocaleManager
 import com.healthconnect.export.repository.LocalExportRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import java.time.LocalDate
 
 
@@ -51,6 +59,7 @@ data class ExportUiState(
     val progressDate: String = "",
     val progressPhase: String = "",
     val isTestingWebhook: Boolean = false,
+    val updateCheckState: UpdateCheckState = UpdateCheckState.Idle,
 )
 
 sealed class DriveStatus {
@@ -73,6 +82,8 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
     private val localRepo = LocalExportRepository(getApplication())
     private val exportUseCase = ExportDataUseCase(healthRepo, localRepo)
 
+    private val releaseJson = Json { ignoreUnknownKeys = true }
+
     private val _uiState = MutableStateFlow(ExportUiState())
     val uiState = _uiState.asStateFlow()
 
@@ -92,6 +103,8 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
         private set
 
     companion object {
+        // Cap response body read to 1 MB to avoid OOM on a misbehaving/gigantic response
+        private const val MAX_RESPONSE_BYTES = 1_048_576
         private const val PREFS_NAME = "healthconnect_export_prefs"
         private const val KEY_SELECTED_TYPES = "selected_types"
         private const val KEY_DARK_THEME = "dark_theme"
@@ -120,8 +133,18 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
         loadLocale()
         loadSourcePreference()
         driveManager.refreshDriveStatus()
+        // Keep uiState.driveStatus in sync with DriveManager: the status is
+        // updated asynchronously (e.g. after a silent sign-in at startup or
+        // when the Drive file listing finishes), so it is collected here.
+        viewModelScope.launch {
+            driveManager.driveState.collect { driveState ->
+                _uiState.update { it.copy(driveStatus = driveState.status) }
+            }
+        }
         refreshLocalFiles()
-        scheduleManager.scheduleExport(_uiState.value)
+        // Re-schedule the periodic export without popping a confirmation
+        // snackbar at every app start.
+        scheduleManager.scheduleExport(_uiState.value, showMessage = false)
         fetchAvailableSources()
     }
 
@@ -475,6 +498,10 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
         currentExportJob = job
     }
 
+    fun cancelExportNow() {
+        cancelExport()
+    }
+
     private fun cancelExport() {
         currentExportJob?.cancel()
         currentExportJob = null
@@ -571,4 +598,178 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
     fun dismissSummary() {
         _uiState.update { it.copy(exportSummary = null) }
     }
+
+    // =============================================
+    // Update check (GitHub releases)
+    // =============================================
+
+    /**
+     * Checks GitHub releases for a newer app version and updates the UI state.
+     * When a newer version is found, also fetches its release notes.
+     * The URLs can be overridden for testing.
+     */
+    fun checkForUpdates(releasesUrl: String? = null, apiReleasesUrl: String? = null) {
+        if (_uiState.value.updateCheckState is UpdateCheckState.Checking) return
+        _uiState.update { it.copy(updateCheckState = UpdateCheckState.Checking) }
+
+        val url = releasesUrl ?: getApplication<Application>().getString(R.string.releases_url)
+        val apiUrl = apiReleasesUrl ?: getApplication<Application>().getString(R.string.api_releases_url)
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                val version = fetchLatestRelease(url)
+                if (version is UpdateCheckState.Available) {
+                    version.copy(releaseNotes = fetchLatestReleaseNotes(apiUrl))
+                } else {
+                    version
+                }
+            }
+            _uiState.update { it.copy(updateCheckState = result) }
+        }
+    }
+
+    fun resetUpdateCheck() {
+        _uiState.update { it.copy(updateCheckState = UpdateCheckState.Idle) }
+    }
+
+    /**
+     * Performs the actual GitHub release check via a HEAD request.
+     * GitHub redirects /releases/latest to /releases/tag/vX.Y.Z — the tag
+     * version is extracted from the redirect Location header and compared
+     * with the installed version.
+     */
+    internal fun fetchLatestRelease(releasesUrl: String): UpdateCheckState {
+        return try {
+            val connection = URL(releasesUrl).openConnection() as HttpURLConnection
+            try {
+                connection.requestMethod = "HEAD"
+                connection.connectTimeout = 15_000
+                connection.readTimeout = 15_000
+                // Handle the redirect manually so we can read the resolved release URL
+                connection.instanceFollowRedirects = false
+                connection.connect()
+
+                val responseCode = connection.responseCode
+                val location = connection.getHeaderField("Location")
+
+                if (responseCode !in 300..399 || location.isNullOrBlank()) {
+                    return UpdateCheckState.Error(str(R.string.update_check_error))
+                }
+
+                // Location can be relative (/kas-cor/.../tag/v1.7) or absolute (https://github.com/...)
+                val resolvedUrl = if (location.startsWith("http")) {
+                    location
+                } else {
+                    "https://github.com$location"
+                }
+                // GitHub redirects /releases/latest to a /releases/tag/ URL. Anything else
+                // (e.g. /releases when the repository has no releases) is not a version
+                // we can compare against.
+                if (!resolvedUrl.contains("/releases/tag/")) {
+                    return UpdateCheckState.Error(str(R.string.update_check_error))
+                }
+                val tagVersion = resolvedUrl.substringAfterLast("/").removePrefix("v")
+                if (tagVersion.isEmpty()) {
+                    return UpdateCheckState.Error(str(R.string.update_check_error))
+                }
+
+                if (isVersionNewer(tagVersion, BuildConfig.VERSION_NAME)) {
+                    UpdateCheckState.Available(
+                        latestVersion = tagVersion,
+                        downloadUrl = resolvedUrl
+                    )
+                } else {
+                    UpdateCheckState.UpToDate
+                }
+            } finally {
+                connection.disconnect()
+            }
+        } catch (e: Exception) {
+            UpdateCheckState.Error(str(R.string.update_check_error))
+        }
+    }
+
+    /**
+     * Compares two dotted version strings (e.g. "1.7.2" vs "1.6").
+     * Returns true if [latest] is strictly newer than [current].
+     */
+    internal fun isVersionNewer(latest: String, current: String): Boolean {
+        val latestParts = latest.split(".").map { it.toIntOrNull() ?: 0 }
+        val currentParts = current.split(".").map { it.toIntOrNull() ?: 0 }
+        for (i in 0 until maxOf(latestParts.size, currentParts.size)) {
+            val l = latestParts.getOrElse(i) { 0 }
+            val c = currentParts.getOrElse(i) { 0 }
+            if (l != c) return l > c
+        }
+        return false
+    }
+
+    /**
+     * Fetches the release notes (body) of the latest GitHub release via the
+     * GitHub API. Returns null when the notes can't be retrieved.
+     *
+     * The API's /releases/latest matches the version resolved via the redirect
+     * (both return the newest published release for this repo).
+     */
+    internal fun fetchLatestReleaseNotes(apiReleasesUrl: String): String? {
+        return try {
+            val connection = URL(apiReleasesUrl).openConnection() as HttpURLConnection
+            try {
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 15_000
+                connection.readTimeout = 15_000
+                connection.setRequestProperty("Accept", "application/vnd.github+json")
+                connection.setRequestProperty("User-Agent", "HealthConnectExport")
+                connection.connect()
+
+                if (connection.responseCode !in 200..299) {
+                    return null
+                }
+                val body = connection.inputStream.bufferedReader().use { readBounded(it) }
+                val release = releaseJson.decodeFromString<GitHubRelease>(body)
+                release.body.takeIf { it.isNotBlank() }
+            } finally {
+                connection.disconnect()
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Caps response body reads to 1 MB to avoid OOM on a misbehaving/gigantic
+     * response (mirrors the defensive read in WebhookRepository).
+     */
+    private fun readBounded(reader: java.io.Reader, maxBytes: Int = MAX_RESPONSE_BYTES): String {
+        val buffer = CharArray(8192)
+        val out = StringBuilder()
+        var total = 0
+        while (total < maxBytes) {
+            val read = reader.read(buffer)
+            if (read == -1) break
+            if (read == 0) continue
+            val room = maxBytes - total
+            out.append(buffer, 0, minOf(read, room))
+            total += minOf(read, room)
+            if (total >= maxBytes) break
+        }
+        return out.toString()
+    }
+}
+
+/**
+ * Subset of the GitHub API release payload used to read the release notes.
+ */
+@Serializable
+private data class GitHubRelease(val body: String = "")
+
+sealed class UpdateCheckState {
+    data object Idle : UpdateCheckState()
+    data object Checking : UpdateCheckState()
+    data object UpToDate : UpdateCheckState()
+    data class Available(
+        val latestVersion: String,
+        val downloadUrl: String,
+        val releaseNotes: String? = null,
+    ) : UpdateCheckState()
+    data class Error(val message: String) : UpdateCheckState()
 }

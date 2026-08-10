@@ -53,14 +53,22 @@ class ScheduleManager(
     /**
      * Schedules a periodic export based on the current configuration.
      * If frequency is MANUAL, cancels any existing schedule.
+     *
+     * @param showMessage Whether to surface a confirmation snackbar. Disabled
+     *   when called at app start ([ExportViewModel] init), so launching the app
+     *   does not pop up an unnecessary "Scheduled export set" message.
      */
-    fun scheduleExport(state: ExportUiState) {
+    fun scheduleExport(state: ExportUiState, showMessage: Boolean = true) {
         val config = buildConfig(state)
         DailyExportWorker.schedule(application, config)
         onStateUpdate {
             copy(
                 scheduleStatus = ScheduleStatus.Scheduled(str(R.string.next_run)),
-                message = str(R.string.schedule_set, config.frequency.displayName)
+                message = if (showMessage) {
+                    str(R.string.schedule_set, config.frequency.displayName)
+                } else {
+                    null
+                }
             )
         }
     }

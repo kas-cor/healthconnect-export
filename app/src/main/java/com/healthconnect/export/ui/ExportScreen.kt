@@ -1,31 +1,77 @@
 package com.healthconnect.export.ui
 
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.healthconnect.export.R
 import com.healthconnect.export.data.HealthDataType
@@ -36,20 +82,42 @@ import com.healthconnect.export.ui.components.DriveStatusCard
 import com.healthconnect.export.ui.components.ExportedFilesCard
 import com.healthconnect.export.ui.components.ExportSummaryCard
 import com.healthconnect.export.ui.components.JsonViewerDialog
+import com.healthconnect.export.ui.components.MaterialCard
+import com.healthconnect.export.ui.components.MaterialSectionHeader
+import com.healthconnect.export.ui.components.ReleaseNotesDialog
 import com.healthconnect.export.ui.components.ScheduleCard
 import com.healthconnect.export.ui.components.WebhookCard
 import com.healthconnect.export.viewmodel.ExportViewModel
+import com.healthconnect.export.viewmodel.UpdateCheckState
+import androidx.compose.material3.ExperimentalMaterial3Api
 import java.io.File
+
+private enum class ExportDestination(
+    val route: String,
+    val titleRes: Int,
+) {
+    EXPORT("export", R.string.nav_export),
+    HISTORY("history", R.string.nav_history),
+    INTEGRATIONS("integrations", R.string.nav_integrations),
+    SCHEDULE("schedule", R.string.nav_schedule),
+    SETTINGS("settings", R.string.nav_settings),
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExportScreen(
     viewModel: ExportViewModel,
     onSignInClick: () -> Unit,
-    onRequestHealthPermissions: (Set<String>) -> Unit
+    onRequestHealthPermissions: (Set<String>) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    var selectedRoute by rememberSaveable { mutableStateOf(ExportDestination.EXPORT.route) }
+    var selectedJsonFilePath by rememberSaveable { mutableStateOf<String?>(null) }
+    var showReleaseNotes by rememberSaveable { mutableStateOf(false) }
+    // Hoisted so the expanded History list stays expanded when switching tabs
+    var showAllHistoryFiles by rememberSaveable { mutableStateOf(false) }
+    val uriHandler = LocalUriHandler.current
 
     LaunchedEffect(uiState.message) {
         uiState.message?.let { message ->
@@ -59,357 +127,835 @@ fun ExportScreen(
     }
 
     LaunchedEffect(viewModel.pendingPermissions) {
-        viewModel.pendingPermissions?.let { permissions ->
-            onRequestHealthPermissions(permissions)
-        }
+        viewModel.pendingPermissions?.let(onRequestHealthPermissions)
     }
 
-    // Store file path (not File) to avoid stale references on recreate
-    var selectedJsonFilePath by remember { mutableStateOf<String?>(null) }
+    // Close the release-notes dialog if the update state changes (e.g. after a re-check)
+    LaunchedEffect(uiState.updateCheckState) {
+        if (uiState.updateCheckState !is UpdateCheckState.Available) {
+            showReleaseNotes = false
+        }
+    }
 
     selectedJsonFilePath?.let { path ->
         JsonViewerDialog(
             file = File(path),
-            onDismiss = { selectedJsonFilePath = null }
+            onDismiss = { selectedJsonFilePath = null },
         )
     }
+
+    if (showReleaseNotes) {
+        val available = uiState.updateCheckState as? UpdateCheckState.Available
+        if (available != null) {
+            ReleaseNotesDialog(
+                version = available.latestVersion,
+                releaseNotes = available.releaseNotes
+                    ?: stringResource(R.string.release_notes_unavailable),
+                onDownload = {
+                    uriHandler.openUri(available.downloadUrl)
+                    viewModel.resetUpdateCheck()
+                    showReleaseNotes = false
+                },
+                onDismiss = { showReleaseNotes = false },
+            )
+        }
+    }
+
+    val destination = ExportDestination.entries.firstOrNull { it.route == selectedRoute }
+        ?: ExportDestination.EXPORT
 
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.app_title)) },
+                title = {
+                    Text(
+                        text = stringResource(destination.titleRes),
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    containerColor = MaterialTheme.colorScheme.surface,
                 ),
                 actions = {
-                    // Locale selector
-                    var showLocaleMenu by remember { mutableStateOf(false) }
-                    val currentLocale = uiState.locale
-                    IconButton(onClick = { showLocaleMenu = true }) {
-                        Icon(
-                            imageVector = Icons.Default.Language,
-                            contentDescription = stringResource(R.string.locale_switch),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = showLocaleMenu,
-                        onDismissRequest = { showLocaleMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.locale_system)) },
-                            onClick = {
-                                showLocaleMenu = false
-                                viewModel.setLocale(null)
-                            },
-                            leadingIcon = if (currentLocale == null) {
-                                { Icon(Icons.Default.Check, contentDescription = null) }
-                            } else null
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.locale_en)) },
-                            onClick = {
-                                showLocaleMenu = false
-                                viewModel.setLocale("en")
-                            },
-                            leadingIcon = if (currentLocale == "en") {
-                                { Icon(Icons.Default.Check, contentDescription = null) }
-                            } else null
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.locale_ru)) },
-                            onClick = {
-                                showLocaleMenu = false
-                                viewModel.setLocale("ru")
-                            },
-                            leadingIcon = if (currentLocale == "ru") {
-                                { Icon(Icons.Default.Check, contentDescription = null) }
-                            } else null
-                        )
-                    }
-
-                    // Theme toggle
-                    val (themeIcon, themeDesc) = when {
-                        uiState.isDarkTheme == null -> Icons.Default.Settings to R.string.theme_follow_system
-                        uiState.isDarkTheme == true -> Icons.Default.DarkMode to R.string.theme_switch_dark
-                        else -> Icons.Default.LightMode to R.string.theme_switch_light
-                    }
-                    IconButton(onClick = {
-                        viewModel.setDarkTheme(
-                            if (uiState.isDarkTheme == null) true
-                            else if (uiState.isDarkTheme == true) false
-                            else null
-                        )
-                    }) {
-                        Icon(
-                            imageVector = themeIcon,
-                            contentDescription = stringResource(themeDesc),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
+                    UpdateCheckAction(
+                        state = uiState.updateCheckState,
+                        onCheck = viewModel::checkForUpdates,
+                        onShowReleaseNotes = { showReleaseNotes = true },
+                    )
+                },
+            )
+        },
+        bottomBar = {
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surface,
+                tonalElevation = 4.dp,
+            ) {
+                ExportDestination.entries.forEach { item ->
+                    val selected = item.route == destination.route
+                    NavigationBarItem(
+                        selected = selected,
+                        onClick = { selectedRoute = item.route },
+                        icon = {
+                            Icon(
+                                imageVector = destinationIcon(item),
+                                contentDescription = stringResource(item.titleRes),
+                                modifier = Modifier.size(24.dp),
+                            )
+                        },
+                        label = {
+                            Text(
+                                text = stringResource(item.titleRes),
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                            )
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
+                    )
                 }
+            }
+        },
+    ) { paddingValues ->
+        when (destination) {
+            ExportDestination.EXPORT -> ExportHomeContent(
+                uiState = uiState,
+                viewModel = viewModel,
+                modifier = Modifier.padding(paddingValues),
+            )
+            ExportDestination.HISTORY -> HistoryContent(
+                files = uiState.exportedFiles,
+                summary = uiState.exportSummary,
+                showAll = showAllHistoryFiles,
+                onShowAllChange = { showAllHistoryFiles = it },
+                onFileClick = { selectedJsonFilePath = it.absolutePath },
+                modifier = Modifier.padding(paddingValues),
+            )
+            ExportDestination.INTEGRATIONS -> IntegrationsContent(
+                uiState = uiState,
+                viewModel = viewModel,
+                onSignInClick = onSignInClick,
+                modifier = Modifier.padding(paddingValues),
+            )
+            ExportDestination.SCHEDULE -> ScheduleContent(
+                uiState = uiState,
+                viewModel = viewModel,
+                modifier = Modifier.padding(paddingValues),
+            )
+            ExportDestination.SETTINGS -> SettingsContent(
+                uiState = uiState,
+                viewModel = viewModel,
+                onShowReleaseNotes = { showReleaseNotes = true },
+                modifier = Modifier.padding(paddingValues),
             )
         }
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Drive Status Card
-            item {
-                DriveStatusCard(
-                    status = uiState.driveStatus,
-                    onSync = { viewModel.syncToDrive() },
-                    onSignInClick = onSignInClick,
-                    onSignOutClick = { viewModel.signOut() }
+    }
+}
+
+private fun destinationIcon(destination: ExportDestination) = when (destination) {
+    ExportDestination.EXPORT -> Icons.Default.FileUpload
+    ExportDestination.HISTORY -> Icons.Default.History
+    ExportDestination.INTEGRATIONS -> Icons.Default.Cloud
+    ExportDestination.SCHEDULE -> Icons.Default.Schedule
+    ExportDestination.SETTINGS -> Icons.Default.Settings
+}
+
+/**
+ * App bar action for the GitHub update check. Shows a small spinner while
+ * checking and a notification dot when a new version is available.
+ */
+@Composable
+private fun UpdateCheckAction(
+    state: UpdateCheckState,
+    onCheck: () -> Unit,
+    onShowReleaseNotes: () -> Unit,
+) {
+    when (state) {
+        is UpdateCheckState.Checking -> {
+            val checkingDescription = stringResource(R.string.checking_for_updates)
+            IconButton(onClick = onCheck, enabled = false) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .size(18.dp)
+                        .semantics { contentDescription = checkingDescription },
+                    strokeWidth = 2.dp,
                 )
             }
-
-            // Webhook Card
-            item {
-                WebhookCard(
-                    webhookUrl = uiState.webhookUrl,
-                    webhookUrlError = uiState.webhookUrlError,
-                    webhookAuthToken = uiState.webhookAuthToken,
-                    autoSendWebhook = uiState.autoSendWebhook,
-                    isTestingWebhook = uiState.isTestingWebhook,
-                    onUrlChange = { viewModel.setWebhookUrl(it) },
-                    onTokenChange = { viewModel.setWebhookAuthToken(it) },
-                    onToggle = { viewModel.setAutoSendWebhook(it) },
-                    onTestClick = { viewModel.testWebhook() },
-                    onCancelTestClick = { viewModel.cancelTestWebhook() }
-                )
-            }
-
-            // Schedule Settings
-            item {
-                ScheduleCard(
-                    frequency = uiState.frequency,
-                    scheduleStatus = uiState.scheduleStatus,
-                    onFrequencyChange = { viewModel.setFrequency(it) },
-                    onSchedule = { viewModel.scheduleExport() },
-                    onCancel = { viewModel.cancelSchedule() },
-                    autoSendWebhookEvery2Hours = uiState.autoSendWebhookEvery2Hours,
-                    webhookUrl = uiState.webhookUrl,
-                    onAutoSendEvery2HoursChange = { viewModel.setAutoSendWebhookEvery2Hours(it) }
-                )
-            }
-
-            // Data Type Selection
-            item {
-                DataTypeCard(
-                    selectedTypes = uiState.selectedTypes,
-                    onTypeToggle = { type ->
-                        val newTypes = if (uiState.selectedTypes.contains(type)) {
-                            uiState.selectedTypes - type
-                        } else {
-                            uiState.selectedTypes + type
-                        }
-                        viewModel.selectTypes(newTypes)
-                    },
-                    onSelectAll = { viewModel.selectTypes(HealthDataType.entries.toSet()) },
-                    onDeselectAll = { viewModel.selectTypes(emptySet()) }
-                )
-            }
-
-            // Data Source Selection
-            item {
-                DataSourceCard(
-                    availableSources = uiState.availableSources,
-                    selectedSourcePackage = uiState.selectedSourcePackage,
-                    sourcesLoading = uiState.sourcesLoading,
-                    onSourceSelected = { viewModel.setSourcePackage(it) },
-                    onRefresh = { viewModel.fetchAvailableSources() }
-                )
-            }
-
-            // Date Range Selection
-            item {
-                DateRangeCard(
-                    startDate = uiState.startDate,
-                    endDate = uiState.endDate,
-                    onPresetChange = { preset -> viewModel.setDateRange(preset) },
-                    onDateRangeChange = { start, end -> viewModel.setDateRange(start, end) },
-                    onStartDateChange = { viewModel.setDateRange(it, uiState.endDate) },
-                    onEndDateChange = { viewModel.setDateRange(uiState.startDate, it) }
-                )
-            }
-
-            // Auto-sync Drive checkbox
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = uiState.autoSyncDrive,
-                        onCheckedChange = { viewModel.setAutoSyncDrive(it) }
-                    )
-                    Text(stringResource(R.string.auto_sync_drive))
-                }
-            }
-
-            // Exported Files List
-            if (uiState.exportedFiles.isNotEmpty()) {
-                item(key = "exported_files_card") {
-                    ExportedFilesCard(
-                        files = uiState.exportedFiles,
-                        onFileClick = { selectedJsonFilePath = it.absolutePath }
-                    )
-                }
-            }
-
-            // Dashboard Summary
-            item(key = "dashboard_summary") {
-                AnimatedVisibility(
-                    visible = uiState.exportSummary != null,
-                    enter = expandVertically(animationSpec = tween(400)) + fadeIn(tween(400)),
-                    exit = shrinkVertically(animationSpec = tween(300)) + fadeOut(tween(300))
-                ) {
-                    uiState.exportSummary?.let { summary ->
-                        ExportSummaryCard(
-                            summary = summary,
-                            onDismiss = { viewModel.dismissSummary() }
-                        )
+        }
+        else -> {
+            val hasUpdate = state is UpdateCheckState.Available
+            BadgedBox(
+                badge = {
+                    if (hasUpdate) {
+                        Badge()
                     }
+                },
+            ) {
+                IconButton(
+                    onClick = {
+                        if (hasUpdate) {
+                            onShowReleaseNotes()
+                        } else {
+                            onCheck()
+                        }
+                    },
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SystemUpdate,
+                        contentDescription = stringResource(
+                            if (hasUpdate) {
+                                R.string.update_available_badge
+                            } else {
+                                R.string.check_for_updates
+                            }
+                        ),
+                    )
                 }
             }
+        }
+    }
+}
 
-            // Export Button with animated transitions
+@Composable
+private fun ExportHomeContent(
+    uiState: com.healthconnect.export.viewmodel.ExportUiState,
+    viewModel: ExportViewModel,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier
+            .padding(horizontal = 16.dp)
+            .padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        item {
+            DateRangeCard(
+                startDate = uiState.startDate,
+                endDate = uiState.endDate,
+                onPresetChange = viewModel::setDateRange,
+                onDateRangeChange = viewModel::setDateRange,
+                onStartDateChange = { viewModel.setDateRange(it, uiState.endDate) },
+                onEndDateChange = { viewModel.setDateRange(uiState.startDate, it) },
+            )
+        }
+        item {
+            DataTypeCard(
+                selectedTypes = uiState.selectedTypes,
+                onTypeToggle = { type ->
+                    val newTypes = if (type in uiState.selectedTypes) {
+                        uiState.selectedTypes - type
+                    } else {
+                        uiState.selectedTypes + type
+                    }
+                    viewModel.selectTypes(newTypes)
+                },
+                onSelectAll = { viewModel.selectTypes(HealthDataType.entries.toSet()) },
+                onDeselectAll = { viewModel.selectTypes(emptySet()) },
+            )
+        }
+        item {
+            DataSourceCard(
+                availableSources = uiState.availableSources,
+                selectedSourcePackage = uiState.selectedSourcePackage,
+                sourcesLoading = uiState.sourcesLoading,
+                onSourceSelected = viewModel::setSourcePackage,
+                onRefresh = viewModel::fetchAvailableSources,
+            )
+        }
+        item {
+            ExportActionButton(
+                isLoading = uiState.isLoading,
+                exportProgress = uiState.exportProgress,
+                progressPhase = uiState.progressPhase,
+                progressDate = uiState.progressDate,
+                progressCurrent = uiState.progressCurrent,
+                progressTotal = uiState.progressTotal,
+                selectedTypesCount = uiState.selectedTypes.size,
+                onExport = viewModel::exportNow,
+                onCancel = viewModel::cancelExportNow,
+            )
+        }
+        item {
+            AnimatedVisibility(
+                visible = uiState.exportSummary != null,
+                enter = expandVertically(tween(400)) + fadeIn(tween(400)),
+                exit = shrinkVertically(tween(300)) + fadeOut(tween(300)),
+            ) {
+                uiState.exportSummary?.let { summary ->
+                    ExportSummaryCard(summary = summary, onDismiss = viewModel::dismissSummary)
+                }
+            }
+        }
+        item { Spacer(modifier = Modifier.size(16.dp)) }
+    }
+}
+
+@Composable
+private fun HistoryContent(
+    files: List<File>,
+    summary: com.healthconnect.export.data.ExportSummary?,
+    showAll: Boolean,
+    onShowAllChange: (Boolean) -> Unit,
+    onFileClick: (File) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier
+            .padding(horizontal = 16.dp)
+            .padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        if (files.isEmpty()) {
+            item { EmptyHistoryCard() }
+        } else {
             item {
-                Button(
-                    onClick = { viewModel.exportNow() },
+                ExportedFilesCard(
+                    files = files,
+                    showAll = showAll,
+                    onShowAllChange = onShowAllChange,
+                    onFileClick = onFileClick,
+                )
+            }
+        }
+        if (summary != null) {
+            item { ExportSummaryCard(summary = summary, onDismiss = {}) }
+        }
+        item { Spacer(modifier = Modifier.size(16.dp)) }
+    }
+}
+
+@Composable
+private fun EmptyHistoryCard() {
+    MaterialCard {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(
+                imageVector = Icons.Default.Description,
+                contentDescription = null,
+                modifier = Modifier.size(56.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+            )
+            Spacer(modifier = Modifier.size(16.dp))
+            Text(
+                text = stringResource(R.string.history_empty_title),
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(modifier = Modifier.size(8.dp))
+            Text(
+                text = stringResource(R.string.history_empty_description),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Composable
+private fun IntegrationsContent(
+    uiState: com.healthconnect.export.viewmodel.ExportUiState,
+    viewModel: ExportViewModel,
+    onSignInClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier
+            .padding(horizontal = 16.dp)
+            .padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        item {
+            DriveStatusCard(
+                status = uiState.driveStatus,
+                onSync = viewModel::syncToDrive,
+                onSignInClick = onSignInClick,
+                onSignOutClick = viewModel::signOut,
+            )
+        }
+        item {
+            MaterialCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Save,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = stringResource(R.string.auto_sync_drive),
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    androidx.compose.material3.Switch(
+                        checked = uiState.autoSyncDrive,
+                        onCheckedChange = viewModel::setAutoSyncDrive,
+                    )
+                }
+            }
+        }
+        item {
+            WebhookCard(
+                webhookUrl = uiState.webhookUrl,
+                webhookUrlError = uiState.webhookUrlError,
+                webhookAuthToken = uiState.webhookAuthToken,
+                autoSendWebhook = uiState.autoSendWebhook,
+                isTestingWebhook = uiState.isTestingWebhook,
+                onUrlChange = viewModel::setWebhookUrl,
+                onTokenChange = viewModel::setWebhookAuthToken,
+                onToggle = viewModel::setAutoSendWebhook,
+                onTestClick = viewModel::testWebhook,
+                onCancelTestClick = viewModel::cancelTestWebhook,
+            )
+        }
+        item { Spacer(modifier = Modifier.size(16.dp)) }
+    }
+}
+
+@Composable
+private fun ScheduleContent(
+    uiState: com.healthconnect.export.viewmodel.ExportUiState,
+    viewModel: ExportViewModel,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier
+            .padding(horizontal = 16.dp)
+            .padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        item {
+            ScheduleCard(
+                frequency = uiState.frequency,
+                scheduleStatus = uiState.scheduleStatus,
+                onFrequencyChange = viewModel::setFrequency,
+                onSchedule = viewModel::scheduleExport,
+                onCancel = viewModel::cancelSchedule,
+                autoSendWebhookEvery2Hours = uiState.autoSendWebhookEvery2Hours,
+                webhookUrl = uiState.webhookUrl,
+                onAutoSendEvery2HoursChange = viewModel::setAutoSendWebhookEvery2Hours,
+            )
+        }
+        item { Spacer(modifier = Modifier.size(16.dp)) }
+    }
+}
+
+@Composable
+private fun SettingsContent(
+    uiState: com.healthconnect.export.viewmodel.ExportUiState,
+    viewModel: ExportViewModel,
+    onShowReleaseNotes: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier
+            .padding(horizontal = 16.dp)
+            .padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        item {
+            MaterialCard {
+                MaterialSectionHeader(
+                    icon = Icons.Default.Settings,
+                    title = stringResource(R.string.appearance),
+                )
+                Spacer(modifier = Modifier.size(8.dp))
+                SettingDropdown(
+                    label = stringResource(R.string.theme_label),
+                    selectedLabel = when (uiState.isDarkTheme) {
+                        null -> stringResource(R.string.theme_system)
+                        false -> stringResource(R.string.theme_light)
+                        true -> stringResource(R.string.theme_dark)
+                    },
+                    options = listOf(
+                        stringResource(R.string.theme_system) to { viewModel.setDarkTheme(null) },
+                        stringResource(R.string.theme_light) to { viewModel.setDarkTheme(false) },
+                        stringResource(R.string.theme_dark) to { viewModel.setDarkTheme(true) },
+                    ),
+                    icon = Icons.Default.Settings,
+                )
+            }
+        }
+        item {
+            MaterialCard {
+                MaterialSectionHeader(
+                    icon = Icons.Default.Language,
+                    title = stringResource(R.string.locale_switch),
+                )
+                Spacer(modifier = Modifier.size(8.dp))
+                SettingDropdown(
+                    label = stringResource(R.string.language_label),
+                    selectedLabel = when (uiState.locale) {
+                        "en" -> stringResource(R.string.locale_en)
+                        "ru" -> stringResource(R.string.locale_ru)
+                        else -> stringResource(R.string.locale_system)
+                    },
+                    options = listOf(
+                        stringResource(R.string.locale_system) to { viewModel.setLocale(null) },
+                        stringResource(R.string.locale_en) to { viewModel.setLocale("en") },
+                        stringResource(R.string.locale_ru) to { viewModel.setLocale("ru") },
+                    ),
+                    icon = Icons.Default.Language,
+                )
+            }
+        }
+        item {
+            MaterialCard {
+                MaterialSectionHeader(
+                    icon = Icons.Default.Cloud,
+                    title = stringResource(R.string.health_connect_access),
+                )
+                Spacer(modifier = Modifier.size(8.dp))
+                Text(
+                    text = stringResource(R.string.health_connect_access_limit),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        item {
+            AboutCard(
+                viewModel = viewModel,
+                onShowReleaseNotes = onShowReleaseNotes,
+            )
+        }
+        item { Spacer(modifier = Modifier.size(16.dp)) }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingDropdown(
+    label: String,
+    selectedLabel: String,
+    options: List<Pair<String, () -> Unit>>,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        TextButton(
+            onClick = { expanded = true },
+            modifier = Modifier
+                .menuAnchor(
+                    type = ExposedDropdownMenuAnchorType.PrimaryNotEditable,
+                    enabled = true,
+                )
+                .fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = selectedLabel,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            }
+        }
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            options.forEach { (optionLabel, onSelect) ->
+                DropdownMenuItem(
+                    text = { Text(optionLabel) },
+                    onClick = {
+                        onSelect()
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AboutCard(
+    viewModel: ExportViewModel,
+    onShowReleaseNotes: () -> Unit,
+) {
+    val uriHandler = LocalUriHandler.current
+    val repositoryUrl = stringResource(R.string.github_url)
+    val uiState by viewModel.uiState.collectAsState()
+    val updateState = uiState.updateCheckState
+
+    MaterialCard {
+        MaterialSectionHeader(
+            icon = Icons.Default.Description,
+            title = stringResource(R.string.about),
+        )
+        Spacer(modifier = Modifier.size(12.dp))
+        Text(
+            text = stringResource(R.string.app_name),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(modifier = Modifier.size(4.dp))
+        Text(
+            text = stringResource(R.string.version_format, com.healthconnect.export.BuildConfig.VERSION_NAME),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.size(4.dp))
+        Text(
+            text = stringResource(R.string.app_description),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.size(12.dp))
+        androidx.compose.material3.HorizontalDivider(
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+        )
+
+        // ── Update check (GitHub releases) ──
+        when (val state = updateState) {
+            is UpdateCheckState.Idle -> {
+                TextButton(
+                    onClick = viewModel::checkForUpdates,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = stringResource(R.string.check_for_updates),
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.Start,
+                    )
+                }
+            }
+            is UpdateCheckState.Checking -> {
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .animateContentSize(
-                            animationSpec = tween(durationMillis = 300)
-                        )
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    AnimatedContent(
-                        targetState = uiState.isLoading,
-                        transitionSpec = {
-                            if (targetState) {
-                                ContentTransform(
-                                    targetContentEnter = slideInVertically { it } + fadeIn(animationSpec = tween(300)),
-                                    initialContentExit = slideOutVertically { -it } + fadeOut(animationSpec = tween(200))
-                                )
-                            } else {
-                                ContentTransform(
-                                    targetContentEnter = slideInVertically { -it } + fadeIn(animationSpec = tween(300)),
-                                    initialContentExit = slideOutVertically { it } + fadeOut(animationSpec = tween(200))
-                                )
-                            }
-                        },
-                        label = "exportButtonState"
-                    ) { isLoading ->
-                        if (isLoading) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                AnimatedContent(
-                                    targetState = uiState.progressPhase,
-                                    transitionSpec = {
-                                        ContentTransform(
-                                            targetContentEnter = slideInVertically { it } + fadeIn(animationSpec = tween(250)),
-                                            initialContentExit = slideOutVertically { -it } + fadeOut(animationSpec = tween(200))
-                                        )
-                                    },
-                                    label = "exportProgressPhase"
-                                ) { phase ->
-                                    when (phase) {
-                                        "read" -> {
-                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                if (uiState.progressTotal > 0) {
-                                                    Text(
-                                                        stringResource(R.string.export_progress_reading, uiState.progressDate),
-                                                        style = MaterialTheme.typography.labelSmall
-                                                    )
-                                                    Spacer(modifier = Modifier.height(4.dp))
-                                                    LinearProgressIndicator(
-                                                        progress = { uiState.progressCurrent.toFloat() / uiState.progressTotal.toFloat() },
-                                                        modifier = Modifier.fillMaxWidth(),
-                                                    )
-                                                    Spacer(modifier = Modifier.height(2.dp))
-                                                    Text(
-                                                        "${uiState.progressCurrent}/${uiState.progressTotal}",
-                                                        style = MaterialTheme.typography.labelSmall
-                                                    )
-                                                } else {
-                                                    Text(
-                                                        stringResource(R.string.export_progress_page, uiState.progressDate, uiState.progressCurrent),
-                                                        style = MaterialTheme.typography.labelSmall
-                                                    )
-                                                    Spacer(modifier = Modifier.height(4.dp))
-                                                    LinearProgressIndicator(
-                                                        modifier = Modifier.fillMaxWidth()
-                                                    )
-                                                }
-                                            }
-                                        }
-                                        "save" -> {
-                                            val progress = if (uiState.progressTotal > 0)
-                                                uiState.progressCurrent.toFloat() / uiState.progressTotal.toFloat()
-                                            else 0f
-                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text(
-                                                    stringResource(R.string.export_progress_saving, uiState.progressDate),
-                                                    style = MaterialTheme.typography.labelSmall
-                                                )
-                                                Spacer(modifier = Modifier.height(4.dp))
-                                                LinearProgressIndicator(
-                                                    progress = { progress },
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                )
-                                                Spacer(modifier = Modifier.height(2.dp))
-                                                Text(
-                                                    "${uiState.progressCurrent}/${uiState.progressTotal}",
-                                                    style = MaterialTheme.typography.labelSmall
-                                                )
-                                            }
-                                        }
-                                        else -> {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                CircularProgressIndicator(
-                                                    modifier = Modifier.size(20.dp),
-                                                    color = MaterialTheme.colorScheme.onPrimary
-                                                )
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text(uiState.exportProgress)
-                                            }
-                                        }
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.Close,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(12.dp),
-                                        tint = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        stringResource(R.string.cancel_export),
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
-                                        )
-                                    )
-                                }
-                            }
-                        } else {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Save, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(stringResource(R.string.export_data_types, uiState.selectedTypes.size))
-                            }
-                        }
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = stringResource(R.string.checking_for_updates),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            is UpdateCheckState.UpToDate -> {
+                TextButton(
+                    onClick = viewModel::checkForUpdates,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = stringResource(R.string.up_to_date),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Start,
+                        )
                     }
                 }
             }
+            is UpdateCheckState.Available -> {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.update_available, state.latestVersion),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        onClick = {
+                            uriHandler.openUri(state.downloadUrl)
+                            viewModel.resetUpdateCheck()
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(stringResource(R.string.update_download))
+                    }
+                }
+                TextButton(
+                    onClick = onShowReleaseNotes,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Campaign,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = stringResource(R.string.whats_new),
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Start,
+                        )
+                    }
+                }
+            }
+            is UpdateCheckState.Error -> {
+                TextButton(
+                    onClick = viewModel::checkForUpdates,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = state.message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = stringResource(R.string.retry),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+        }
 
-            item { Spacer(modifier = Modifier.height(32.dp)) }
+        androidx.compose.material3.HorizontalDivider(
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+        )
+
+        // ── GitHub repository link ──
+        TextButton(
+            onClick = { uriHandler.openUri(repositoryUrl) },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_github),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = stringResource(R.string.github_repository),
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Start,
+                )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExportActionButton(
+    isLoading: Boolean,
+    exportProgress: String,
+    progressPhase: String,
+    progressDate: String,
+    progressCurrent: Int,
+    progressTotal: Int,
+    selectedTypesCount: Int,
+    onExport: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    Button(
+        onClick = if (isLoading) onCancel else onExport,
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(tween(300)),
+        enabled = isLoading || selectedTypesCount > 0,
+    ) {
+        if (!isLoading) {
+            Icon(Icons.Default.FileUpload, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(stringResource(R.string.export_data_types, selectedTypesCount))
+        } else {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(exportProgress)
+                }
+                if (progressPhase == "read" && progressTotal > 0) {
+                    Spacer(modifier = Modifier.size(4.dp))
+                    LinearProgressIndicator(
+                        progress = { progressCurrent.toFloat() / progressTotal.toFloat() },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        text = "$progressDate  $progressCurrent/$progressTotal",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.cancel_export),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f),
+                )
+            }
         }
     }
 }

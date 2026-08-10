@@ -40,20 +40,12 @@ fun ScheduleCard(
     webhookUrl: String = "",
     onAutoSendEvery2HoursChange: (Boolean) -> Unit = {}
 ) {
-    Card {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Schedule, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    stringResource(R.string.scheduled_export),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f)
-                )
-            }
+    MaterialCard {
+        Column {
+            MaterialSectionHeader(
+                icon = Icons.Default.Schedule,
+                title = stringResource(R.string.scheduled_export),
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
 

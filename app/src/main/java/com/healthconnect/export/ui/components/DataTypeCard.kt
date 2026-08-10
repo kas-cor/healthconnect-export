@@ -104,17 +104,17 @@ fun DataTypeCard(
         }
     }
 
-    Card {
-        Column(modifier = Modifier.padding(16.dp)) {
+    MaterialCard {
+        Column {
             // Header row
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    stringResource(R.string.data_types),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f)
+                MaterialSectionHeader(
+                    icon = Icons.Default.FitnessCenter,
+                    title = stringResource(R.string.data_types),
+                    modifier = Modifier.weight(1f),
                 )
                 Surface(
                     shape = MaterialTheme.shapes.small,
