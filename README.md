@@ -4,7 +4,8 @@
 [![Coverage](https://raw.githubusercontent.com/kas-cor/healthconnect-export/main/badges/coverage.svg)](https://github.com/kas-cor/healthconnect-export/actions/workflows/build-apk.yml)
 [![Branches](https://raw.githubusercontent.com/kas-cor/healthconnect-export/main/badges/branches.svg)](https://github.com/kas-cor/healthconnect-export/actions/workflows/build-apk.yml)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Kotlin](https://img.shields.io/badge/kotlin-2.3.21-purple)](https://kotlinlang.org)
+[![Kotlin](https://img.shields.io/badge/kotlin-2.4.10-purple)](https://kotlinlang.org)
+[![Release](https://img.shields.io/github/v/release/kas-cor/healthconnect-export)](https://github.com/kas-cor/healthconnect-export/releases)
 [![Русский](https://img.shields.io/badge/README-%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-blue)](README.ru.md)
 
 > Coverage badge auto-updates on every push to `main` via CI.
@@ -414,9 +415,9 @@ Create a PR on GitHub with your translation files. After merging:
 
 | Component | Version |
 |---|---|
-| Language | Kotlin 2.3.21 |
+| Language | Kotlin 2.4.10 |
 | UI | Jetpack Compose + Material3 (BOM 2026.05) |
-| Build | AGP 9.1.1 / Gradle 9.5.1 |
+| Build | AGP 9.3.1 / Gradle 9.6.1 |
 | Health Connect | `connect-client:1.1.0` |
 | Google Drive | `google-api-services-drive:v3-rev20240123`, `google-http-client-gson:2.1.0` |
 | Auth | `play-services-auth:21.6.0` |
