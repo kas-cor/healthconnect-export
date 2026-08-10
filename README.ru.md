@@ -5,6 +5,7 @@
 [![Branches](https://raw.githubusercontent.com/kas-cor/healthconnect-export/main/badges/branches.svg)](https://github.com/kas-cor/healthconnect-export/actions/workflows/build-apk.yml)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Kotlin](https://img.shields.io/badge/kotlin-2.4.10-purple)](https://kotlinlang.org)
+[![Версия](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-1.8-blue)](CHANGELOG.md)
 [![Release](https://img.shields.io/github/v/release/kas-cor/healthconnect-export)](https://github.com/kas-cor/healthconnect-export/releases)
 [![English](https://img.shields.io/badge/README-English-blue)](README.md)
 
