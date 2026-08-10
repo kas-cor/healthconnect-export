@@ -14,9 +14,9 @@ User selects health data types and a date range, then exports to JSON files (one
 
 | Component | Technology |
 |---|---|
-| Language | Kotlin 2.3.21 |
+| Language | Kotlin 2.4.10 |
 | UI | Jetpack Compose + Material3 (BOM 2026.05) |
-| Build | Gradle KTS + AGP 9.1.1 / Gradle 9.5.1 |
+| Build | Gradle KTS + AGP 9.3.1 / Gradle 9.6.1 |
 | Health API | `androidx.health.connect:connect-client:1.1.0` |
 | Google Drive | `google-api-services-drive:v3-rev20240123`, `google-http-client-gson:2.1.0` |
 | Auth | `play-services-auth:21.6.0` (OAuth 2.0) |
