@@ -2,8 +2,10 @@ package com.healthconnect.export.viewmodel
 
 import android.app.Application
 import android.content.Context
+import android.content.Intent
 import android.util.Log
 import androidx.activity.result.ActivityResult
+import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.healthconnect.export.BuildConfig
@@ -60,6 +62,9 @@ data class ExportUiState(
     val progressPhase: String = "",
     val isTestingWebhook: Boolean = false,
     val updateCheckState: UpdateCheckState = UpdateCheckState.Idle,
+    val exportFormat: ExportFormat = ExportFormat.JSON,
+    val scheduleHour: Int? = null,
+    val retentionDays: Int? = null,
 )
 
 sealed class DriveStatus {
@@ -118,6 +123,9 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
         private const val KEY_AUTO_SYNC_DRIVE = "auto_sync_drive"
         private const val KEY_LOCALE = "app_locale"
         private const val KEY_SOURCE_PACKAGE = "selected_source_package"
+        private const val KEY_EXPORT_FORMAT = "export_format"
+        private const val KEY_SCHEDULE_HOUR = "schedule_hour"
+        private const val KEY_RETENTION_DAYS = "retention_days"
     }
 
     // Helper to get localized strings from resources
@@ -132,6 +140,9 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
         webhookManager.loadSettings()
         loadLocale()
         loadSourcePreference()
+        loadExportFormat()
+        loadScheduleHour()
+        loadRetentionDays()
         driveManager.refreshDriveStatus()
         // Keep uiState.driveStatus in sync with DriveManager: the status is
         // updated asynchronously (e.g. after a silent sign-in at startup or
@@ -142,6 +153,9 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
         refreshLocalFiles()
+        // Apply the retention policy on start (if enabled) so old files are
+        // cleaned up even if no export happens for a while.
+        applyRetentionCleanup()
         // Re-schedule the periodic export without popping a confirmation
         // snackbar at every app start.
         scheduleManager.scheduleExport(_uiState.value, showMessage = false)
@@ -352,6 +366,157 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
         saveAutoSyncDrive(enabled)
     }
 
+    // ── Export format ────────────────────────────────────────────────────────
+
+    private fun loadExportFormat() {
+        val prefs = getApplication<Application>().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val name = prefs.getString(KEY_EXPORT_FORMAT, null)
+        val format = name?.let {
+            try {
+                ExportFormat.valueOf(it)
+            } catch (_: IllegalArgumentException) {
+                null
+            }
+        }
+        if (format != null) {
+            _uiState.update { it.copy(exportFormat = format) }
+        }
+    }
+
+    private fun saveExportFormat(format: ExportFormat) {
+        getApplication<Application>()
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_EXPORT_FORMAT, format.name)
+            .apply()
+    }
+
+    fun setExportFormat(format: ExportFormat) {
+        _uiState.update { it.copy(exportFormat = format) }
+        saveExportFormat(format)
+    }
+
+    // ── Schedule time of day ─────────────────────────────────────────────────
+
+    private fun loadScheduleHour() {
+        val prefs = getApplication<Application>().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (prefs.contains(KEY_SCHEDULE_HOUR)) {
+            _uiState.update { it.copy(scheduleHour = prefs.getInt(KEY_SCHEDULE_HOUR, -1).takeIf { h -> h in 0..23 }) }
+        }
+    }
+
+    private fun saveScheduleHour(hour: Int?) {
+        val prefs = getApplication<Application>().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (hour != null) {
+            prefs.edit().putInt(KEY_SCHEDULE_HOUR, hour).apply()
+        } else {
+            prefs.edit().remove(KEY_SCHEDULE_HOUR).apply()
+        }
+    }
+
+    fun setScheduleHour(hour: Int?) {
+        _uiState.update { it.copy(scheduleHour = hour) }
+        saveScheduleHour(hour)
+        // Apply the new time immediately if a schedule is already active
+        if (_uiState.value.frequency != ExportFrequency.MANUAL) {
+            scheduleManager.rescheduleExport(_uiState.value)
+        }
+    }
+
+    // ── Retention (auto-cleanup of old files) ───────────────────────────────
+
+    private fun loadRetentionDays() {
+        val prefs = getApplication<Application>().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (prefs.contains(KEY_RETENTION_DAYS)) {
+            _uiState.update { it.copy(retentionDays = prefs.getInt(KEY_RETENTION_DAYS, 0).takeIf { d -> d > 0 }) }
+        }
+    }
+
+    private fun saveRetentionDays(days: Int?) {
+        val prefs = getApplication<Application>().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (days != null) {
+            prefs.edit().putInt(KEY_RETENTION_DAYS, days).apply()
+        } else {
+            prefs.edit().remove(KEY_RETENTION_DAYS).apply()
+        }
+    }
+
+    fun setRetentionDays(days: Int?) {
+        _uiState.update { it.copy(retentionDays = days) }
+        saveRetentionDays(days)
+        applyRetentionCleanup()
+    }
+
+    /**
+     * Deletes exported files older than the retention period (if enabled)
+     * and refreshes the file list.
+     */
+    private fun applyRetentionCleanup() {
+        val days = _uiState.value.retentionDays ?: return
+        localRepo.cleanupOldExports(days, currentExportConfig())
+        refreshLocalFiles()
+    }
+
+    // ── File actions (share / delete) ───────────────────────────────────────
+
+    /**
+     * Shares an exported file via the Android share sheet (FileProvider URI).
+     */
+    fun shareExportFile(file: File) {
+        try {
+            val app = getApplication<Application>()
+            val uri = FileProvider.getUriForFile(app, "${app.packageName}.fileprovider", file)
+            val intent = Intent(Intent.ACTION_SEND)
+            intent.type = if (file.extension.equals("csv", ignoreCase = true)) "text/csv" else "application/json"
+            intent.putExtra(Intent.EXTRA_STREAM, uri)
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            val chooser = Intent.createChooser(intent, str(R.string.share_file))
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            app.startActivity(chooser)
+        } catch (e: Exception) {
+            _uiState.update { it.copy(message = str(R.string.share_file_error)) }
+        }
+    }
+
+    /**
+     * Deletes an exported file (both JSON and CSV variants for that day).
+     */
+    fun deleteExportFile(file: File) {
+        val dateStr = file.name
+            .removePrefix("health_")
+            .removeSuffix(".json")
+            .removeSuffix(".csv")
+        val date = try {
+            LocalDate.parse(dateStr)
+        } catch (e: Exception) {
+            null
+        }
+        if (date != null) {
+            localRepo.deleteExport(date, currentExportConfig())
+            refreshLocalFiles()
+            _uiState.update { it.copy(message = str(R.string.file_deleted, file.name)) }
+        }
+    }
+
+    /**
+     * Builds an [ExportConfig] snapshot from the current UI state.
+     */
+    private fun currentExportConfig(): ExportConfig {
+        val s = _uiState.value
+        return ExportConfig(
+            enabledTypes = s.selectedTypes,
+            frequency = s.frequency,
+            autoSyncDrive = s.autoSyncDrive,
+            webhookUrl = s.webhookUrl,
+            webhookAuthToken = s.webhookAuthToken,
+            autoSendWebhook = s.autoSendWebhook,
+            autoSendWebhookEvery2Hours = s.autoSendWebhookEvery2Hours,
+            selectedSourcePackage = s.selectedSourcePackage,
+            exportFormat = s.exportFormat,
+            scheduleHour = s.scheduleHour,
+        )
+    }
+
     fun setWebhookUrl(url: String) {
         webhookManager.setWebhookUrl(url)
     }
@@ -394,12 +559,7 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
 
                 exportUseCase.execute(
                     context = getApplication(),
-                    config = ExportConfig(
-                        enabledTypes = state.selectedTypes,
-                        frequency = state.frequency,
-                        autoSyncDrive = state.autoSyncDrive,
-                        selectedSourcePackage = state.selectedSourcePackage
-                    ),
+                    config = currentExportConfig(),
                     startDate = state.startDate,
                     endDate = state.endDate
                 ).collect { step ->
@@ -470,6 +630,8 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
                             // Refresh the full file list from disk so the UI shows all exported files,
                             // not just the ones from this export run
                             refreshLocalFiles()
+                            // Apply the retention policy after a successful export
+                            applyRetentionCleanup()
                             // Post-export: auto-sync to Drive
                             if (state.autoSyncDrive && driveManager.driveRepo.isSignedIn()) {
                                 syncToDrive(step.files)
@@ -574,12 +736,7 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun refreshLocalFiles() {
-        val config = ExportConfig(
-            enabledTypes = _uiState.value.selectedTypes,
-            frequency = _uiState.value.frequency,
-            autoSyncDrive = _uiState.value.autoSyncDrive
-        )
-        val files = localRepo.listExportedFiles(config).map { it.second }
+        val files = localRepo.listExportedFiles(currentExportConfig()).map { it.second }
         _uiState.update { it.copy(exportedFiles = files) }
     }
 

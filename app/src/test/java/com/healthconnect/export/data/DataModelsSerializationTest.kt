@@ -258,6 +258,35 @@ class DataModelsSerializationTest {
         assertFalse(config.autoSendWebhook)
         assertEquals("HealthConnectExport", config.outputDirectory)
         assertNull(config.selectedSourcePackage)
+        assertEquals(ExportFormat.JSON, config.exportFormat)
+        assertNull(config.scheduleHour)
+    }
+
+    @Test
+    fun `ExportConfig with exportFormat and scheduleHour roundtrips`() {
+        val types = setOf(HealthDataType.STEPS)
+        val original = ExportConfig(
+            enabledTypes = types,
+            frequency = ExportFrequency.DAILY,
+            autoSyncDrive = true,
+            exportFormat = ExportFormat.CSV,
+            scheduleHour = 7,
+        )
+
+        val jsonString = json.encodeToString(original)
+        val restored = json.decodeFromString<ExportConfig>(jsonString)
+
+        assertEquals(ExportFormat.CSV, restored.exportFormat)
+        assertEquals(7, restored.scheduleHour)
+    }
+
+    @Test
+    fun `ExportFormat enum values serialize and deserialize`() {
+        for (format in ExportFormat.entries) {
+            val jsonString = json.encodeToString(ExportFormat.serializer(), format)
+            val restored = json.decodeFromString<ExportFormat>(jsonString)
+            assertEquals(format, restored)
+        }
     }
 
     @Test

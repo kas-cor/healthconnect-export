@@ -28,6 +28,7 @@ ALLOWED_ENGLISH_IN_RU = {
     "Google",
     "Bearer",
     "JSON",
+    "CSV",
     "URL",
     "HTTP",
     "HTTPS",

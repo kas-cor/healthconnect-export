@@ -16,6 +16,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
 import java.time.LocalDate
+import java.time.LocalTime
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 
 /**
@@ -50,13 +52,24 @@ class DailyExportWorker(
                 KEY_CONFIG to json.encodeToString(config)
             )
 
-            val request = PeriodicWorkRequestBuilder<DailyExportWorker>(
+            val requestBuilder = PeriodicWorkRequestBuilder<DailyExportWorker>(
                 config.frequency.hours, TimeUnit.HOURS
             )
                 .setConstraints(constraints)
                 .setInputData(inputData)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.MINUTES)
-                .build()
+
+            // If a time of day is configured, delay the first run until the next
+            // occurrence of that hour (subsequent runs repeat every period).
+            config.scheduleHour?.let { hour ->
+                val now = LocalTime.now()
+                val target = LocalTime.of(hour.coerceIn(0, 23), 0)
+                var delayMinutes = ChronoUnit.MINUTES.between(now, target)
+                if (delayMinutes <= 0) delayMinutes += 24 * 60
+                requestBuilder.setInitialDelay(delayMinutes, TimeUnit.MINUTES)
+            }
+
+            val request = requestBuilder.build()
 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 WORK_NAME,

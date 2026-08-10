@@ -77,6 +77,33 @@
     <string name="exported_files_show_all">Show all files (%1$d)</string>
     <string name="exported_files_show_less">Show fewer</string>
 
+    <!-- File actions -->
+    <string name="share_file">Share file</string>
+    <string name="share_file_error">Unable to share the file</string>
+    <string name="file_deleted">%1$s deleted</string>
+    <string name="file_delete_title">Delete file?</string>
+    <string name="file_delete_message">Delete %1$s? This cannot be undone.</string>
+    <string name="file_delete_confirm">Delete</string>
+    <string name="file_delete_cancel">Cancel</string>
+
+    <!-- Export format -->
+    <string name="export_format_title">Export Format</string>
+    <string name="export_format_label">Format</string>
+    <string name="export_format_json">JSON</string>
+    <string name="export_format_csv">CSV</string>
+    <string name="export_format_csv_note">CSV includes daily totals and averages only; detailed records (sleep stages, exercises, nutrition) are available in JSON.</string>
+
+    <!-- Data retention -->
+    <string name="retention_title">Data Retention</string>
+    <string name="retention_enable">Auto-delete old files</string>
+    <string name="retention_days_label">Keep files for</string>
+    <string name="retention_days_format">%1$d days</string>
+    <string name="retention_hint">Files older than this period are removed automatically at app start and after each export.</string>
+
+    <!-- Schedule time of day -->
+    <string name="schedule_time_label">Export time</string>
+    <string name="schedule_time_default">Default</string>
+
     <!-- File sizes -->
     <string name="file_size_bytes">%d B</string>
     <string name="file_size_kb">%d KB</string>

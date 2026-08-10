@@ -33,6 +33,10 @@ Android app for exporting Google Health Connect data to JSON format with optiona
 - **Update check** — GitHub release check with notification dot in the app bar + "What's new" dialog
 - **Google Drive auto sign-in** — previous session restored silently at app start
 - **History management** — expandable "Show all files" list (any file opens), file count + total size header
+- **File actions** — share any exported file via the system share sheet, or delete it (with confirmation)
+- **Export format** — JSON or CSV (one row per day, RFC 4180 escaping)
+- **Auto-cleanup** — keep exported files for N days, older files are removed automatically
+- **Schedule time** — pick the hour of day for daily/weekly exports
 - **Manual + automatic** — export on demand or on schedule
 
 ## Architecture 🏗️
@@ -98,7 +102,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ## Testing 🧪
 
 ```bash
-# Run all unit tests (308 tests)
+# Run all unit tests (341 tests)
 ./gradlew testDebugUnitTest
 
 # Coverage report + gate check
@@ -106,23 +110,24 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 # Open: app/build/reports/jacoco/jacocoTestReport/html/index.html
 ```
 
-**Test suites (308 total):**
+**Test suites (341 total):**
 
 | File | Tests | Scope |
 |---|---|---|
+| `ExportViewModelTest` | 54 | ViewModel states: export, webhook, Drive sign-in, silent sign-in/restore, signed-out flag, update check, export format, schedule hour, retention, file actions |
 | `WebhookRepositoryTest` | 39 | sendRecords via local HTTP server (success/error/auth/special chars/JSON body) + URL validation |
-| `ExportViewModelTest` | 45 | ViewModel states: export, webhook, Drive sign-in, silent sign-in/restore, signed-out flag, update check |
-| `DataModelsSerializationTest` | 37 | Roundtrip serialization: DailyHealthRecord, ExportConfig, enums, SpeedData, sourceDisplayName |
+| `DataModelsSerializationTest` | 39 | Roundtrip serialization: DailyHealthRecord, ExportConfig (incl. format/hour), enums, SpeedData, sourceDisplayName |
+| `LocalExportRepositoryTest` | 31 | File operations: save (JSON/CSV), list, cleanup, delete both formats, filename format |
 | `HighlightJsonSyntaxTest` | 31 | JSON syntax highlighting: strings, numbers, booleans, null, nested objects, arrays, escaped quotes |
+| `DailyExportWorkerTest` | 30 | `doWork()` (success/already-exported/empty/exceptions) + `schedule()` (daily/weekly/manual/cancel, schedule hour) |
 | `HumanReadableMapperTest` | 27 | 8 mapper functions: bodyPosition, specimenSource, sleepStage, exerciseType, etc. |
-| `DailyExportWorkerTest` | 28 | `doWork()` (success/already-exported/empty/exceptions) + `schedule()` (daily/weekly/manual/cancel) |
-| `LocalExportRepositoryTest` | 24 | File operations: save, list, cleanup, isExported, filename format |
 | `GoogleDriveRepositoryTest` | 23 | Drive sync: upload, list, download, delete, scopes, special characters |
 | `Every2HoursWebhookWorkerTest` | 18 | doWork (happy path, blank URL, exceptions) + schedule/cancel |
 | `ExportDataUseCaseTest` | 16 | Export workflow: permissions, health check, progress, webhook, Drive sync |
+| `CsvMapperTest` | 13 | CSV flattening: header/row sync, RFC 4180 escaping, double formatting, missing sections |
 | `LocaleManagerTest` | 12 | localeDisplayName all branches, saveLocale/getSavedLocale |
 | `ExportedFilesCardTest` | 5 | visibleExportFiles slicing: collapse to newest N, showAll, ≤N files, empty list |
-| `DateRangeCardTest` | 3 | Compose UI tests (currently `@Ignore`d — require Robolectric setup) |
+| `DateRangeCardTest` | 3 | Compose UI tests: presets, custom dates, picker interaction |
 
 ## CI/CD 🚀
 
@@ -288,7 +293,7 @@ Each element in the `messages` array is a `DailyHealthRecord` — one per export
 
 - **Languages**: English (default), Russian
 - **Locale switching**: Via Settings tab → Language
-- **Coverage**: All 174 strings translated in `values-ru/strings.xml`
+- **Coverage**: All 193 strings translated in `values-ru/strings.xml`
 - **Format safety**: All `%d`, `%s`, `%.1f` placeholders match between locales
 - **Persistence**: Selected locale saved in SharedPreferences
 
@@ -314,7 +319,7 @@ Each element in the `messages` array is a `DailyHealthRecord` — one per export
 **Технические детали:**
 
 - Файл перевода: `app/src/main/res/values-ru/strings.xml`
-- Все **174 строки** переведены — ни одной пропущенной английской строки
+- Все **193 строки** переведены — ни одной пропущенной английской строки
 - Форматные плейсхолдеры (`%d`, `%s`, `%.1f`) полностью совпадают с английской версией — никаких crash'ей при переключении языка
 - Выбор языка сохраняется в `SharedPreferences` и восстанавливается после перезапуска
 - На здоровье не влияет — JSON-данные экспортируются с английскими ключами независимо от языка интерфейса
@@ -435,6 +440,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full release history.
 
 | Version | Date | Highlights |
 |---|---|---|
+| [v1.8](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.8) | 2026-08-10 | File actions in History (share/delete), JSON/CSV export format, auto-cleanup retention, schedule hour, 341 tests |
 | [v1.7](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.7) | 2026-08-10 | Update check + "What's new" dialog, tabbed navigation, Google Drive auto sign-in, History improvements |
 | [v1.6](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.6) | 2026-07-17 | Build script (`build.sh`), Russian README (`README.ru.md`), README sync validation |
 | [v1.5](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.5) | 2026-06-08 | Every-2-hours webhook worker, test webhook button, file sorting descending, dependency updates (Kotlin 2.3.21, Gradle 9.5.1) |

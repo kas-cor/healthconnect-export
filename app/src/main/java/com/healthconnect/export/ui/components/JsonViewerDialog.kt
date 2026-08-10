@@ -72,7 +72,12 @@ fun JsonViewerDialog(
     LaunchedEffect(file) {
         try {
             val content = file.readText()
-            prettyJson = JSONObject(content).toString(2)
+            // Non-JSON files (e.g. CSV exports) are shown as plain text
+            prettyJson = try {
+                JSONObject(content).toString(2)
+            } catch (e: Exception) {
+                content
+            }
         } catch (e: Exception) {
             error = openErrorMsg
         }

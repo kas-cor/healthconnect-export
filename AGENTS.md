@@ -42,7 +42,7 @@ MainActivity (ComponentActivity)
             ├─ WebhookManager             — webhook URL/token/send/test
             ├─ ScheduleManager            — schedule/cancel periodic exports
             ├─ HealthConnectRepository    — read Health Connect API (batch via TypeHandler)
-            ├─ LocalExportRepository      — save JSON to device
+            ├─ LocalExportRepository      — save JSON/CSV to device
             ├─ GoogleDriveRepository      — Google Drive API calls
             └─ WebhookRepository          — POST to webhook URL
        ├─ DailyExportWorker (WorkManager, daily/weekly)
@@ -53,6 +53,10 @@ MainActivity (ComponentActivity)
 
 - **TypeHandler pattern** (HealthConnectRepository): Each health data type is registered with a `TypeHandler` that knows its record class, time selector, extraction logic, and record updater. This enables data-type-agnostic batch processing — one API call per type for the entire period, grouped by day.
 - **Manager classes** (DriveManager, WebhookManager, ScheduleManager): Extracted from ExportViewModel to keep it focused on UI state orchestration. Each manager owns its state flow and persistence.
+- **Export format** (`ExportFormat` in ExportConfig): JSON or CSV; `CsvMapper` keeps header and row columns in sync from one definition. Saving a day removes the counterpart-format file.
+- **Retention**: `retentionDays` in settings — `cleanupOldExports()` runs at app start and after each export, deleting files older than the cutoff.
+- **Schedule time of day**: `scheduleHour` in ExportConfig; `DailyExportWorker.schedule()` sets an initial delay until the next occurrence of that hour; `ScheduleManager.rescheduleExport()` re-creates the work silently when the hour changes.
+- **File actions**: History rows share via `FileProvider` (`xml/file_paths.xml` mirrors `getExportDirectory()` paths) and delete with a confirmation dialog; `deleteExport()` removes both JSON and CSV variants of a day.
 - **Drive state flow**: `ExportViewModel` collects `driveManager.driveState` into `uiState.driveStatus`, so the connection status is correct immediately at launch (including after an async silent sign-in).
 - **Silent Drive sign-in**: `DriveManager.silentSignIn()` restores the previous Google session at app start without showing UI; a session-only `signedOutThisSession` flag prevents silent reconnection after an explicit sign-out.
 - **Update check**: HEAD request to the GitHub `releases/latest` URL, version parsed from the redirect `Location` header; release notes fetched from the GitHub API (`releases/latest`) for the "What's new" dialog.
@@ -69,7 +73,8 @@ healthconnect-export/
 │       ├── main/java/com/healthconnect/export/
 │       │   ├── MainActivity.kt
 │       │   ├── data/
-│       │   │   └── DataModels.kt       # DailyHealthRecord, ExportConfig, enums, mappers, KNOWN_SOURCE_PACKAGES
+│       │   │   ├── DataModels.kt       # DailyHealthRecord, ExportConfig, enums, mappers, KNOWN_SOURCE_PACKAGES
+│       │   │   └── CsvMapper.kt        # DailyHealthRecord → CSV row (RFC 4180 escaping)
 │       │   ├── usecase/
 │       │   │   └── ExportDataUseCase.kt # Export workflow (Flow<ExportStep>)
 │       │   ├── repository/
@@ -107,8 +112,8 @@ healthconnect-export/
 │       │       ├── DailyExportWorker.kt
 │       │       └── Every2HoursWebhookWorker.kt
 │       ├── main/res/
-│       │   ├── values/strings.xml              # English (174 strings)
-│       │   ├── values-ru/strings.xml           # Russian (174 strings, полный перевод)
+│       │   ├── values/strings.xml              # English (193 strings)
+│       │   ├── values-ru/strings.xml           # Russian (193 strings, полный перевод)
 │       │   ├── values/themes.xml
 │       │   ├── drawable/ic_github.xml          # GitHub logo for the About card
 │       │   └── xml/health_connect_permissions.xml
@@ -161,10 +166,11 @@ Every2HoursWebhookWorker (every 2h)
   → WebhookRepository (POST, no local save / no Drive)
 ```
 
-### JSON file format
+### File format
 
-- File name: `health_YYYY-MM-DD.json`
-- One file per day
+- **JSON** (default): file name `health_YYYY-MM-DD.json`, one per day
+- **CSV**: file name `health_YYYY-MM-DD.csv`, one row per day — daily totals/averages only (detailed records are JSON-only); RFC 4180 escaping via `CsvMapper`
+- Switching format removes the counterpart file for the same day
 - Location: app's external files directory (`HealthConnectExport/`)
 
 ### JSON payload example
@@ -192,23 +198,24 @@ Every2HoursWebhookWorker (every 2h)
 
 ## Unit tests
 
-**Test files (308 tests total):**
+**Test files (341 tests total):**
 
 | File | Tests | Scope |
 |---|---|---|
+| `ExportViewModelTest.kt` | 54 | UI state: loading, export, error, permissions, schedule, data sources, Drive sign-in, silent sign-in/restore, signed-out flag, webhook test, update check, export format, schedule hour, retention, file actions |
 | `WebhookRepositoryTest.kt` | 39 | `sendRecords()` via local HTTP server: success (200/201/204), error (400/403/500), network exception, Bearer auth (token/null/blank/special chars), headers, JSON body, errorstream null. `isValidWebhookUrl()` (19). |
-| `ExportViewModelTest.kt` | 45 | UI state: loading, export, error, permissions, schedule, data sources, Drive sign-in, silent sign-in/restore, signed-out flag, webhook test, update check (version parsing, redirects, release notes) |
-| `DataModelsSerializationTest.kt` | 37 | Roundtrip serialization: DailyHealthRecord (5), ExportConfig (4), ExportFrequency (4), HealthDataType (2), ExportSummary (3), helper functions (3), edge cases (4), SpeedData (5), SerialName verification, sourceDisplayName |
+| `DataModelsSerializationTest.kt` | 39 | Roundtrip serialization: DailyHealthRecord, ExportConfig (incl. ExportFormat/scheduleHour), ExportFrequency, HealthDataType, ExportSummary, SpeedData, SerialName verification, sourceDisplayName |
+| `LocalExportRepositoryTest.kt` | 31 | File operations: getExportDirectory, getFilenameForDate (JSON/CSV), isExported, saveDailyRecord (JSON/CSV, counterpart removal), saveRecords, listExportedFiles (both formats), cleanupOldExports, deleteExport (both variants) |
 | `HighlightJsonSyntaxTest.kt` | 31 | JSON syntax highlighting: strings, numbers (int/float/sci), booleans, null, nested objects, arrays, escaped quotes, adjacent tokens, realistic health record |
+| `DailyExportWorkerTest.kt` | 30 | `doWork()` (success, empty, exceptions, config defaults) / `schedule()` (daily, weekly, manual, cancel, scheduleHour initial delay) / webhook auth test |
 | `HumanReadableMapperTest.kt` | 27 | 8 mapper functions: bodyPositionToString, specimenSourceToString, mealTypeToString, sleepStageToString, measurementLocationToString, menstruationFlowToString, nutritionMealTypeToString, exerciseTypeToString |
-| `DailyExportWorkerTest.kt` | 28 | `doWork()` (14): success, already exported, empty, exceptions, config defaults / `schedule()` (4): daily, weekly, manual, cancel / webhook auth test |
-| `LocalExportRepositoryTest.kt` | 24 | File operations: getExportDirectory (3), getFilenameForDate (2), isExported (3), saveDailyRecord (3), saveRecords (2), listExportedFiles (6), cleanupOldExports (4), deleteExport (2) |
 | `GoogleDriveRepositoryTest.kt` | 23 | Google Drive sync: upload (success, delete exception, special chars), download, list (folder found/not found, error after folder), delete, sign in/out, scopes |
 | `Every2HoursWebhookWorkerTest.kt` | 18 | doWork (happy path, blank URL, exceptions), schedule/cancel, constants |
 | `ExportDataUseCaseTest.kt` | 16 | Export steps flow: permissions (granted/denied), health check (available/not available/installed), progress, webhook, Drive sync, complete |
+| `CsvMapperTest.kt` | 13 | CSV flattening: header/row sync, RFC 4180 escaping (commas/quotes/newlines), double formatting, empty cells, metadata, counts |
 | `LocaleManagerTest.kt` | 12 | localeDisplayName (all branches + edge cases), saveLocale, getSavedLocale |
 | `ExportedFilesCardTest.kt` | 5 | `visibleExportFiles()` slicing: collapse to newest N, showAll, ≤N files, exactly N, empty list |
-| `DateRangeCardTest.kt` | 3 | DateRangeCard Compose UI tests — currently `@Ignore`d (require Robolectric + Compose activity setup) |
+| `DateRangeCardTest.kt` | 3 | DateRangeCard Compose UI tests: presets, custom dates, picker interaction |
 
 **Run tests:**
 
@@ -340,8 +347,9 @@ Tag push (after build-release):
 ### Release process
 
 ```bash
-git tag v1.7
-git push origin v1.7
+git tag v1.8
+
+git push origin v1.8
 # CI: bump version → build → create GitHub Release
 ```
 
@@ -507,5 +515,5 @@ Works with both manual and scheduled exports.
 - **Languages**: English (default), Russian
 - **Locale switching**: Via Settings tab → Language → System / English / Russian
 - **Locale persistence**: Saved to SharedPreferences, Activity recreates on change
-- **Coverage**: 174 string resources in each locale, all format placeholders match
+- **Coverage**: 193 string resources in each locale, all format placeholders match
 - **Validation**: `scripts/locale-validator.py` checks for missing translations

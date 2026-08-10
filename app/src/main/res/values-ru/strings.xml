@@ -77,6 +77,33 @@
     <string name="exported_files_show_all">Показать все файлы (%1$d)</string>
     <string name="exported_files_show_less">Свернуть</string>
 
+    <!-- File actions -->
+    <string name="share_file">Поделиться файлом</string>
+    <string name="share_file_error">Не удалось поделиться файлом</string>
+    <string name="file_deleted">%1$s удалён</string>
+    <string name="file_delete_title">Удалить файл?</string>
+    <string name="file_delete_message">Удалить %1$s? Это действие нельзя отменить.</string>
+    <string name="file_delete_confirm">Удалить</string>
+    <string name="file_delete_cancel">Отмена</string>
+
+    <!-- Export format -->
+    <string name="export_format_title">Формат экспорта</string>
+    <string name="export_format_label">Формат</string>
+    <string name="export_format_json">JSON</string>
+    <string name="export_format_csv">CSV</string>
+    <string name="export_format_csv_note">CSV содержит только дневные суммы и средние значения; детальные записи (фазы сна, упражнения, питание) доступны в JSON.</string>
+
+    <!-- Data retention -->
+    <string name="retention_title">Хранение данных</string>
+    <string name="retention_enable">Автоудалять старые файлы</string>
+    <string name="retention_days_label">Хранить файлы</string>
+    <string name="retention_days_format">%1$d дней</string>
+    <string name="retention_hint">Файлы старше этого периода удаляются автоматически при запуске приложения и после каждого экспорта.</string>
+
+    <!-- Schedule time of day -->
+    <string name="schedule_time_label">Время экспорта</string>
+    <string name="schedule_time_default">По умолчанию</string>
+
     <!-- File sizes -->
     <string name="file_size_bytes">%d Б</string>
     <string name="file_size_kb">%d КБ</string>
