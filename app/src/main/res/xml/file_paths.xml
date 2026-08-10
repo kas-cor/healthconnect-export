@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Paths exposed via FileProvider for sharing exported files. -->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- External files dir: .../Android/data/<package>/files/HealthConnectExport -->
+    <external-files-path
+        name="exports"
+        path="HealthConnectExport/" />
+    <!-- Fallback app files dir (used when no external storage is available) -->
+    <files-path
+        name="exports_files"
+        path="HealthConnectExport/" />
+</paths>

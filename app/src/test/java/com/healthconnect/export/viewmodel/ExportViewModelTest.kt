@@ -45,6 +45,7 @@ import com.google.android.gms.tasks.OnCompleteListener
 import com.google.android.gms.tasks.OnFailureListener
 import com.google.android.gms.tasks.OnSuccessListener
 import com.google.android.gms.tasks.Task
+import com.healthconnect.export.R
 import com.healthconnect.export.data.*
 import com.healthconnect.export.repository.*
 import com.healthconnect.export.usecase.ExportDataUseCase
@@ -97,6 +98,7 @@ class ExportViewModelTest {
         mockPrefsEditor = mock()
         whenever(mockPrefsEditor.putString(any(), anyOrNull<String>())).thenReturn(mockPrefsEditor)
         whenever(mockPrefsEditor.putBoolean(any(), any())).thenReturn(mockPrefsEditor)
+        whenever(mockPrefsEditor.putInt(any(), any())).thenReturn(mockPrefsEditor)
         whenever(mockPrefsEditor.putStringSet(any(), anyOrNull())).thenReturn(mockPrefsEditor)
         whenever(mockPrefsEditor.remove(any())).thenReturn(mockPrefsEditor)
 
@@ -1199,6 +1201,96 @@ class ExportViewModelTest {
     ) {
         val headers = if (location != null) mapOf("Location" to location) else emptyMap()
         withHttpServer(responseCode = responseCode, body = "", headers = headers, block = block)
+    }
+
+    // =============================================
+    // Export format / schedule hour / retention / file actions
+    // =============================================
+
+    @Test
+    fun `setExportFormat updates state and persists`() {
+        viewModel.setExportFormat(ExportFormat.CSV)
+
+        assertEquals(ExportFormat.CSV, viewModel.uiState.value.exportFormat)
+        verify(mockPrefsEditor).putString("export_format", "CSV")
+    }
+
+    @Test
+    fun `setExportFormat persists JSON format`() {
+        viewModel.setExportFormat(ExportFormat.JSON)
+
+        assertEquals(ExportFormat.JSON, viewModel.uiState.value.exportFormat)
+        verify(mockPrefsEditor).putString("export_format", "JSON")
+    }
+
+    @Test
+    fun `setScheduleHour updates state persists and reschedules`() {
+        viewModel.setFrequency(ExportFrequency.DAILY)
+
+        viewModel.setScheduleHour(7)
+
+        assertEquals(7, viewModel.uiState.value.scheduleHour)
+        verify(mockPrefsEditor).putInt("schedule_hour", 7)
+    }
+
+    @Test
+    fun `setScheduleHour with null clears persisted hour`() {
+        viewModel.setScheduleHour(null)
+
+        assertNull(viewModel.uiState.value.scheduleHour)
+        verify(mockPrefsEditor).remove("schedule_hour")
+    }
+
+    @Test
+    fun `setRetentionDays updates state and persists`() {
+        viewModel.setRetentionDays(30)
+
+        assertEquals(30, viewModel.uiState.value.retentionDays)
+        verify(mockPrefsEditor).putInt("retention_days", 30)
+    }
+
+    @Test
+    fun `setRetentionDays with null disables cleanup`() {
+        viewModel.setRetentionDays(null)
+
+        assertNull(viewModel.uiState.value.retentionDays)
+        verify(mockPrefsEditor).remove("retention_days")
+    }
+
+    @Test
+    fun `deleteExportFile deletes file and refreshes list`() {
+        val file = File(tempDir, "health_2026-05-24.json")
+        file.writeText("{}")
+        whenever(mockLocalRepo.listExportedFiles(any())).thenReturn(emptyList())
+        whenever(mockApp.getString(any(), any())).thenReturn("Deleted ${file.name}")
+
+        viewModel.deleteExportFile(file)
+
+        verify(mockLocalRepo).deleteExport(eq(LocalDate.of(2026, 5, 24)), any())
+        verify(mockLocalRepo).listExportedFiles(any())
+        assertEquals("Deleted ${file.name}", viewModel.uiState.value.message)
+    }
+
+    @Test
+    fun `deleteExportFile with invalid filename does nothing`() {
+        val file = File(tempDir, "readme.json")
+        file.writeText("{}")
+
+        viewModel.deleteExportFile(file)
+
+        verify(mockLocalRepo, never()).deleteExport(any(), any())
+    }
+
+    @Test
+    fun `shareExportFile shows error message when share fails`() {
+        val file = File(tempDir, "health_2026-05-24.json")
+        file.writeText("{}")
+        // getUriForFile will throw because FileProvider is not configured on the mock app
+        whenever(mockApp.getString(R.string.share_file_error)).thenReturn("share error")
+
+        viewModel.shareExportFile(file)
+
+        assertEquals("share error", viewModel.uiState.value.message)
     }
 
     // =============================================

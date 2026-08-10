@@ -6,7 +6,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.test.core.app.ApplicationProvider
 import com.healthconnect.export.R
 import com.healthconnect.export.ui.components.DateRangeCard
-import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -16,7 +15,6 @@ import java.time.LocalDate
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
-@Ignore("Requires Robolectric + Compose activity setup — WIP from stash")
 class DateRangeCardTest {
 
     @get:Rule

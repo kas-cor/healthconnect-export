@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.8] — 2026-08-10
+
+### Added
+- **File actions in History:** every exported file can now be shared via the system share sheet (FileProvider) or deleted (with a confirmation dialog)
+- **Export format selection:** JSON or CSV output, switchable in Settings; CSV is a flat summary (one row per day) with RFC 4180 escaping; switching formats removes the counterpart file for the same day
+- **Auto-cleanup:** "Keep files for N days" retention setting in Settings — old exports are deleted on app start and after each export
+- **Schedule time of day:** pick the hour for daily/weekly exports (hour dropdown in the Schedule card); the first run is delayed until the next occurrence of that hour
+- **CSV mapper:** `CsvMapper` flattens `DailyHealthRecord` into a single CSV row with a fixed header, keeping header and row in sync
+- **Tests:** CSV mapper, repository CSV format, file actions, retention, schedule hour (13 new CsvMapperTest, +8 LocalExportRepositoryTest, +9 ExportViewModelTest, +2 DailyExportWorkerTest, +3 DataModelsSerializationTest); `DateRangeCardTest` re-enabled (3 Compose tests now run)
+
+### Changed
+- **File listing:** `listExportedFiles` includes both `.json` and `.csv`; `deleteExport` removes both variants of a day; `isExported`/`getFilenameForDate` honor the configured format
+- **Schedule:** `ScheduleManager.rescheduleExport` re-creates the periodic work silently when the hour changes
+
+### Fixed
+- **Locale validator:** `CSV` added to the allowlist of English abbreviations allowed in the Russian locale
+
+---
+
 ## [1.7] — 2026-08-10
 
 ### Added
@@ -185,6 +204,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[1.8]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.8
 [1.7]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.7
 [1.6]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.6
 [1.5.1]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.5.1

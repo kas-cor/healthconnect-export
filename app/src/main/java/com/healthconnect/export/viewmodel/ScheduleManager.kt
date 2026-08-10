@@ -40,7 +40,9 @@ class ScheduleManager(
         webhookAuthToken = state.webhookAuthToken,
         autoSendWebhook = state.autoSendWebhook,
         autoSendWebhookEvery2Hours = state.autoSendWebhookEvery2Hours,
-        selectedSourcePackage = state.selectedSourcePackage
+        selectedSourcePackage = state.selectedSourcePackage,
+        exportFormat = state.exportFormat,
+        scheduleHour = state.scheduleHour
     )
 
     /**
@@ -84,5 +86,15 @@ class ScheduleManager(
                 message = str(R.string.schedule_cancelled)
             )
         }
+    }
+
+    /**
+     * Cancels and re-creates the periodic export so that changes to the
+     * schedule (e.g. the time of day) take effect immediately. Silent — no
+     * confirmation snackbar.
+     */
+    fun rescheduleExport(state: ExportUiState) {
+        DailyExportWorker.cancel(application)
+        scheduleExport(state, showMessage = false)
     }
 }

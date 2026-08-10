@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -74,6 +75,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.healthconnect.export.R
+import com.healthconnect.export.data.ExportFormat
 import com.healthconnect.export.data.HealthDataType
 import com.healthconnect.export.ui.components.DataSourceCard
 import com.healthconnect.export.ui.components.DataTypeCard
@@ -233,6 +235,8 @@ fun ExportScreen(
                 showAll = showAllHistoryFiles,
                 onShowAllChange = { showAllHistoryFiles = it },
                 onFileClick = { selectedJsonFilePath = it.absolutePath },
+                onShareFile = viewModel::shareExportFile,
+                onDeleteFile = viewModel::deleteExportFile,
                 modifier = Modifier.padding(paddingValues),
             )
             ExportDestination.INTEGRATIONS -> IntegrationsContent(
@@ -401,6 +405,8 @@ private fun HistoryContent(
     showAll: Boolean,
     onShowAllChange: (Boolean) -> Unit,
     onFileClick: (File) -> Unit,
+    onShareFile: (File) -> Unit = {},
+    onDeleteFile: (File) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -418,6 +424,8 @@ private fun HistoryContent(
                     showAll = showAll,
                     onShowAllChange = onShowAllChange,
                     onFileClick = onFileClick,
+                    onShareFile = onShareFile,
+                    onDeleteFile = onDeleteFile,
                 )
             }
         }
@@ -540,6 +548,8 @@ private fun ScheduleContent(
                 autoSendWebhookEvery2Hours = uiState.autoSendWebhookEvery2Hours,
                 webhookUrl = uiState.webhookUrl,
                 onAutoSendEvery2HoursChange = viewModel::setAutoSendWebhookEvery2Hours,
+                scheduleHour = uiState.scheduleHour,
+                onScheduleHourChange = viewModel::setScheduleHour,
             )
         }
         item { Spacer(modifier = Modifier.size(16.dp)) }
@@ -608,6 +618,43 @@ private fun SettingsContent(
         item {
             MaterialCard {
                 MaterialSectionHeader(
+                    icon = Icons.Default.Save,
+                    title = stringResource(R.string.export_format_title),
+                )
+                Spacer(modifier = Modifier.size(8.dp))
+                SettingDropdown(
+                    label = stringResource(R.string.export_format_label),
+                    selectedLabel = when (uiState.exportFormat) {
+                        ExportFormat.JSON -> stringResource(R.string.export_format_json)
+                        ExportFormat.CSV -> stringResource(R.string.export_format_csv)
+                    },
+                    options = listOf(
+                        stringResource(R.string.export_format_json) to {
+                            viewModel.setExportFormat(ExportFormat.JSON)
+                        },
+                        stringResource(R.string.export_format_csv) to {
+                            viewModel.setExportFormat(ExportFormat.CSV)
+                        },
+                    ),
+                    icon = Icons.Default.Save,
+                )
+                Spacer(modifier = Modifier.size(8.dp))
+                Text(
+                    text = stringResource(R.string.export_format_csv_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        item {
+            RetentionCard(
+                retentionDays = uiState.retentionDays,
+                onRetentionDaysChange = viewModel::setRetentionDays,
+            )
+        }
+        item {
+            MaterialCard {
+                MaterialSectionHeader(
                     icon = Icons.Default.Cloud,
                     title = stringResource(R.string.health_connect_access),
                 )
@@ -626,6 +673,57 @@ private fun SettingsContent(
             )
         }
         item { Spacer(modifier = Modifier.size(16.dp)) }
+    }
+}
+
+@Composable
+private fun RetentionCard(
+    retentionDays: Int?,
+    onRetentionDaysChange: (Int?) -> Unit,
+) {
+    MaterialCard {
+        MaterialSectionHeader(
+            icon = Icons.Default.Delete,
+            title = stringResource(R.string.retention_title),
+        )
+        Spacer(modifier = Modifier.size(8.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                text = stringResource(R.string.retention_enable),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
+            androidx.compose.material3.Switch(
+                checked = retentionDays != null,
+                onCheckedChange = { enabled ->
+                    onRetentionDaysChange(if (enabled) 30 else null)
+                },
+            )
+        }
+        if (retentionDays != null) {
+            Spacer(modifier = Modifier.size(8.dp))
+            SettingDropdown(
+                label = stringResource(R.string.retention_days_label),
+                selectedLabel = stringResource(R.string.retention_days_format, retentionDays),
+                options = listOf(
+                    stringResource(R.string.retention_days_format, 7) to { onRetentionDaysChange(7) },
+                    stringResource(R.string.retention_days_format, 14) to { onRetentionDaysChange(14) },
+                    stringResource(R.string.retention_days_format, 30) to { onRetentionDaysChange(30) },
+                    stringResource(R.string.retention_days_format, 90) to { onRetentionDaysChange(90) },
+                ),
+                icon = Icons.Default.Delete,
+            )
+            Spacer(modifier = Modifier.size(4.dp))
+            Text(
+                text = stringResource(R.string.retention_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+        }
     }
 }
 

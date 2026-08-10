@@ -364,6 +364,36 @@ class DailyExportWorkerTest {
     }
 
     @Test
+    fun `schedule daily with scheduleHour does not throw`() {
+        val config = ExportConfig(
+            enabledTypes = setOf(HealthDataType.STEPS),
+            frequency = ExportFrequency.DAILY,
+            autoSyncDrive = false,
+            autoSendWebhook = false,
+            scheduleHour = 7
+        )
+
+        // Must not throw: sets an initial delay until the next occurrence of 07:00
+        DailyExportWorker.schedule(mockApp, config)
+
+        val liveData = DailyExportWorker.getStatus(mockApp)
+        assertNotNull(liveData)
+    }
+
+    @Test
+    fun `schedule weekly with scheduleHour does not throw`() {
+        val config = ExportConfig(
+            enabledTypes = setOf(HealthDataType.STEPS),
+            frequency = ExportFrequency.WEEKLY,
+            autoSyncDrive = false,
+            autoSendWebhook = false,
+            scheduleHour = 23
+        )
+
+        DailyExportWorker.schedule(mockApp, config)
+    }
+
+    @Test
     fun `schedule weekly enqueues periodic work with 168h interval`() {
         val config = ExportConfig(
             enabledTypes = setOf(HealthDataType.STEPS),

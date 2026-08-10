@@ -3,6 +3,7 @@ package com.healthconnect.export.repository
 import android.content.Context
 import com.healthconnect.export.data.DailyHealthRecord
 import com.healthconnect.export.data.ExportConfig
+import com.healthconnect.export.data.ExportFormat
 import com.healthconnect.export.data.ExportFrequency
 import com.healthconnect.export.data.ExportMetadata
 import com.healthconnect.export.data.HealthDataType
@@ -342,5 +343,105 @@ class LocalExportRepositoryTest {
     fun `deleteExport returns false when file does not exist`() {
         val result = repo.deleteExport(LocalDate.of(2026, 5, 24), testConfig)
         assertFalse(result)
+    }
+
+    // ============================
+    // CSV format
+    // ============================
+
+    private val csvConfig = testConfig.copy(exportFormat = ExportFormat.CSV)
+
+    @Test
+    fun `getFilenameForDate returns csv extension for CSV format`() {
+        assertEquals("health_2026-05-24.csv", repo.getFilenameForDate(LocalDate.of(2026, 5, 24), ExportFormat.CSV))
+        assertEquals("health_2026-05-24.json", repo.getFilenameForDate(LocalDate.of(2026, 5, 24), ExportFormat.JSON))
+    }
+
+    @Test
+    fun `saveDailyRecord writes CSV header and row for CSV config`() = runBlocking {
+        val record = DailyHealthRecord(
+            date = "2026-05-24",
+            steps = StepsData(totalSteps = 100, recordsCount = 1),
+            metadata = ExportMetadata("1.0", "2026-05-24T12:00:00", "Europe/Moscow", "test")
+        )
+
+        val file = repo.saveDailyRecord(record, csvConfig)
+
+        assertEquals("health_2026-05-24.csv", file.name)
+        val content = file.readText()
+        val lines = content.trim().split("\n")
+        assertEquals(2, lines.size)
+        assertTrue(lines[0].startsWith("date,steps_total,steps_records"))
+        assertTrue(lines[1].startsWith("2026-05-24,100,1"))
+    }
+
+    @Test
+    fun `saveDailyRecord removes counterpart file when switching format`() = runBlocking {
+        val record = DailyHealthRecord(
+            date = "2026-05-24",
+            steps = StepsData(totalSteps = 100, recordsCount = 1),
+            metadata = ExportMetadata("1.0", "2026-05-24T12:00:00", "Europe/Moscow", "test")
+        )
+        val dir = repo.getExportDirectory(testConfig)
+
+        repo.saveDailyRecord(record, testConfig)
+        assertTrue(File(dir, "health_2026-05-24.json").exists())
+
+        // Switch to CSV — the JSON counterpart must be removed
+        repo.saveDailyRecord(record, csvConfig)
+
+        assertTrue(File(dir, "health_2026-05-24.csv").exists())
+        assertFalse(File(dir, "health_2026-05-24.json").exists())
+    }
+
+    @Test
+    fun `isExported checks the configured format file`() {
+        val dir = repo.getExportDirectory(csvConfig)
+        File(dir, "health_2026-05-24.csv").writeText("date\n2026-05-24")
+
+        assertTrue(repo.isExported(LocalDate.of(2026, 5, 24), csvConfig))
+        assertFalse(repo.isExported(LocalDate.of(2026, 5, 24), testConfig))
+    }
+
+    @Test
+    fun `listExportedFiles lists both JSON and CSV files`() {
+        val dir = repo.getExportDirectory(testConfig)
+        File(dir, "health_2026-05-24.json").writeText("{}")
+        File(dir, "health_2026-05-25.csv").writeText("date\n2026-05-25")
+        File(dir, "notes.txt").writeText("hello")
+
+        val result = repo.listExportedFiles(testConfig)
+
+        assertEquals(2, result.size)
+        assertEquals(listOf("health_2026-05-24.json", "health_2026-05-25.csv"), result.map { it.second.name })
+    }
+
+    @Test
+    fun `cleanupOldExports deletes old CSV files too`() {
+        val today = LocalDate.now()
+        val dir = repo.getExportDirectory(testConfig)
+        File(dir, "health_${today.minusDays(30)}.csv").writeText("old")
+        File(dir, "health_${today.minusDays(14)}.json").writeText("old")
+        File(dir, "health_${today}.csv").writeText("current")
+
+        repo.cleanupOldExports(7, testConfig)
+
+        val remaining = repo.listExportedFiles(testConfig)
+        assertEquals(1, remaining.size)
+        assertEquals(today, remaining[0].first)
+    }
+
+    @Test
+    fun `deleteExport deletes both JSON and CSV variants for the date`() {
+        val date = LocalDate.of(2026, 5, 24)
+        val dir = repo.getExportDirectory(testConfig)
+        File(dir, "health_2026-05-24.json").writeText("{}")
+        File(dir, "health_2026-05-24.csv").writeText("date\n2026-05-24")
+
+        val result = repo.deleteExport(date, testConfig)
+
+        assertTrue(result)
+        assertFalse(File(dir, "health_2026-05-24.json").exists())
+        assertFalse(File(dir, "health_2026-05-24.csv").exists())
     }
 }

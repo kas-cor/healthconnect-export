@@ -204,6 +204,17 @@ enum class ExportFrequency(val displayName: String, val hours: Long) {
 }
 
 /**
+ * Output format for exported health data files.
+ */
+@Serializable
+enum class ExportFormat(
+    val displayName: String,
+) {
+    JSON("JSON"),
+    CSV("CSV"),
+}
+
+/**
  * Preset period selection for the export date range.
  *
  * When [LAST_7_DAYS] or [LAST_30_DAYS] is active, the actual start/end dates are
@@ -238,7 +249,9 @@ data class ExportConfig(
     val autoSendWebhook: Boolean = false,
     val autoSendWebhookEvery2Hours: Boolean = false,
     val outputDirectory: String = "HealthConnectExport",
-    val selectedSourcePackage: String? = null
+    val selectedSourcePackage: String? = null,
+    val exportFormat: ExportFormat = ExportFormat.JSON,
+    val scheduleHour: Int? = null
 )
 
 @Serializable
