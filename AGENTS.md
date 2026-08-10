@@ -2,11 +2,11 @@
 
 ## Overview
 
-**HealthConnect Export** — Android-приложение для экспорта данных Google Health Connect в JSON-формат с опциональной синхронизацией на Google Drive и отправкой на webhook. Полная локализация: английский и русский языки.
+**HealthConnect Export** — Android-приложение для экспорта данных Google Health Connect в JSON-формат с опциональной синхронизацией на Google Drive и отправкой на webhook. Полная локализация: английский и русский языки. UI организован в виде вкладок (Export / History / Integrations / Schedule / Settings); встроена проверка обновлений через GitHub Releases.
 
 ### Core scenario
 
-User selects health data types and a date range, then exports to JSON files (one per day). Files can be auto-synced to Google Drive and/or sent to a webhook URL. Scheduled daily/weekly exports via WorkManager. All UI strings use `stringResource()` and support EN/RU locale switching.
+User selects health data types and a date range, then exports to JSON files (one per day). Files can be auto-synced to Google Drive and/or sent to a webhook URL. Scheduled daily/weekly exports via WorkManager. The app silently restores a previous Google Drive session at start, checks GitHub Releases for updates (with a badge in the app bar and a "What's new" dialog), and lets the user open any exported file from History. All UI strings use `stringResource()` and support EN/RU locale switching.
 
 ---
 
@@ -35,7 +35,7 @@ User selects health data types and a date range, then exports to JSON files (one
 
 ```
 MainActivity (ComponentActivity)
-  └─ ExportScreen (Compose, LazyColumn)
+  └─ ExportScreen (Compose, bottom navigation tabs)
        └─ ExportViewModel (AndroidViewModel)
             ├─ ExportDataUseCase          — export workflow (Flow<ExportStep>)
             ├─ DriveManager               — Google Drive sign-in/sync/sign-out
@@ -53,6 +53,9 @@ MainActivity (ComponentActivity)
 
 - **TypeHandler pattern** (HealthConnectRepository): Each health data type is registered with a `TypeHandler` that knows its record class, time selector, extraction logic, and record updater. This enables data-type-agnostic batch processing — one API call per type for the entire period, grouped by day.
 - **Manager classes** (DriveManager, WebhookManager, ScheduleManager): Extracted from ExportViewModel to keep it focused on UI state orchestration. Each manager owns its state flow and persistence.
+- **Drive state flow**: `ExportViewModel` collects `driveManager.driveState` into `uiState.driveStatus`, so the connection status is correct immediately at launch (including after an async silent sign-in).
+- **Silent Drive sign-in**: `DriveManager.silentSignIn()` restores the previous Google session at app start without showing UI; a session-only `signedOutThisSession` flag prevents silent reconnection after an explicit sign-out.
+- **Update check**: HEAD request to the GitHub `releases/latest` URL, version parsed from the redirect `Location` header; release notes fetched from the GitHub API (`releases/latest`) for the "What's new" dialog.
 - **ExportDataUseCase**: Encapsulates the complete export workflow as a `Flow<ExportStep>`, making it testable and separable from ViewModel lifecycle.
 - **Separate UI components**: Each card (DriveStatus, Webhook, Schedule, DataType, DateRange, DataSource, ExportedFiles, ExportSummary) is in its own file under `ui/components/`.
 
@@ -84,7 +87,9 @@ healthconnect-export/
 │       │   ├── ui/
 │       │   │   ├── ExportScreen.kt
 │       │   │   ├── theme/
-│       │   │   │   └── AppTheme.kt
+│       │   │   │   ├── AppTheme.kt
+│       │   │   │   ├── Color.kt
+│       │   │   │   └── Type.kt
 │       │   │   └── components/
 │       │   │       ├── DataSourceCard.kt
 │       │   │       ├── DataTypeCard.kt
@@ -93,15 +98,19 @@ healthconnect-export/
 │       │   │       ├── ExportedFilesCard.kt
 │       │   │       ├── ExportSummaryCard.kt
 │       │   │       ├── JsonViewerDialog.kt
+│       │   │       ├── MaterialCard.kt
+│       │   │       ├── MaterialSection.kt
+│       │   │       ├── ReleaseNotesDialog.kt
 │       │   │       ├── ScheduleCard.kt
 │       │   │       └── WebhookCard.kt
 │       │   └── worker/
 │       │       ├── DailyExportWorker.kt
 │       │       └── Every2HoursWebhookWorker.kt
 │       ├── main/res/
-│       │   ├── values/strings.xml              # English (136 strings)
-│       │   ├── values-ru/strings.xml           # Russian (136 strings, полный перевод)
+│       │   ├── values/strings.xml              # English (174 strings)
+│       │   ├── values-ru/strings.xml           # Russian (174 strings, полный перевод)
 │       │   ├── values/themes.xml
+│       │   ├── drawable/ic_github.xml          # GitHub logo for the About card
 │       │   └── xml/health_connect_permissions.xml
 │       └── test/java/com/healthconnect/export/
 │           ├── data/
@@ -113,7 +122,9 @@ healthconnect-export/
 │           │   └── WebhookRepositoryTest.kt
 │           ├── ui/
 │           │   ├── DateRangeCardTest.kt
-│           │   └── HighlightJsonSyntaxTest.kt
+│           │   ├── HighlightJsonSyntaxTest.kt
+│           │   └── components/
+│           │       └── ExportedFilesCardTest.kt
 │           ├── usecase/
 │           │   └── ExportDataUseCaseTest.kt
 │           ├── util/
@@ -181,22 +192,23 @@ Every2HoursWebhookWorker (every 2h)
 
 ## Unit tests
 
-**Test files (323 tests total):**
+**Test files (308 tests total):**
 
 | File | Tests | Scope |
 |---|---|---|
 | `WebhookRepositoryTest.kt` | 39 | `sendRecords()` via local HTTP server: success (200/201/204), error (400/403/500), network exception, Bearer auth (token/null/blank/special chars), headers, JSON body, errorstream null. `isValidWebhookUrl()` (19). |
-| `DataModelsSerializationTest.kt` | 33 | Roundtrip serialization: DailyHealthRecord (5), ExportConfig (4), ExportFrequency (4), HealthDataType (2), ExportSummary (3), helper functions (3), edge cases (4), SpeedData (5), SerialName verification, sourceDisplayName |
+| `ExportViewModelTest.kt` | 45 | UI state: loading, export, error, permissions, schedule, data sources, Drive sign-in, silent sign-in/restore, signed-out flag, webhook test, update check (version parsing, redirects, release notes) |
+| `DataModelsSerializationTest.kt` | 37 | Roundtrip serialization: DailyHealthRecord (5), ExportConfig (4), ExportFrequency (4), HealthDataType (2), ExportSummary (3), helper functions (3), edge cases (4), SpeedData (5), SerialName verification, sourceDisplayName |
 | `HighlightJsonSyntaxTest.kt` | 31 | JSON syntax highlighting: strings, numbers (int/float/sci), booleans, null, nested objects, arrays, escaped quotes, adjacent tokens, realistic health record |
 | `HumanReadableMapperTest.kt` | 27 | 8 mapper functions: bodyPositionToString, specimenSourceToString, mealTypeToString, sleepStageToString, measurementLocationToString, menstruationFlowToString, nutritionMealTypeToString, exerciseTypeToString |
-| `DailyExportWorkerTest.kt` | 25 | `doWork()` (14): success, already exported, empty, exceptions, config defaults / `schedule()` (4): daily, weekly, manual, cancel / webhook auth test |
+| `DailyExportWorkerTest.kt` | 28 | `doWork()` (14): success, already exported, empty, exceptions, config defaults / `schedule()` (4): daily, weekly, manual, cancel / webhook auth test |
 | `LocalExportRepositoryTest.kt` | 24 | File operations: getExportDirectory (3), getFilenameForDate (2), isExported (3), saveDailyRecord (3), saveRecords (2), listExportedFiles (6), cleanupOldExports (4), deleteExport (2) |
 | `GoogleDriveRepositoryTest.kt` | 23 | Google Drive sync: upload (success, delete exception, special chars), download, list (folder found/not found, error after folder), delete, sign in/out, scopes |
 | `Every2HoursWebhookWorkerTest.kt` | 18 | doWork (happy path, blank URL, exceptions), schedule/cancel, constants |
-| `ExportDataUseCaseTest.kt` | 15 | Export steps flow: permissions (granted/denied), health check (available/not available/installed), progress, webhook, Drive sync, complete |
-| `ExportViewModelTest.kt` | 13 | UI state: loading, export, error, permissions, schedule, data sources, Drive sign-in, webhook test |
+| `ExportDataUseCaseTest.kt` | 16 | Export steps flow: permissions (granted/denied), health check (available/not available/installed), progress, webhook, Drive sync, complete |
 | `LocaleManagerTest.kt` | 12 | localeDisplayName (all branches + edge cases), saveLocale, getSavedLocale |
-| `DateRangeCardTest.kt` | 8 | DateRangeCard UI: presets, custom dates, picker interaction (Compose UI tests) |
+| `ExportedFilesCardTest.kt` | 5 | `visibleExportFiles()` slicing: collapse to newest N, showAll, ≤N files, exactly N, empty list |
+| `DateRangeCardTest.kt` | 3 | DateRangeCard Compose UI tests — currently `@Ignore`d (require Robolectric + Compose activity setup) |
 
 **Run tests:**
 
@@ -328,10 +340,19 @@ Tag push (after build-release):
 ### Release process
 
 ```bash
-git tag v1.2
-git push origin v1.2
+git tag v1.7
+git push origin v1.7
 # CI: bump version → build → create GitHub Release
 ```
+
+### Post-release documentation sync
+
+After every release, update **all** `*.md` files so docs stay in sync with the released version, **before** the next tag:
+
+- `CHANGELOG.md` — add the new version section (Keep a Changelog format) and the release link at the bottom
+- `README.md` and `README.ru.md` — new features, updated test/string counts, changelog table row
+- `AGENTS.md` — architecture, project structure, test/string counts
+- Run `scripts/locale-validator.py` (checks README section alignment + translation completeness) before pushing
 
 ### Artifacts
 
@@ -484,7 +505,7 @@ Works with both manual and scheduled exports.
 ## Localization
 
 - **Languages**: English (default), Russian
-- **Locale switching**: Via Language icon in app bar → System / English / Russian
+- **Locale switching**: Via Settings tab → Language → System / English / Russian
 - **Locale persistence**: Saved to SharedPreferences, Activity recreates on change
-- **Coverage**: 136 string resources in each locale, all format placeholders match
+- **Coverage**: 174 string resources in each locale, all format placeholders match
 - **Validation**: `scripts/locale-validator.py` checks for missing translations
