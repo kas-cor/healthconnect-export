@@ -14,7 +14,7 @@ android {
         applicationId = "com.healthconnect.export"
         minSdk = 28
         targetSdk = 37
-        versionCode = 11
+        versionCode = 12
         versionName = "1.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
