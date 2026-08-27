@@ -11,7 +11,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -47,7 +46,7 @@ fun ScheduleCard(
     webhookUrl: String = "",
     onAutoSendEvery2HoursChange: (Boolean) -> Unit = {},
     scheduleHour: Int? = null,
-    onScheduleHourChange: (Int?) -> Unit = {}
+    onScheduleHourChange: (Int?) -> Unit = {},
 ) {
     MaterialCard {
         Column {
@@ -61,11 +60,11 @@ fun ScheduleCard(
             ExportFrequency.entries.forEach { freq ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     RadioButton(
                         selected = frequency == freq,
-                        onClick = { onFrequencyChange(freq) }
+                        onClick = { onFrequencyChange(freq) },
                     )
                     Text(exportFrequencyDisplayName(freq))
                 }
@@ -77,16 +76,16 @@ fun ScheduleCard(
             if (frequency != ExportFrequency.MANUAL) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
                         text = stringResource(R.string.schedule_time_label),
                         style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                     ScheduleHourDropdown(
                         hour = scheduleHour,
-                        onHourChange = onScheduleHourChange
+                        onHourChange = onScheduleHourChange,
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -117,18 +116,22 @@ fun ScheduleCard(
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Checkbox(
                     checked = autoSendWebhookEvery2Hours,
                     onCheckedChange = { onAutoSendEvery2HoursChange(it) },
-                    enabled = webhookUrl.isNotBlank()
+                    enabled = webhookUrl.isNotBlank(),
                 )
                 Text(
-                    text = if (webhookUrl.isBlank()) stringResource(R.string.enter_url_first_every_2h)
-                           else stringResource(R.string.every_2_hours_webhook),
+                    text =
+                        if (webhookUrl.isBlank()) {
+                            stringResource(R.string.enter_url_first_every_2h)
+                        } else {
+                            stringResource(R.string.every_2_hours_webhook)
+                        },
                     style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 )
             }
         }
@@ -136,11 +139,12 @@ fun ScheduleCard(
 }
 
 @Composable
-fun exportFrequencyDisplayName(freq: ExportFrequency): String = when (freq) {
-    ExportFrequency.MANUAL -> stringResource(R.string.freq_manual)
-    ExportFrequency.DAILY -> stringResource(R.string.freq_daily)
-    ExportFrequency.WEEKLY -> stringResource(R.string.freq_weekly)
-}
+fun exportFrequencyDisplayName(freq: ExportFrequency): String =
+    when (freq) {
+        ExportFrequency.MANUAL -> stringResource(R.string.freq_manual)
+        ExportFrequency.DAILY -> stringResource(R.string.freq_daily)
+        ExportFrequency.WEEKLY -> stringResource(R.string.freq_weekly)
+    }
 
 /**
  * Dropdown for picking the hour of day at which the periodic export runs.
@@ -149,7 +153,7 @@ fun exportFrequencyDisplayName(freq: ExportFrequency): String = when (freq) {
 @Composable
 private fun ScheduleHourDropdown(
     hour: Int?,
-    onHourChange: (Int?) -> Unit
+    onHourChange: (Int?) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val defaultLabel = stringResource(R.string.schedule_time_default)
@@ -158,23 +162,23 @@ private fun ScheduleHourDropdown(
         TextButton(onClick = { expanded = true }) {
             Text(
                 text = hour?.let { "%02d:00".format(it) } ?: defaultLabel,
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.bodyMedium,
             )
             Icon(
                 imageVector = Icons.Default.ArrowDropDown,
-                contentDescription = null
+                contentDescription = null,
             )
         }
         DropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false }
+            onDismissRequest = { expanded = false },
         ) {
             DropdownMenuItem(
                 text = { Text(defaultLabel) },
                 onClick = {
                     expanded = false
                     onHourChange(null)
-                }
+                },
             )
             (0..23).forEach { h ->
                 val label = "%02d:00".format(h)
@@ -183,7 +187,7 @@ private fun ScheduleHourDropdown(
                     onClick = {
                         expanded = false
                         onHourChange(h)
-                    }
+                    },
                 )
             }
         }

@@ -11,34 +11,38 @@ import com.healthconnect.export.data.StepsData
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.junit.After
-import org.junit.Assert.*
 import org.junit.Before
+import org.junit.Assert.*
 import org.junit.Test
+import org.mockito.kotlin.*
 import org.junit.runner.RunWith
 import org.mockito.Mock
 import org.mockito.junit.MockitoJUnitRunner
-import org.mockito.kotlin.*
 import java.io.File
 import java.time.LocalDate
 import kotlin.io.path.createTempDirectory
 
 @RunWith(MockitoJUnitRunner.Silent::class)
 class LocalExportRepositoryTest {
-
     @Mock
     private lateinit var mockContext: Context
 
     private lateinit var repo: LocalExportRepository
     private lateinit var tempDir: File
     private lateinit var filesDir: File
-    private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
+    private val json =
+        Json {
+            prettyPrint = true
+            ignoreUnknownKeys = true
+        }
 
-    private val testConfig = ExportConfig(
-        enabledTypes = setOf(HealthDataType.STEPS),
-        frequency = ExportFrequency.DAILY,
-        autoSyncDrive = false,
-        outputDirectory = "HealthConnectExport"
-    )
+    private val testConfig =
+        ExportConfig(
+            enabledTypes = setOf(HealthDataType.STEPS),
+            frequency = ExportFrequency.DAILY,
+            autoSyncDrive = false,
+            outputDirectory = "HealthConnectExport",
+        )
 
     @Before
     fun setup() {
@@ -136,73 +140,84 @@ class LocalExportRepositoryTest {
     // ============================
 
     @Test
-    fun `saveDailyRecord writes valid JSON file`() = runBlocking {
-        val record = DailyHealthRecord(
-            date = "2026-05-24",
-            steps = StepsData(totalSteps = 12345, recordsCount = 480),
-            metadata = ExportMetadata("1.0", "2026-05-24T12:00:00", "Europe/Moscow", "test")
-        )
+    fun `saveDailyRecord writes valid JSON file`() =
+        runBlocking {
+            val record =
+                DailyHealthRecord(
+                    date = "2026-05-24",
+                    steps = StepsData(totalSteps = 12345, recordsCount = 480),
+                    metadata = ExportMetadata("1.0", "2026-05-24T12:00:00", "Europe/Moscow", "test"),
+                )
 
-        val file = repo.saveDailyRecord(record, testConfig)
+            val file = repo.saveDailyRecord(record, testConfig)
 
-        assertTrue(file.exists())
-        assertTrue(file.length() > 0)
-        val content = file.readText()
-        assertTrue(content.contains("12345"))
-        assertTrue(content.contains("2026-05-24"))
-    }
-
-    @Test
-    fun `saveDailyRecord file path matches formatted date`() = runBlocking {
-        val record = DailyHealthRecord(
-            date = "2026-05-24",
-            metadata = ExportMetadata("1.0", "2026-05-24T12:00:00", "Europe/Moscow", "test")
-        )
-
-        val file = repo.saveDailyRecord(record, testConfig)
-
-        assertEquals("health_2026-05-24.json", file.name)
-    }
+            assertTrue(file.exists())
+            assertTrue(file.length() > 0)
+            val content = file.readText()
+            assertTrue(content.contains("12345"))
+            assertTrue(content.contains("2026-05-24"))
+        }
 
     @Test
-    fun `saveDailyRecord writes parseable JSON`() = runBlocking {
-        val record = DailyHealthRecord(
-            date = "2026-05-24",
-            steps = StepsData(totalSteps = 100, recordsCount = 1),
-            metadata = ExportMetadata("1.0", "2026-05-24T12:00:00", "Europe/Moscow", "test")
-        )
+    fun `saveDailyRecord file path matches formatted date`() =
+        runBlocking {
+            val record =
+                DailyHealthRecord(
+                    date = "2026-05-24",
+                    metadata = ExportMetadata("1.0", "2026-05-24T12:00:00", "Europe/Moscow", "test"),
+                )
 
-        val file = repo.saveDailyRecord(record, testConfig)
-        val parsed = json.decodeFromString<DailyHealthRecord>(file.readText())
-        assertEquals("2026-05-24", parsed.date)
-        assertEquals(100L, parsed.steps?.totalSteps)
-    }
+            val file = repo.saveDailyRecord(record, testConfig)
+
+            assertEquals("health_2026-05-24.json", file.name)
+        }
+
+    @Test
+    fun `saveDailyRecord writes parseable JSON`() =
+        runBlocking {
+            val record =
+                DailyHealthRecord(
+                    date = "2026-05-24",
+                    steps = StepsData(totalSteps = 100, recordsCount = 1),
+                    metadata = ExportMetadata("1.0", "2026-05-24T12:00:00", "Europe/Moscow", "test"),
+                )
+
+            val file = repo.saveDailyRecord(record, testConfig)
+            val parsed = json.decodeFromString<DailyHealthRecord>(file.readText())
+            assertEquals("2026-05-24", parsed.date)
+            assertEquals(100L, parsed.steps?.totalSteps)
+        }
 
     // ============================
     // saveRecords
     // ============================
 
     @Test
-    fun `saveRecords saves multiple records`() = runBlocking {
-        val records = listOf(
-            DailyHealthRecord("2026-05-24", metadata = ExportMetadata("1.0", "", "UTC", "")),
-            DailyHealthRecord("2026-05-25", metadata = ExportMetadata("1.0", "", "UTC", "")),
-            DailyHealthRecord("2026-05-26", metadata = ExportMetadata("1.0", "", "UTC", ""))
-        )
+    fun `saveRecords saves multiple records`() =
+        runBlocking {
+            val records =
+                listOf(
+                    DailyHealthRecord("2026-05-24", metadata = ExportMetadata("1.0", "", "UTC", "")),
+                    DailyHealthRecord("2026-05-25", metadata = ExportMetadata("1.0", "", "UTC", "")),
+                    DailyHealthRecord("2026-05-26", metadata = ExportMetadata("1.0", "", "UTC", "")),
+                )
 
-        val files = repo.saveRecords(records, testConfig)
+            val files = repo.saveRecords(records, testConfig)
 
-        assertEquals(3, files.size)
-        files.forEach { assertTrue(it.exists()) }
-        assertEquals(listOf("health_2026-05-24.json", "health_2026-05-25.json", "health_2026-05-26.json"),
-            files.map { it.name }.sorted())
-    }
+            assertEquals(3, files.size)
+            files.forEach { assertTrue(it.exists()) }
+            assertEquals(
+                listOf("health_2026-05-24.json", "health_2026-05-25.json", "health_2026-05-26.json"),
+                files.map { it.name }.sorted(),
+            )
+        }
 
     @Test
-    fun `saveRecords empty list returns empty list`() = runBlocking {
-        val files = repo.saveRecords(emptyList(), testConfig)
-        assertTrue(files.isEmpty())
-    }
+    fun `saveRecords empty list returns empty list`() =
+        runBlocking {
+            val files = repo.saveRecords(emptyList(), testConfig)
+            assertTrue(files.isEmpty())
+        }
 
     // ============================
     // listExportedFiles
@@ -231,8 +246,8 @@ class LocalExportRepositoryTest {
     @Test
     fun `listExportedFiles skips files with invalid date names`() {
         val dir = repo.getExportDirectory(testConfig)
-        File(dir, "health_2026-13-01.json").writeText("{}")  // invalid month
-        File(dir, "readme.json").writeText("{}")               // no date prefix
+        File(dir, "health_2026-13-01.json").writeText("{}") // invalid month
+        File(dir, "readme.json").writeText("{}") // no date prefix
 
         val result = repo.listExportedFiles(testConfig)
         assertTrue(result.isEmpty())
@@ -275,7 +290,7 @@ class LocalExportRepositoryTest {
         File(dir, "health_${today.minusDays(30)}.json").writeText("old")
         File(dir, "health_${today.minusDays(14)}.json").writeText("old")
         File(dir, "health_${today.minusDays(2)}.json").writeText("current")
-        File(dir, "health_${today}.json").writeText("current")
+        File(dir, "health_$today.json").writeText("current")
 
         repo.cleanupOldExports(7, testConfig)
 
@@ -358,41 +373,45 @@ class LocalExportRepositoryTest {
     }
 
     @Test
-    fun `saveDailyRecord writes CSV header and row for CSV config`() = runBlocking {
-        val record = DailyHealthRecord(
-            date = "2026-05-24",
-            steps = StepsData(totalSteps = 100, recordsCount = 1),
-            metadata = ExportMetadata("1.0", "2026-05-24T12:00:00", "Europe/Moscow", "test")
-        )
+    fun `saveDailyRecord writes CSV header and row for CSV config`() =
+        runBlocking {
+            val record =
+                DailyHealthRecord(
+                    date = "2026-05-24",
+                    steps = StepsData(totalSteps = 100, recordsCount = 1),
+                    metadata = ExportMetadata("1.0", "2026-05-24T12:00:00", "Europe/Moscow", "test"),
+                )
 
-        val file = repo.saveDailyRecord(record, csvConfig)
+            val file = repo.saveDailyRecord(record, csvConfig)
 
-        assertEquals("health_2026-05-24.csv", file.name)
-        val content = file.readText()
-        val lines = content.trim().split("\n")
-        assertEquals(2, lines.size)
-        assertTrue(lines[0].startsWith("date,steps_total,steps_records"))
-        assertTrue(lines[1].startsWith("2026-05-24,100,1"))
-    }
+            assertEquals("health_2026-05-24.csv", file.name)
+            val content = file.readText()
+            val lines = content.trim().split("\n")
+            assertEquals(2, lines.size)
+            assertTrue(lines[0].startsWith("date,steps_total,steps_records"))
+            assertTrue(lines[1].startsWith("2026-05-24,100,1"))
+        }
 
     @Test
-    fun `saveDailyRecord removes counterpart file when switching format`() = runBlocking {
-        val record = DailyHealthRecord(
-            date = "2026-05-24",
-            steps = StepsData(totalSteps = 100, recordsCount = 1),
-            metadata = ExportMetadata("1.0", "2026-05-24T12:00:00", "Europe/Moscow", "test")
-        )
-        val dir = repo.getExportDirectory(testConfig)
+    fun `saveDailyRecord removes counterpart file when switching format`() =
+        runBlocking {
+            val record =
+                DailyHealthRecord(
+                    date = "2026-05-24",
+                    steps = StepsData(totalSteps = 100, recordsCount = 1),
+                    metadata = ExportMetadata("1.0", "2026-05-24T12:00:00", "Europe/Moscow", "test"),
+                )
+            val dir = repo.getExportDirectory(testConfig)
 
-        repo.saveDailyRecord(record, testConfig)
-        assertTrue(File(dir, "health_2026-05-24.json").exists())
+            repo.saveDailyRecord(record, testConfig)
+            assertTrue(File(dir, "health_2026-05-24.json").exists())
 
-        // Switch to CSV — the JSON counterpart must be removed
-        repo.saveDailyRecord(record, csvConfig)
+            // Switch to CSV — the JSON counterpart must be removed
+            repo.saveDailyRecord(record, csvConfig)
 
-        assertTrue(File(dir, "health_2026-05-24.csv").exists())
-        assertFalse(File(dir, "health_2026-05-24.json").exists())
-    }
+            assertTrue(File(dir, "health_2026-05-24.csv").exists())
+            assertFalse(File(dir, "health_2026-05-24.json").exists())
+        }
 
     @Test
     fun `isExported checks the configured format file`() {
@@ -422,7 +441,7 @@ class LocalExportRepositoryTest {
         val dir = repo.getExportDirectory(testConfig)
         File(dir, "health_${today.minusDays(30)}.csv").writeText("old")
         File(dir, "health_${today.minusDays(14)}.json").writeText("old")
-        File(dir, "health_${today}.csv").writeText("current")
+        File(dir, "health_$today.csv").writeText("current")
 
         repo.cleanupOldExports(7, testConfig)
 

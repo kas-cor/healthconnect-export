@@ -8,7 +8,6 @@ import java.io.File
 import kotlin.io.path.createTempDirectory
 
 class ExportedFilesCardTest {
-
     private val tempDirs = mutableListOf<File>()
 
     @After

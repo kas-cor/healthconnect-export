@@ -2,18 +2,17 @@ package com.healthconnect.export.util
 
 import android.content.Context
 import android.content.SharedPreferences
-import org.junit.Test
 import org.junit.Assert.*
+import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.ArgumentMatchers.anyInt
+import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mock
 import org.mockito.junit.MockitoJUnitRunner
 import org.mockito.kotlin.*
-import org.mockito.ArgumentMatchers.anyInt
-import org.mockito.ArgumentMatchers.anyString
 
 @RunWith(MockitoJUnitRunner.Silent::class)
 class LocaleManagerTest {
-
     @Mock
     private lateinit var mockContext: Context
 

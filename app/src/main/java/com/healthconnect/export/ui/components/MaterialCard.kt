@@ -23,16 +23,19 @@ fun MaterialCard(
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(if (prominent) 20.dp else 16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = containerColor ?: if (prominent) {
-                MaterialTheme.colorScheme.surface
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            },
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = if (prominent) 3.dp else 0.dp,
-        ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    containerColor ?: if (prominent) {
+                        MaterialTheme.colorScheme.surface
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    },
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = if (prominent) 3.dp else 0.dp,
+            ),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),

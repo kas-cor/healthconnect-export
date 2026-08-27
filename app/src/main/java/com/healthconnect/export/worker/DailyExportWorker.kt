@@ -6,15 +6,15 @@ import androidx.work.*
 import com.healthconnect.export.data.ExportConfig
 import com.healthconnect.export.data.ExportFrequency
 import com.healthconnect.export.data.HealthDataType
+import com.healthconnect.export.repository.GoogleDriveRepository
 import com.healthconnect.export.repository.HealthConnectRepository
 import com.healthconnect.export.repository.LocalExportRepository
-import com.healthconnect.export.repository.GoogleDriveRepository
 import com.healthconnect.export.repository.WebhookRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.temporal.ChronoUnit
@@ -25,16 +25,18 @@ import java.util.concurrent.TimeUnit
  */
 class DailyExportWorker(
     context: Context,
-    params: WorkerParameters
+    params: WorkerParameters,
 ) : CoroutineWorker(context, params) {
-
     companion object {
         const val WORK_NAME = "daily_health_export"
         const val KEY_CONFIG = "export_config"
         private const val TAG = "DailyExportWorker"
         private val json = Json { ignoreUnknownKeys = true }
 
-        fun schedule(context: Context, config: ExportConfig) {
+        fun schedule(
+            context: Context,
+            config: ExportConfig,
+        ) {
             if (config.frequency == com.healthconnect.export.data.ExportFrequency.MANUAL) {
                 WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
                 // Also cancel 2-hour webhook if manual is selected
@@ -44,20 +46,24 @@ class DailyExportWorker(
             // Schedule 2-hour webhook if enabled
             scheduleEvery2HoursWebhook(context, config)
 
-            val constraints = Constraints.Builder()
-                .setRequiresBatteryNotLow(true)
-                .build()
+            val constraints =
+                Constraints
+                    .Builder()
+                    .setRequiresBatteryNotLow(true)
+                    .build()
 
-            val inputData = workDataOf(
-                KEY_CONFIG to json.encodeToString(config)
-            )
+            val inputData =
+                workDataOf(
+                    KEY_CONFIG to json.encodeToString(config),
+                )
 
-            val requestBuilder = PeriodicWorkRequestBuilder<DailyExportWorker>(
-                config.frequency.hours, TimeUnit.HOURS
-            )
-                .setConstraints(constraints)
-                .setInputData(inputData)
-                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.MINUTES)
+            val requestBuilder =
+                PeriodicWorkRequestBuilder<DailyExportWorker>(
+                    config.frequency.hours,
+                    TimeUnit.HOURS,
+                ).setConstraints(constraints)
+                    .setInputData(inputData)
+                    .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.MINUTES)
 
             // If a time of day is configured, delay the first run until the next
             // occurrence of that hour (subsequent runs repeat every period).
@@ -74,7 +80,7 @@ class DailyExportWorker(
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 WORK_NAME,
                 ExistingPeriodicWorkPolicy.KEEP,
-                request
+                request,
             )
         }
 
@@ -86,7 +92,10 @@ class DailyExportWorker(
         /**
          * Schedules or cancels the every-2-hours webhook periodic work.
          */
-        fun scheduleEvery2HoursWebhook(context: Context, config: ExportConfig) {
+        fun scheduleEvery2HoursWebhook(
+            context: Context,
+            config: ExportConfig,
+        ) {
             if (config.autoSendWebhookEvery2Hours && config.webhookUrl.isNotBlank()) {
                 Every2HoursWebhookWorker.schedule(context, config)
             } else {
@@ -98,8 +107,7 @@ class DailyExportWorker(
             Every2HoursWebhookWorker.cancel(context)
         }
 
-        fun getStatus(context: Context) =
-            WorkManager.getInstance(context).getWorkInfosForUniqueWorkLiveData(WORK_NAME)
+        fun getStatus(context: Context) = WorkManager.getInstance(context).getWorkInfosForUniqueWorkLiveData(WORK_NAME)
     }
 
     private val healthRepo = HealthConnectRepository(applicationContext)
@@ -107,62 +115,76 @@ class DailyExportWorker(
     private val driveRepo = GoogleDriveRepository(applicationContext)
     private val webhookRepo = WebhookRepository(applicationContext)
 
-    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        try {
-            val configJson = inputData.getString(KEY_CONFIG)
-            val config = if (configJson != null) {
-                Json.decodeFromString<ExportConfig>(configJson)
-            } else {
-                ExportConfig(
-                    enabledTypes = HealthDataType.entries.toSet(),
-                    frequency = com.healthconnect.export.data.ExportFrequency.DAILY,
-                    autoSyncDrive = true
-                )
-            }
+    override suspend fun doWork(): Result =
+        withContext(Dispatchers.IO) {
+            try {
+                val configJson = inputData.getString(KEY_CONFIG)
+                val config =
+                    if (configJson != null) {
+                        Json.decodeFromString<ExportConfig>(configJson)
+                    } else {
+                        ExportConfig(
+                            enabledTypes = HealthDataType.entries.toSet(),
+                            frequency = com.healthconnect.export.data.ExportFrequency.DAILY,
+                            autoSyncDrive = true,
+                        )
+                    }
 
-            // Export period ending today (captures current day)
-            val endDate = LocalDate.now()
-            val startDate = when (config.frequency) {
-                ExportFrequency.DAILY -> endDate.minusDays(1)  // yesterday + today
-                ExportFrequency.WEEKLY -> endDate.minusDays(6)  // past 7 days ending today
-                ExportFrequency.MANUAL -> endDate  // shouldn't happen via schedule, but just today
-            }
+                // Export completed days only. This avoids repeatedly sending a partial
+                // current-day record from a periodic worker.
+                val endDate = LocalDate.now().minusDays(1)
+                val startDate =
+                    when (config.frequency) {
+                        ExportFrequency.DAILY -> endDate
+                        ExportFrequency.WEEKLY -> endDate.minusDays(6)
+                        ExportFrequency.MANUAL -> endDate
+                    }
 
-            // Read health data for the period (batch mode: 1 API call per type)
-            val records = healthRepo.readPeriodInBatch(
-                startDate = startDate,
-                endDate = endDate,
-                types = config.enabledTypes,
-                selectedSourcePackage = config.selectedSourcePackage
-            )
+                // Read health data for the period (batch mode: 1 API call per type)
+                val records =
+                    healthRepo.readPeriodInBatch(
+                        startDate = startDate,
+                        endDate = endDate,
+                        types = config.enabledTypes,
+                        selectedSourcePackage = config.selectedSourcePackage,
+                    )
 
-            if (records.isEmpty()) {
-                Log.w(TAG, "doWork: no health data returned for period $startDate..$endDate")
-                return@withContext Result.success()
-            }
-
-            // Save locally
-            val files = localRepo.saveRecords(records, config)
-
-            // Sync to Drive if enabled and signed in
-            if (config.autoSyncDrive && driveRepo.isSignedIn()) {
-                files.forEach { file ->
-                    driveRepo.uploadFile(file, "HealthConnectExport/${file.name}")
+                if (records.isEmpty()) {
+                    Log.w(TAG, "doWork: no health data returned for period $startDate..$endDate")
+                    return@withContext Result.success()
                 }
-            }
 
-            // Send to webhook if enabled
-            if (config.autoSendWebhook && config.webhookUrl.isNotBlank()) {
-                webhookRepo.sendRecords(config.webhookUrl, records, config.webhookAuthToken)
-            }
+                // Save locally
+                val files = localRepo.saveRecords(records, config)
 
-            Result.success()
-        } catch (e: SecurityException) {
-            Result.failure()
-        } catch (e: IllegalStateException) {
-            Result.failure()
-        } catch (e: Exception) {
-            Result.retry()
+                // Sync to Drive if enabled and signed in
+                if (config.autoSyncDrive && driveRepo.isSignedIn()) {
+                    val driveResults =
+                        files.map { file ->
+                            driveRepo.uploadFile(file, "HealthConnectExport/${file.name}")
+                        }
+                    if (driveResults.any { it == null }) {
+                        return@withContext Result.retry()
+                    }
+                }
+
+                // Send to webhook if enabled
+                if (config.autoSendWebhook && config.webhookUrl.isNotBlank()) {
+                    when (webhookRepo.sendRecords(config.webhookUrl, records, config.webhookAuthToken)) {
+                        is com.healthconnect.export.repository.WebhookResult.Success -> Unit
+                        is com.healthconnect.export.repository.WebhookResult.Error -> {
+                            return@withContext Result.retry()
+                        }
+                    }
+                }
+
+                Result.success()
+            } catch (e: SecurityException) {
+                Result.failure()
+            } catch (e: IllegalStateException) {
+                Result.failure()
+            } catch (e: Exception) {
+                Result.retry()
+            }
         }
-    }
 }

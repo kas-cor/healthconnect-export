@@ -18,7 +18,6 @@ import java.time.LocalDate
 
 @RunWith(MockitoJUnitRunner.Silent::class)
 class ExportDataUseCaseTest {
-
     @Mock
     private lateinit var mockHealthRepo: HealthConnectRepository
 
@@ -30,12 +29,13 @@ class ExportDataUseCaseTest {
 
     private lateinit var useCase: ExportDataUseCase
 
-    private val defaultConfig = ExportConfig(
-        enabledTypes = setOf(HealthDataType.STEPS, HealthDataType.HEART_RATE),
-        frequency = ExportFrequency.DAILY,
-        autoSyncDrive = false,
-        outputDirectory = "HealthConnectExport"
-    )
+    private val defaultConfig =
+        ExportConfig(
+            enabledTypes = setOf(HealthDataType.STEPS, HealthDataType.HEART_RATE),
+            frequency = ExportFrequency.DAILY,
+            autoSyncDrive = false,
+            outputDirectory = "HealthConnectExport",
+        )
 
     private val startDate = LocalDate.of(2026, 5, 24)
     private val endDate = LocalDate.of(2026, 5, 25)
@@ -49,11 +49,12 @@ class ExportDataUseCaseTest {
     private fun recordForDate(dateStr: String): DailyHealthRecord =
         DailyHealthRecord(
             date = dateStr,
-            metadata = ExportMetadata(
-                appVersion = "1.0.0",
-                exportTimestamp = "${dateStr}T12:00:00",
-                timezone = "UTC"
-            )
+            metadata =
+                ExportMetadata(
+                    appVersion = "1.0.0",
+                    exportTimestamp = "${dateStr}T12:00:00",
+                    timezone = "UTC",
+                ),
         )
 
     /** Assert that a given step is a Progress with the expected phase/current/total/dateOrType */
@@ -62,7 +63,7 @@ class ExportDataUseCaseTest {
         expectedPhase: String,
         expectedCurrent: Int,
         expectedTotal: Int,
-        expectedDateOrType: String
+        expectedDateOrType: String,
     ) {
         assertTrue("Expected Progress, got ${step::class.simpleName}", step is ExportStep.Progress)
         val msg = (step as ExportStep.Progress).message
@@ -194,14 +195,16 @@ class ExportDataUseCaseTest {
     fun `when no data emits Complete with empty records`() {
         runBlocking {
             // Empty record: healthRepo returns records with no data, then no files are saved
-            val emptyRecord = DailyHealthRecord(
-                date = "2026-05-24",
-                metadata = ExportMetadata("1.0.0", "2026-05-24T12:00:00", "UTC")
-            )
-            val emptyRecord2 = DailyHealthRecord(
-                date = "2026-05-25",
-                metadata = ExportMetadata("1.0.0", "2026-05-25T12:00:00", "UTC")
-            )
+            val emptyRecord =
+                DailyHealthRecord(
+                    date = "2026-05-24",
+                    metadata = ExportMetadata("1.0.0", "2026-05-24T12:00:00", "UTC"),
+                )
+            val emptyRecord2 =
+                DailyHealthRecord(
+                    date = "2026-05-25",
+                    metadata = ExportMetadata("1.0.0", "2026-05-25T12:00:00", "UTC"),
+                )
 
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(true)
@@ -228,32 +231,35 @@ class ExportDataUseCaseTest {
     @Test
     fun `summary is correctly computed from records`() {
         runBlocking {
-            val record1 = DailyHealthRecord(
-                date = "2026-05-24",
-                steps = StepsData(totalSteps = 5000, recordsCount = 100),
-                heartRate = HeartRateData(avgBpm = 72.0, minBpm = 55, maxBpm = 140, recordsCount = 10),
-                calories = CaloriesData(totalCalories = 200.0, recordsCount = 5),
-                distance = DistanceData(totalDistanceMeters = 3000.0, recordsCount = 3),
-                sleep = SleepData(totalDurationMinutes = 420, sleepStages = mapOf("Deep" to 90), recordsCount = 1),
-                activeCalories = ActiveCaloriesData(totalCalories = 150.0, recordsCount = 5),
-                metadata = ExportMetadata("1.0.0", "2026-05-24T12:00:00", "UTC")
-            )
+            val record1 =
+                DailyHealthRecord(
+                    date = "2026-05-24",
+                    steps = StepsData(totalSteps = 5000, recordsCount = 100),
+                    heartRate = HeartRateData(avgBpm = 72.0, minBpm = 55, maxBpm = 140, recordsCount = 10),
+                    calories = CaloriesData(totalCalories = 200.0, recordsCount = 5),
+                    distance = DistanceData(totalDistanceMeters = 3000.0, recordsCount = 3),
+                    sleep = SleepData(totalDurationMinutes = 420, sleepStages = mapOf("Deep" to 90), recordsCount = 1),
+                    activeCalories = ActiveCaloriesData(totalCalories = 150.0, recordsCount = 5),
+                    metadata = ExportMetadata("1.0.0", "2026-05-24T12:00:00", "UTC"),
+                )
 
-            val record2 = DailyHealthRecord(
-                date = "2026-05-25",
-                steps = StepsData(totalSteps = 8000, recordsCount = 150),
-                heartRate = HeartRateData(avgBpm = 68.0, minBpm = 50, maxBpm = 135, recordsCount = 12),
-                calories = CaloriesData(totalCalories = 250.0, recordsCount = 6),
-                distance = DistanceData(totalDistanceMeters = 5000.0, recordsCount = 4),
-                sleep = SleepData(totalDurationMinutes = 360, sleepStages = mapOf("Light" to 180), recordsCount = 1),
-                activeCalories = ActiveCaloriesData(totalCalories = 200.0, recordsCount = 6),
-                metadata = ExportMetadata("1.0.0", "2026-05-25T12:00:00", "UTC")
-            )
+            val record2 =
+                DailyHealthRecord(
+                    date = "2026-05-25",
+                    steps = StepsData(totalSteps = 8000, recordsCount = 150),
+                    heartRate = HeartRateData(avgBpm = 68.0, minBpm = 50, maxBpm = 135, recordsCount = 12),
+                    calories = CaloriesData(totalCalories = 250.0, recordsCount = 6),
+                    distance = DistanceData(totalDistanceMeters = 5000.0, recordsCount = 4),
+                    sleep = SleepData(totalDurationMinutes = 360, sleepStages = mapOf("Light" to 180), recordsCount = 1),
+                    activeCalories = ActiveCaloriesData(totalCalories = 200.0, recordsCount = 6),
+                    metadata = ExportMetadata("1.0.0", "2026-05-25T12:00:00", "UTC"),
+                )
 
-            val files = listOf(
-                File("health_2026-05-24.json"),
-                File("health_2026-05-25.json")
-            )
+            val files =
+                listOf(
+                    File("health_2026-05-24.json"),
+                    File("health_2026-05-25.json"),
+                )
 
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(true)
@@ -285,9 +291,10 @@ class ExportDataUseCaseTest {
     @Test
     fun `summary handles null fields correctly`() {
         runBlocking {
-            val record1 = recordForDate("2026-05-24").copy(
-                steps = StepsData(totalSteps = 5000, recordsCount = 100)
-            )
+            val record1 =
+                recordForDate("2026-05-24").copy(
+                    steps = StepsData(totalSteps = 5000, recordsCount = 100),
+                )
             val record2 = recordForDate("2026-05-25")
 
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
@@ -318,21 +325,23 @@ class ExportDataUseCaseTest {
     @Test
     fun `summary with mixed null fields covers both branches`() {
         runBlocking {
-            val record1 = DailyHealthRecord(
-                date = "2026-05-24",
-                heartRate = HeartRateData(avgBpm = 72.0, minBpm = 55, maxBpm = 140, recordsCount = 10),
-                calories = CaloriesData(totalCalories = 200.0, recordsCount = 5),
-                activeCalories = ActiveCaloriesData(totalCalories = 150.0, recordsCount = 5),
-                metadata = ExportMetadata("1.0.0", "2026-05-24T12:00:00", "UTC")
-            )
+            val record1 =
+                DailyHealthRecord(
+                    date = "2026-05-24",
+                    heartRate = HeartRateData(avgBpm = 72.0, minBpm = 55, maxBpm = 140, recordsCount = 10),
+                    calories = CaloriesData(totalCalories = 200.0, recordsCount = 5),
+                    activeCalories = ActiveCaloriesData(totalCalories = 150.0, recordsCount = 5),
+                    metadata = ExportMetadata("1.0.0", "2026-05-24T12:00:00", "UTC"),
+                )
 
-            val record2 = DailyHealthRecord(
-                date = "2026-05-25",
-                steps = StepsData(totalSteps = 8000, recordsCount = 150),
-                sleep = SleepData(totalDurationMinutes = 360, sleepStages = mapOf("Light" to 180), recordsCount = 1),
-                distance = DistanceData(totalDistanceMeters = 5000.0, recordsCount = 4),
-                metadata = ExportMetadata("1.0.0", "2026-05-25T12:00:00", "UTC")
-            )
+            val record2 =
+                DailyHealthRecord(
+                    date = "2026-05-25",
+                    steps = StepsData(totalSteps = 8000, recordsCount = 150),
+                    sleep = SleepData(totalDurationMinutes = 360, sleepStages = mapOf("Light" to 180), recordsCount = 1),
+                    distance = DistanceData(totalDistanceMeters = 5000.0, recordsCount = 4),
+                    metadata = ExportMetadata("1.0.0", "2026-05-25T12:00:00", "UTC"),
+                )
 
             val files = listOf(File("h1.json"), File("h2.json"))
 
@@ -450,15 +459,16 @@ class ExportDataUseCaseTest {
     @Test
     fun `complete step contains correct fields`() {
         runBlocking {
-            val record = recordForDate("2026-05-24").copy(
-                steps = StepsData(totalSteps = 7500, recordsCount = 200),
-                heartRate = HeartRateData(avgBpm = 75.0, minBpm = 60, maxBpm = 150, recordsCount = 15),
-                calories = CaloriesData(totalCalories = 300.0, recordsCount = 8),
-                distance = DistanceData(totalDistanceMeters = 4500.0, recordsCount = 5),
-                sleep = SleepData(totalDurationMinutes = 400, sleepStages = mapOf("Deep" to 100), recordsCount = 1),
-                activeCalories = ActiveCaloriesData(totalCalories = 180.0, recordsCount = 6),
-                metadata = ExportMetadata("1.0.0", "2026-05-24T12:00:00", "UTC")
-            )
+            val record =
+                recordForDate("2026-05-24").copy(
+                    steps = StepsData(totalSteps = 7500, recordsCount = 200),
+                    heartRate = HeartRateData(avgBpm = 75.0, minBpm = 60, maxBpm = 150, recordsCount = 15),
+                    calories = CaloriesData(totalCalories = 300.0, recordsCount = 8),
+                    distance = DistanceData(totalDistanceMeters = 4500.0, recordsCount = 5),
+                    sleep = SleepData(totalDurationMinutes = 400, sleepStages = mapOf("Deep" to 100), recordsCount = 1),
+                    activeCalories = ActiveCaloriesData(totalCalories = 180.0, recordsCount = 6),
+                    metadata = ExportMetadata("1.0.0", "2026-05-24T12:00:00", "UTC"),
+                )
             val record2 = recordForDate("2026-05-25")
             val files = listOf(File("health_2026-05-24.json"), File("health_2026-05-25.json"))
 
@@ -496,7 +506,9 @@ class ExportDataUseCaseTest {
             whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
                 .thenReturn(listOf(record1, record2, record3))
             whenever(mockLocalRepo.saveDailyRecord(any(), any())).thenReturn(
-                File("h1.json"), File("h2.json"), File("h3.json")
+                File("h1.json"),
+                File("h2.json"),
+                File("h3.json"),
             )
 
             val steps = useCase.execute(mockContext, defaultConfig, threeDaysStart, threeDaysEnd).toList()

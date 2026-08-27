@@ -61,12 +61,13 @@ class CsvMapperTest {
 
     @Test
     fun `recordToCsv writes steps and heart rate values`() {
-        val row = CsvMapper.recordToCsv(
-            record(
-                steps = StepsData(totalSteps = 12453, recordsCount = 480),
-                heartRate = HeartRateData(avgBpm = 72.5, minBpm = 55, maxBpm = 142, recordsCount = 18),
-            ),
-        )
+        val row =
+            CsvMapper.recordToCsv(
+                record(
+                    steps = StepsData(totalSteps = 12453, recordsCount = 480),
+                    heartRate = HeartRateData(avgBpm = 72.5, minBpm = 55, maxBpm = 142, recordsCount = 18),
+                ),
+            )
         assertTrue(row.contains("12453"))
         assertTrue(row.contains("480"))
         assertTrue(row.contains("72.5"))
@@ -104,41 +105,45 @@ class CsvMapperTest {
 
     @Test
     fun `recordToCsv formats whole doubles without trailing zeros`() {
-        val row = CsvMapper.recordToCsv(
-            record(
-                steps = StepsData(totalSteps = 100, recordsCount = 1),
-                heartRate = HeartRateData(avgBpm = 72.0, minBpm = 55, maxBpm = 142, recordsCount = 1),
-            ),
-        )
+        val row =
+            CsvMapper.recordToCsv(
+                record(
+                    steps = StepsData(totalSteps = 100, recordsCount = 1),
+                    heartRate = HeartRateData(avgBpm = 72.0, minBpm = 55, maxBpm = 142, recordsCount = 1),
+                ),
+            )
         assertTrue(row.contains("72"))
         assertTrue(row.contains(",55,"))
     }
 
     @Test
     fun `recordToCsv writes exercises and nutrition counts`() {
-        val row = CsvMapper.recordToCsv(
-            record(
-                exercises = listOf(
-                    ExerciseData(
-                        exerciseType = "Running",
-                        startTime = "2026-05-24T10:00:00",
-                        endTime = "2026-05-24T10:30:00",
-                        durationMinutes = 30,
-                    ),
-                    ExerciseData(
-                        exerciseType = "Yoga",
-                        startTime = "2026-05-24T18:00:00",
-                        endTime = "2026-05-24T19:00:00",
-                        durationMinutes = 60,
-                    ),
+        val row =
+            CsvMapper.recordToCsv(
+                record(
+                    exercises =
+                        listOf(
+                            ExerciseData(
+                                exerciseType = "Running",
+                                startTime = "2026-05-24T10:00:00",
+                                endTime = "2026-05-24T10:30:00",
+                                durationMinutes = 30,
+                            ),
+                            ExerciseData(
+                                exerciseType = "Yoga",
+                                startTime = "2026-05-24T18:00:00",
+                                endTime = "2026-05-24T19:00:00",
+                                durationMinutes = 60,
+                            ),
+                        ),
+                    nutrition =
+                        listOf(
+                            NutritionData(name = "Apple", energyKcal = 52.0),
+                        ),
                 ),
-                nutrition = listOf(
-                    NutritionData(name = "Apple", energyKcal = 52.0),
-                ),
-            ),
-        )
-        assertTrue(row.contains("2"))   // exercises count
-        assertTrue(row.contains("1"))   // nutrition count
+            )
+        assertTrue(row.contains("2")) // exercises count
+        assertTrue(row.contains("1")) // nutrition count
     }
 
     @Test
@@ -158,11 +163,12 @@ class CsvMapperTest {
 
     @Test
     fun `header and row both have the same value for a full record`() {
-        val full = record(
-            steps = StepsData(totalSteps = 12453, recordsCount = 480),
-            heartRate = HeartRateData(avgBpm = 72.5, minBpm = 55, maxBpm = 142, recordsCount = 18),
-            sleep = SleepData(totalDurationMinutes = 420, sleepStages = mapOf("Deep" to 90L), recordsCount = 1),
-        )
+        val full =
+            record(
+                steps = StepsData(totalSteps = 12453, recordsCount = 480),
+                heartRate = HeartRateData(avgBpm = 72.5, minBpm = 55, maxBpm = 142, recordsCount = 18),
+                sleep = SleepData(totalDurationMinutes = 420, sleepStages = mapOf("Deep" to 90L), recordsCount = 1),
+            )
         val headerCells = CsvMapper.header().split(",")
         val rowCells = CsvMapper.recordToCsv(full).split(",")
         assertEquals(headerCells.size, rowCells.size)

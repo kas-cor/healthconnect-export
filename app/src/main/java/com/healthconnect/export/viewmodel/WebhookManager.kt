@@ -27,9 +27,8 @@ class WebhookManager(
     private val application: Application,
     private val _uiState: MutableStateFlow<ExportUiState>,
     private val viewModelScope: kotlinx.coroutines.CoroutineScope,
-    internal var healthRepo: HealthConnectRepository
+    internal var healthRepo: HealthConnectRepository,
 ) {
-
     private val webhookRepo = WebhookRepository(application)
     private var currentTestWebhookJob: Job? = null
 
@@ -56,39 +55,54 @@ class WebhookManager(
         val autoSend = prefs.getBoolean(KEY_AUTO_SEND_WEBHOOK, false)
         val autoSend2h = prefs.getBoolean(KEY_AUTO_SEND_WEBHOOK_EVERY_2_HOURS, false)
         if (url.isNotBlank() || token.isNotBlank() || autoSend || autoSend2h) {
-            val error = if (url.isNotBlank() && !webhookRepo.isValidWebhookUrl(url)) {
-                application.getString(R.string.vm_invalid_url)
-            } else null
+            val error =
+                if (url.isNotBlank() && !webhookRepo.isValidWebhookUrl(url)) {
+                    application.getString(R.string.vm_invalid_url)
+                } else {
+                    null
+                }
             _uiState.update {
                 it.copy(
                     webhookUrl = url,
                     webhookAuthToken = token,
                     autoSendWebhook = autoSend,
                     autoSendWebhookEvery2Hours = autoSend2h,
-                    webhookUrlError = error
+                    webhookUrlError = error,
                 )
             }
         }
     }
 
     private fun saveWebhookUrl(url: String) {
-        application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putString(KEY_WEBHOOK_URL, url).apply()
+        application
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_WEBHOOK_URL, url)
+            .apply()
     }
 
     private fun saveWebhookToken(token: String) {
-        application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putString(KEY_WEBHOOK_TOKEN, token).apply()
+        application
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_WEBHOOK_TOKEN, token)
+            .apply()
     }
 
     private fun saveAutoSendWebhook(enabled: Boolean) {
-        application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putBoolean(KEY_AUTO_SEND_WEBHOOK, enabled).apply()
+        application
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_AUTO_SEND_WEBHOOK, enabled)
+            .apply()
     }
 
     private fun saveAutoSendWebhookEvery2Hours(enabled: Boolean) {
-        application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putBoolean(KEY_AUTO_SEND_WEBHOOK_EVERY_2_HOURS, enabled).apply()
+        application
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_AUTO_SEND_WEBHOOK_EVERY_2_HOURS, enabled)
+            .apply()
     }
 
     // ------------------------------------------------------------------
@@ -96,9 +110,12 @@ class WebhookManager(
     // ------------------------------------------------------------------
 
     fun setWebhookUrl(url: String) {
-        val error = if (url.isNotBlank() && !webhookRepo.isValidWebhookUrl(url)) {
-            application.getString(R.string.vm_invalid_url)
-        } else null
+        val error =
+            if (url.isNotBlank() && !webhookRepo.isValidWebhookUrl(url)) {
+                application.getString(R.string.vm_invalid_url)
+            } else {
+                null
+            }
         _uiState.update { it.copy(webhookUrl = url, webhookUrlError = error) }
         saveWebhookUrl(url)
     }
@@ -122,16 +139,17 @@ class WebhookManager(
         _uiState.update { it.copy(autoSendWebhookEvery2Hours = enabled) }
         saveAutoSendWebhookEvery2Hours(enabled)
         // Schedule or cancel the 2-hour worker
-        val config = ExportConfig(
-            enabledTypes = state.selectedTypes,
-            frequency = state.frequency,
-            autoSyncDrive = state.autoSyncDrive,
-            webhookUrl = state.webhookUrl,
-            webhookAuthToken = state.webhookAuthToken,
-            autoSendWebhook = state.autoSendWebhook,
-            autoSendWebhookEvery2Hours = enabled,
-            selectedSourcePackage = state.selectedSourcePackage
-        )
+        val config =
+            ExportConfig(
+                enabledTypes = state.selectedTypes,
+                frequency = state.frequency,
+                autoSyncDrive = state.autoSyncDrive,
+                webhookUrl = state.webhookUrl,
+                webhookAuthToken = state.webhookAuthToken,
+                autoSendWebhook = state.autoSendWebhook,
+                autoSendWebhookEvery2Hours = enabled,
+                selectedSourcePackage = state.selectedSourcePackage,
+            )
         DailyExportWorker.scheduleEvery2HoursWebhook(application, config)
         if (enabled) {
             _uiState.update {
@@ -152,21 +170,25 @@ class WebhookManager(
      * Sends exported health records to the configured webhook URL.
      * Updates UI state with success/error messages.
      */
-    fun sendToWebhook(url: String, authToken: String, records: List<DailyHealthRecord>) {
+    fun sendToWebhook(
+        url: String,
+        authToken: String,
+        records: List<DailyHealthRecord>,
+    ) {
         viewModelScope.launch {
             _uiState.update { it.copy(exportProgress = application.getString(R.string.vm_sending_webhook)) }
             when (val result = webhookRepo.sendRecords(url, records, authToken)) {
                 is WebhookResult.Success -> {
                     _uiState.update {
                         it.copy(
-                            message = application.getString(R.string.vm_webhook_success, result.statusCode)
+                            message = application.getString(R.string.vm_webhook_success, result.statusCode),
                         )
                     }
                 }
                 is WebhookResult.Error -> {
                     _uiState.update {
                         it.copy(
-                            message = application.getString(R.string.vm_webhook_error, result.statusCode, result.message)
+                            message = application.getString(R.string.vm_webhook_error, result.statusCode, result.message),
                         )
                     }
                 }
@@ -193,46 +215,48 @@ class WebhookManager(
             it.copy(isTestingWebhook = true, message = application.getString(R.string.webhook_testing))
         }
 
-        val job = viewModelScope.launch {
-            try {
-                val today = LocalDate.now()
-                val records = healthRepo.readPeriodInBatch(
-                    startDate = today,
-                    endDate = today,
-                    types = state.selectedTypes,
-                    selectedSourcePackage = state.selectedSourcePackage
-                )
+        val job =
+            viewModelScope.launch {
+                try {
+                    val today = LocalDate.now()
+                    val records =
+                        healthRepo.readPeriodInBatch(
+                            startDate = today,
+                            endDate = today,
+                            types = state.selectedTypes,
+                            selectedSourcePackage = state.selectedSourcePackage,
+                        )
 
-                if (records.isEmpty()) {
+                    if (records.isEmpty()) {
+                        _uiState.update {
+                            it.copy(message = application.getString(R.string.vm_webhook_no_data))
+                        }
+                        return@launch
+                    }
+
+                    when (val result = webhookRepo.sendRecords(state.webhookUrl, records, state.webhookAuthToken)) {
+                        is WebhookResult.Success -> {
+                            _uiState.update {
+                                it.copy(message = application.getString(R.string.vm_webhook_test_success, result.statusCode))
+                            }
+                        }
+                        is WebhookResult.Error -> {
+                            _uiState.update {
+                                it.copy(message = application.getString(R.string.vm_webhook_test_error, result.statusCode, result.message))
+                            }
+                        }
+                    }
+                } catch (e: CancellationException) {
+                    // Test was cancelled — do nothing, cancelTestWebhook() already reset state
+                } catch (e: Exception) {
                     _uiState.update {
-                        it.copy(message = application.getString(R.string.vm_webhook_no_data))
+                        it.copy(message = application.getString(R.string.vm_webhook_test_error, 0, e.message ?: "Unknown error"))
                     }
-                    return@launch
+                } finally {
+                    _uiState.update { it.copy(isTestingWebhook = false) }
+                    currentTestWebhookJob = null
                 }
-
-                when (val result = webhookRepo.sendRecords(state.webhookUrl, records, state.webhookAuthToken)) {
-                    is WebhookResult.Success -> {
-                        _uiState.update {
-                            it.copy(message = application.getString(R.string.vm_webhook_test_success, result.statusCode))
-                        }
-                    }
-                    is WebhookResult.Error -> {
-                        _uiState.update {
-                            it.copy(message = application.getString(R.string.vm_webhook_test_error, result.statusCode, result.message))
-                        }
-                    }
-                }
-            } catch (e: CancellationException) {
-                // Test was cancelled — do nothing, cancelTestWebhook() already reset state
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(message = application.getString(R.string.vm_webhook_test_error, 0, e.message ?: "Unknown error"))
-                }
-            } finally {
-                _uiState.update { it.copy(isTestingWebhook = false) }
-                currentTestWebhookJob = null
             }
-        }
         currentTestWebhookJob = job
     }
 
@@ -245,7 +269,7 @@ class WebhookManager(
         _uiState.update {
             it.copy(
                 isTestingWebhook = false,
-                message = application.getString(R.string.vm_export_cancelled)
+                message = application.getString(R.string.vm_export_cancelled),
             )
         }
     }

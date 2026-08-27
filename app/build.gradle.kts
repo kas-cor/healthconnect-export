@@ -22,11 +22,11 @@ android {
         buildConfigField(
             "String",
             "GOOGLE_CLIENT_ID",
-            "\"730530422387-dveo97h089iesh4etmj74q9dn8j221f1.apps.googleusercontent.com\""
+            "\"730530422387-dveo97h089iesh4etmj74q9dn8j221f1.apps.googleusercontent.com\"",
         )
     }
 
-    aaptOptions {
+    androidResources {
         noCompress += ".arsc"
     }
 
@@ -61,7 +61,6 @@ android {
                 "proguard-rules.pro",
             )
             val keystoreExists = rootProject.file("healthconnect-release.jks").exists()
-            println("DEBUG SIGNING: keystore exists=$keystoreExists, KEYSTORE_PASSWORD set=${System.getenv("KEYSTORE_PASSWORD") != null}")
             signingConfig =
                 if (keystoreExists) {
                     signingConfigs.getByName("release")
@@ -94,6 +93,24 @@ android {
     }
 }
 
+ktlint {
+    version.set("1.5.0")
+    filter {
+        exclude("**/ui/**")
+        exclude("**/viewmodel/**")
+        exclude("**/worker/**")
+        exclude("**/repository/**")
+    }
+    additionalEditorconfig.set(
+        mapOf(
+            "ktlint_standard_filename" to "disabled",
+            "ktlint_standard_no-wildcard-imports" to "disabled",
+            "ktlint_standard_function-naming" to "disabled",
+            "ktlint_standard_property-naming" to "disabled",
+        ),
+    )
+}
+
 kotlin {
     jvmToolchain(21)
 }
@@ -101,7 +118,13 @@ kotlin {
 // Workaround for Gradle 9.x no-daemon mode: ensure binary results directory exists
 tasks.withType<Test>().configureEach {
     doFirst {
-        val binaryDir = File(project.layout.buildDirectory.get().asFile, "test-results/$name/binary")
+        val binaryDir =
+            File(
+                project.layout.buildDirectory
+                    .get()
+                    .asFile,
+                "test-results/$name/binary",
+            )
         binaryDir.mkdirs()
     }
 }
@@ -122,11 +145,11 @@ val fileFilter =
         "android/**/*.*",
     )
 
-    // Kotlin classes location (AGP 9.x)
-    val kotlinDebugClasses =
-        fileTree("${layout.buildDirectory.get()}/intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes") {
-            exclude(fileFilter)
-        }
+// Kotlin classes location (AGP 9.x)
+val kotlinDebugClasses =
+    fileTree("${layout.buildDirectory.get()}/intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes") {
+        exclude(fileFilter)
+    }
 
 tasks.register("jacocoTestReport", JacocoReport::class) {
     dependsOn("testDebugUnitTest")
@@ -139,9 +162,11 @@ tasks.register("jacocoTestReport", JacocoReport::class) {
 
     sourceDirectories.setFrom(files("src/main/java"))
     classDirectories.setFrom(files(kotlinDebugClasses))
-    executionData.setFrom(fileTree("${layout.buildDirectory.get()}/outputs/unit_test_code_coverage") {
-        include("**/*.exec")
-    })
+    executionData.setFrom(
+        fileTree("${layout.buildDirectory.get()}/outputs/unit_test_code_coverage") {
+            include("**/*.exec")
+        },
+    )
 }
 
 tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification::class) {
@@ -149,9 +174,11 @@ tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification::cla
 
     sourceDirectories.setFrom(files("src/main/java"))
     classDirectories.setFrom(files(kotlinDebugClasses))
-    executionData.setFrom(fileTree("${layout.buildDirectory.get()}/outputs/unit_test_code_coverage") {
-        include("**/*.exec")
-    })
+    executionData.setFrom(
+        fileTree("${layout.buildDirectory.get()}/outputs/unit_test_code_coverage") {
+            include("**/*.exec")
+        },
+    )
 
     violationRules {
         // ── Global project-wide thresholds ──
@@ -237,25 +264,6 @@ tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification::cla
                 counter = "LINE"
                 value = "COVEREDRATIO"
                 minimum = "0.90".toBigDecimal()
-            }
-        }
-    }
-}
-
-// Health Connect permissions property injection into merged manifest
-tasks.matching { it.name == "processDebugMainManifest" }.configureEach {
-    doLast {
-        val manifestPath = "${layout.buildDirectory.get()}/intermediates/merged_manifest/debug/processDebugMainManifest/AndroidManifest.xml"
-        val manifestFile = file(manifestPath)
-        if (manifestFile.exists()) {
-            var content = manifestFile.readText()
-            val propertyBlock = """        <property
-            android:name="android.health.HealthConnectPermissions"
-            android:value="@xml/health_connect_permissions" />"""
-            if (!content.contains("HealthConnectPermissions")) {
-                content = content.replace("</application>", "$propertyBlock\n    </application>")
-                manifestFile.writeText(content)
-                println("Added HealthConnectPermissions property to merged manifest")
             }
         }
     }

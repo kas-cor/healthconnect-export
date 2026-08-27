@@ -422,17 +422,17 @@ Create a PR on GitHub with your translation files. After merging:
 | Component | Version |
 |---|---|
 | Language | Kotlin 2.4.10 |
-| UI | Jetpack Compose + Material3 (BOM 2026.05) |
-| Build | AGP 9.3.1 / Gradle 9.6.1 |
+| UI | Jetpack Compose + Material3 (BOM 2026.08) |
+| Build | AGP 9.3.1 / Gradle 9.7.0 |
 | Health Connect | `connect-client:1.1.0` |
-| Google Drive | `google-api-services-drive:v3-rev20240123`, `google-http-client-gson:2.1.0` |
+| Google Drive | `google-api-services-drive:v3-rev20240123`, `google-http-client-gson:2.2.0` |
 | Auth | `play-services-auth:21.6.0` |
 | Background | WorkManager `work-runtime-ktx:2.11.2` |
 | Serialization | `kotlinx-serialization-json:1.11.0` |
-| minSdk / targetSdk / compileSdk | 28 / 36 / 36 |
+| minSdk / targetSdk / compileSdk | 28 / 37 / 37 |
 | JVM | 21 |
 | Testing | JUnit 4.13.2, Mockito 5.23.0, mockito-kotlin 6.3.0 |
-| Coverage | JaCoCo 0.8.11 |
+| Coverage | JaCoCo 0.8.12 |
 | CI | GitHub Actions |
 
 ## Changelog 📋

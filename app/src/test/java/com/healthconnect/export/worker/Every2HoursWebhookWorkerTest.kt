@@ -33,7 +33,6 @@ import kotlin.io.path.createTempDirectory
 
 @RunWith(MockitoJUnitRunner.Silent::class)
 class Every2HoursWebhookWorkerTest {
-
     @Mock
     private lateinit var mockHealthRepo: HealthConnectRepository
 
@@ -44,12 +43,13 @@ class Every2HoursWebhookWorkerTest {
     private lateinit var tempDir: File
     private val json = Json { ignoreUnknownKeys = true }
 
-    private val todayRecord = DailyHealthRecord(
-        date = LocalDate.now().toString(),
-        steps = StepsData(totalSteps = 8000, recordsCount = 320),
-        heartRate = HeartRateData(avgBpm = 72.0, minBpm = 55, maxBpm = 130, recordsCount = 12),
-        metadata = ExportMetadata("1.0.0", "2026-06-08T10:00:00", "Europe/Moscow")
-    )
+    private val todayRecord =
+        DailyHealthRecord(
+            date = LocalDate.now().toString(),
+            steps = StepsData(totalSteps = 8000, recordsCount = 320),
+            heartRate = HeartRateData(avgBpm = 72.0, minBpm = 55, maxBpm = 130, recordsCount = 12),
+            metadata = ExportMetadata("1.0.0", "2026-06-08T10:00:00", "Europe/Moscow"),
+        )
 
     @Before
     fun setup() {
@@ -81,9 +81,11 @@ class Every2HoursWebhookWorkerTest {
         whenever(mockApp.getDatabasePath(any())).thenReturn(File(dbDir, "workmanager.db"))
 
         // Initialize WorkManager
-        val wmConfig = Configuration.Builder()
-            .setMinimumLoggingLevel(android.util.Log.WARN)
-            .build()
+        val wmConfig =
+            Configuration
+                .Builder()
+                .setMinimumLoggingLevel(android.util.Log.WARN)
+                .build()
         WorkManagerTestInitHelper.initializeTestWorkManager(mockApp, wmConfig)
     }
 
@@ -96,7 +98,11 @@ class Every2HoursWebhookWorkerTest {
     // Helper: inject private fields via reflection
     // =============================================
 
-    private fun setField(obj: Any, name: String, value: Any) {
+    private fun setField(
+        obj: Any,
+        name: String,
+        value: Any,
+    ) {
         val field: Field = obj::class.java.getDeclaredField(name)
         field.isAccessible = true
         field.set(obj, value)
@@ -108,16 +114,18 @@ class Every2HoursWebhookWorkerTest {
 
     private fun createWorker(
         config: ExportConfig? = null,
-        context: Context = mockApp
+        context: Context = mockApp,
     ): Every2HoursWebhookWorker {
-        val inputData = if (config != null) {
-            workDataOf(Every2HoursWebhookWorker.KEY_CONFIG to json.encodeToString(config))
-        } else {
-            workDataOf()
-        }
-        val worker = TestListenableWorkerBuilder<Every2HoursWebhookWorker>(context)
-            .setInputData(inputData)
-            .build()
+        val inputData =
+            if (config != null) {
+                workDataOf(Every2HoursWebhookWorker.KEY_CONFIG to json.encodeToString(config))
+            } else {
+                workDataOf()
+            }
+        val worker =
+            TestListenableWorkerBuilder<Every2HoursWebhookWorker>(context)
+                .setInputData(inputData)
+                .build()
 
         // Replace repos with mocks via reflection
         setField(worker, "healthRepo", mockHealthRepo)
@@ -133,21 +141,32 @@ class Every2HoursWebhookWorkerTest {
     @Test
     fun `successful read sends webhook and returns success`() {
         runBlocking {
-            val config = ExportConfig(
-                enabledTypes = setOf(HealthDataType.STEPS, HealthDataType.HEART_RATE),
-                frequency = ExportFrequency.MANUAL,
-                autoSyncDrive = false,
-                webhookUrl = "https://hooks.example.com/data",
-                webhookAuthToken = "test-token-123",
-                autoSendWebhookEvery2Hours = true
-            )
+            val config =
+                ExportConfig(
+                    enabledTypes = setOf(HealthDataType.STEPS, HealthDataType.HEART_RATE),
+                    frequency = ExportFrequency.MANUAL,
+                    autoSyncDrive = false,
+                    webhookUrl = "https://hooks.example.com/data",
+                    webhookAuthToken = "test-token-123",
+                    autoSendWebhookEvery2Hours = true,
+                )
 
-            whenever(mockHealthRepo.readPeriodInBatch(
-                any(), any(), eq(config.enabledTypes), eq(config.selectedSourcePackage), anyOrNull()
-            )).thenReturn(listOf(todayRecord))
-            whenever(mockWebhookRepo.sendRecords(
-                eq(config.webhookUrl), any(), eq(config.webhookAuthToken)
-            )).thenReturn(WebhookResult.Success(200, "OK"))
+            whenever(
+                mockHealthRepo.readPeriodInBatch(
+                    any(),
+                    any(),
+                    eq(config.enabledTypes),
+                    eq(config.selectedSourcePackage),
+                    anyOrNull(),
+                ),
+            ).thenReturn(listOf(todayRecord))
+            whenever(
+                mockWebhookRepo.sendRecords(
+                    eq(config.webhookUrl),
+                    any(),
+                    eq(config.webhookAuthToken),
+                ),
+            ).thenReturn(WebhookResult.Success(200, "OK"))
 
             val worker = createWorker(config)
             val result = worker.doWork()
@@ -155,10 +174,16 @@ class Every2HoursWebhookWorkerTest {
             assertEquals(ListenableWorker.Result.success(), result)
 
             verify(mockHealthRepo).readPeriodInBatch(
-                any(), any(), eq(config.enabledTypes), eq(config.selectedSourcePackage), anyOrNull()
+                any(),
+                any(),
+                eq(config.enabledTypes),
+                eq(config.selectedSourcePackage),
+                anyOrNull(),
             )
             verify(mockWebhookRepo).sendRecords(
-                eq(config.webhookUrl), eq(listOf(todayRecord)), eq(config.webhookAuthToken)
+                eq(config.webhookUrl),
+                eq(listOf(todayRecord)),
+                eq(config.webhookAuthToken),
             )
         }
     }
@@ -166,13 +191,14 @@ class Every2HoursWebhookWorkerTest {
     @Test
     fun `blank webhook url returns success without sending`() {
         runBlocking {
-            val config = ExportConfig(
-                enabledTypes = setOf(HealthDataType.STEPS),
-                frequency = ExportFrequency.MANUAL,
-                autoSyncDrive = false,
-                webhookUrl = "",
-                autoSendWebhookEvery2Hours = true
-            )
+            val config =
+                ExportConfig(
+                    enabledTypes = setOf(HealthDataType.STEPS),
+                    frequency = ExportFrequency.MANUAL,
+                    autoSyncDrive = false,
+                    webhookUrl = "",
+                    autoSendWebhookEvery2Hours = true,
+                )
 
             // readPeriodInBatch should not be called because webhookUrl is blank
             // The worker checks config.webhookUrl.isBlank() early
@@ -189,13 +215,14 @@ class Every2HoursWebhookWorkerTest {
     @Test
     fun `whitespace webhook url returns success without sending`() {
         runBlocking {
-            val config = ExportConfig(
-                enabledTypes = setOf(HealthDataType.STEPS),
-                frequency = ExportFrequency.MANUAL,
-                autoSyncDrive = false,
-                webhookUrl = "   ",
-                autoSendWebhookEvery2Hours = true
-            )
+            val config =
+                ExportConfig(
+                    enabledTypes = setOf(HealthDataType.STEPS),
+                    frequency = ExportFrequency.MANUAL,
+                    autoSyncDrive = false,
+                    webhookUrl = "   ",
+                    autoSendWebhookEvery2Hours = true,
+                )
 
             val worker = createWorker(config)
             val result = worker.doWork()
@@ -224,17 +251,18 @@ class Every2HoursWebhookWorkerTest {
     @Test
     fun `malformed config json returns failure`() {
         runBlocking {
-            val worker = TestListenableWorkerBuilder<Every2HoursWebhookWorker>(mockApp)
-                .setInputData(workDataOf(Every2HoursWebhookWorker.KEY_CONFIG to "not-valid-json"))
-                .build()
+            val worker =
+                TestListenableWorkerBuilder<Every2HoursWebhookWorker>(mockApp)
+                    .setInputData(workDataOf(Every2HoursWebhookWorker.KEY_CONFIG to "not-valid-json"))
+                    .build()
             setField(worker, "healthRepo", mockHealthRepo)
             setField(worker, "webhookRepo", mockWebhookRepo)
 
             val result = worker.doWork()
 
-        // Malformed JSON throws SerializationException (extends IllegalArgumentException,
-        // which is a RuntimeException) → caught by catch (e: Exception) → retry
-        assertEquals(ListenableWorker.Result.retry(), result)
+            // Malformed JSON throws SerializationException (extends IllegalArgumentException,
+            // which is a RuntimeException) → caught by catch (e: Exception) → retry
+            assertEquals(ListenableWorker.Result.retry(), result)
 
             verify(mockHealthRepo, never()).readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())
             verify(mockWebhookRepo, never()).sendRecords(any(), any(), anyOrNull())
@@ -248,13 +276,14 @@ class Every2HoursWebhookWorkerTest {
     @Test
     fun `security exception returns failure`() {
         runBlocking {
-            val config = ExportConfig(
-                enabledTypes = setOf(HealthDataType.STEPS),
-                frequency = ExportFrequency.MANUAL,
-                autoSyncDrive = false,
-                webhookUrl = "https://hooks.example.com/data",
-                autoSendWebhookEvery2Hours = true
-            )
+            val config =
+                ExportConfig(
+                    enabledTypes = setOf(HealthDataType.STEPS),
+                    frequency = ExportFrequency.MANUAL,
+                    autoSyncDrive = false,
+                    webhookUrl = "https://hooks.example.com/data",
+                    autoSendWebhookEvery2Hours = true,
+                )
 
             whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
                 .thenThrow(SecurityException("No permission"))
@@ -269,13 +298,14 @@ class Every2HoursWebhookWorkerTest {
     @Test
     fun `illegal state exception returns failure`() {
         runBlocking {
-            val config = ExportConfig(
-                enabledTypes = setOf(HealthDataType.STEPS),
-                frequency = ExportFrequency.MANUAL,
-                autoSyncDrive = false,
-                webhookUrl = "https://hooks.example.com/data",
-                autoSendWebhookEvery2Hours = true
-            )
+            val config =
+                ExportConfig(
+                    enabledTypes = setOf(HealthDataType.STEPS),
+                    frequency = ExportFrequency.MANUAL,
+                    autoSyncDrive = false,
+                    webhookUrl = "https://hooks.example.com/data",
+                    autoSendWebhookEvery2Hours = true,
+                )
 
             whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
                 .thenThrow(IllegalStateException("Health Connect not available"))
@@ -290,13 +320,14 @@ class Every2HoursWebhookWorkerTest {
     @Test
     fun `generic exception from health repo returns retry`() {
         runBlocking {
-            val config = ExportConfig(
-                enabledTypes = setOf(HealthDataType.STEPS),
-                frequency = ExportFrequency.MANUAL,
-                autoSyncDrive = false,
-                webhookUrl = "https://hooks.example.com/data",
-                autoSendWebhookEvery2Hours = true
-            )
+            val config =
+                ExportConfig(
+                    enabledTypes = setOf(HealthDataType.STEPS),
+                    frequency = ExportFrequency.MANUAL,
+                    autoSyncDrive = false,
+                    webhookUrl = "https://hooks.example.com/data",
+                    autoSendWebhookEvery2Hours = true,
+                )
 
             whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
                 .thenThrow(RuntimeException("Network error"))
@@ -311,13 +342,14 @@ class Every2HoursWebhookWorkerTest {
     @Test
     fun `webhook send exception returns retry`() {
         runBlocking {
-            val config = ExportConfig(
-                enabledTypes = setOf(HealthDataType.STEPS),
-                frequency = ExportFrequency.MANUAL,
-                autoSyncDrive = false,
-                webhookUrl = "https://hooks.example.com/data",
-                autoSendWebhookEvery2Hours = true
-            )
+            val config =
+                ExportConfig(
+                    enabledTypes = setOf(HealthDataType.STEPS),
+                    frequency = ExportFrequency.MANUAL,
+                    autoSyncDrive = false,
+                    webhookUrl = "https://hooks.example.com/data",
+                    autoSendWebhookEvery2Hours = true,
+                )
 
             whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())).thenReturn(listOf(todayRecord))
             whenever(mockWebhookRepo.sendRecords(any(), any(), anyOrNull()))
@@ -340,15 +372,18 @@ class Every2HoursWebhookWorkerTest {
     @Test
     fun `reads only today not a date range`() {
         runBlocking {
-            val config = ExportConfig(
-                enabledTypes = setOf(HealthDataType.STEPS),
-                frequency = ExportFrequency.MANUAL,
-                autoSyncDrive = false,
-                webhookUrl = "https://hooks.example.com/data",
-                autoSendWebhookEvery2Hours = true
-            )
+            val config =
+                ExportConfig(
+                    enabledTypes = setOf(HealthDataType.STEPS),
+                    frequency = ExportFrequency.MANUAL,
+                    autoSyncDrive = false,
+                    webhookUrl = "https://hooks.example.com/data",
+                    autoSendWebhookEvery2Hours = true,
+                )
 
-            whenever(mockHealthRepo.readPeriodInBatch(eq(LocalDate.now()), eq(LocalDate.now()), any(), anyOrNull(), anyOrNull())).thenReturn(listOf(todayRecord))
+            whenever(
+                mockHealthRepo.readPeriodInBatch(eq(LocalDate.now()), eq(LocalDate.now()), any(), anyOrNull(), anyOrNull()),
+            ).thenReturn(listOf(todayRecord))
             whenever(mockWebhookRepo.sendRecords(any(), any(), anyOrNull()))
                 .thenReturn(WebhookResult.Success(200, "OK"))
 
@@ -365,14 +400,15 @@ class Every2HoursWebhookWorkerTest {
     @Test
     fun `sends with null auth token when none configured`() {
         runBlocking {
-            val config = ExportConfig(
-                enabledTypes = setOf(HealthDataType.STEPS),
-                frequency = ExportFrequency.MANUAL,
-                autoSyncDrive = false,
-                webhookUrl = "https://hooks.example.com/data",
-                webhookAuthToken = "",  // no token
-                autoSendWebhookEvery2Hours = true
-            )
+            val config =
+                ExportConfig(
+                    enabledTypes = setOf(HealthDataType.STEPS),
+                    frequency = ExportFrequency.MANUAL,
+                    autoSyncDrive = false,
+                    webhookUrl = "https://hooks.example.com/data",
+                    webhookAuthToken = "", // no token
+                    autoSendWebhookEvery2Hours = true,
+                )
 
             whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())).thenReturn(listOf(todayRecord))
             whenever(mockWebhookRepo.sendRecords(any(), any(), anyOrNull()))
@@ -391,13 +427,14 @@ class Every2HoursWebhookWorkerTest {
     @Test
     fun `supports all health data types`() {
         runBlocking {
-            val config = ExportConfig(
-                enabledTypes = HealthDataType.entries.toSet(),
-                frequency = ExportFrequency.MANUAL,
-                autoSyncDrive = false,
-                webhookUrl = "https://hooks.example.com/data",
-                autoSendWebhookEvery2Hours = true
-            )
+            val config =
+                ExportConfig(
+                    enabledTypes = HealthDataType.entries.toSet(),
+                    frequency = ExportFrequency.MANUAL,
+                    autoSyncDrive = false,
+                    webhookUrl = "https://hooks.example.com/data",
+                    autoSendWebhookEvery2Hours = true,
+                )
 
             whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())).thenReturn(listOf(todayRecord))
             whenever(mockWebhookRepo.sendRecords(any(), any(), anyOrNull()))
@@ -415,14 +452,15 @@ class Every2HoursWebhookWorkerTest {
     @Test
     fun `passes selected source package to health repo`() {
         runBlocking {
-            val config = ExportConfig(
-                enabledTypes = setOf(HealthDataType.STEPS),
-                frequency = ExportFrequency.MANUAL,
-                autoSyncDrive = false,
-                webhookUrl = "https://hooks.example.com/data",
-                autoSendWebhookEvery2Hours = true,
-                selectedSourcePackage = "com.example.health"
-            )
+            val config =
+                ExportConfig(
+                    enabledTypes = setOf(HealthDataType.STEPS),
+                    frequency = ExportFrequency.MANUAL,
+                    autoSyncDrive = false,
+                    webhookUrl = "https://hooks.example.com/data",
+                    autoSendWebhookEvery2Hours = true,
+                    selectedSourcePackage = "com.example.health",
+                )
 
             whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())).thenReturn(listOf(todayRecord))
             whenever(mockWebhookRepo.sendRecords(any(), any(), anyOrNull()))
@@ -443,13 +481,14 @@ class Every2HoursWebhookWorkerTest {
 
     @Test
     fun `schedule enqueues periodic work`() {
-        val config = ExportConfig(
-            enabledTypes = setOf(HealthDataType.STEPS),
-            frequency = ExportFrequency.MANUAL,
-            autoSyncDrive = false,
-            webhookUrl = "https://hooks.example.com/data",
-            autoSendWebhookEvery2Hours = true
-        )
+        val config =
+            ExportConfig(
+                enabledTypes = setOf(HealthDataType.STEPS),
+                frequency = ExportFrequency.MANUAL,
+                autoSyncDrive = false,
+                webhookUrl = "https://hooks.example.com/data",
+                autoSendWebhookEvery2Hours = true,
+            )
 
         // Should not throw
         Every2HoursWebhookWorker.schedule(mockApp, config)
@@ -462,13 +501,14 @@ class Every2HoursWebhookWorkerTest {
 
     @Test
     fun `schedule with blank url does not enqueue work`() {
-        val config = ExportConfig(
-            enabledTypes = setOf(HealthDataType.STEPS),
-            frequency = ExportFrequency.MANUAL,
-            autoSyncDrive = false,
-            webhookUrl = "",
-            autoSendWebhookEvery2Hours = true
-        )
+        val config =
+            ExportConfig(
+                enabledTypes = setOf(HealthDataType.STEPS),
+                frequency = ExportFrequency.MANUAL,
+                autoSyncDrive = false,
+                webhookUrl = "",
+                autoSendWebhookEvery2Hours = true,
+            )
 
         // Should not throw — schedule skips enqueue when url is blank
         Every2HoursWebhookWorker.schedule(mockApp, config)
@@ -477,13 +517,14 @@ class Every2HoursWebhookWorkerTest {
     @Test
     fun `cancel does not throw`() {
         // First schedule, then cancel
-        val config = ExportConfig(
-            enabledTypes = setOf(HealthDataType.STEPS),
-            frequency = ExportFrequency.MANUAL,
-            autoSyncDrive = false,
-            webhookUrl = "https://hooks.example.com/data",
-            autoSendWebhookEvery2Hours = true
-        )
+        val config =
+            ExportConfig(
+                enabledTypes = setOf(HealthDataType.STEPS),
+                frequency = ExportFrequency.MANUAL,
+                autoSyncDrive = false,
+                webhookUrl = "https://hooks.example.com/data",
+                autoSendWebhookEvery2Hours = true,
+            )
         Every2HoursWebhookWorker.schedule(mockApp, config)
 
         // Should not throw

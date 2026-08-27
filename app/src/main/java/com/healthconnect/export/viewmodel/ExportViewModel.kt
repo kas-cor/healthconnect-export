@@ -12,10 +12,10 @@ import com.healthconnect.export.BuildConfig
 import com.healthconnect.export.R
 import com.healthconnect.export.data.*
 import com.healthconnect.export.repository.HealthConnectRepository
+import com.healthconnect.export.repository.LocalExportRepository
 import com.healthconnect.export.usecase.ExportDataUseCase
 import com.healthconnect.export.usecase.ExportStep
 import com.healthconnect.export.util.LocaleManager
-import com.healthconnect.export.repository.LocalExportRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +30,6 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.LocalDate
-
 
 data class ExportUiState(
     val isLoading: Boolean = false,
@@ -69,14 +68,23 @@ data class ExportUiState(
 
 sealed class DriveStatus {
     object NotConnected : DriveStatus()
+
     object Connected : DriveStatus()
+
     object Syncing : DriveStatus()
-    data class Synced(val filesCount: Int) : DriveStatus()
-    data class Error(val error: String) : DriveStatus()
+
+    data class Synced(
+        val filesCount: Int,
+    ) : DriveStatus()
+
+    data class Error(
+        val error: String,
+    ) : DriveStatus()
 }
 
-class ExportViewModel(application: Application) : AndroidViewModel(application) {
-
+class ExportViewModel(
+    application: Application,
+) : AndroidViewModel(application) {
     /** Scope for export operations. Made internal for testability. */
     internal var exportScope: CoroutineScope = viewModelScope
 
@@ -93,15 +101,17 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
     val uiState = _uiState.asStateFlow()
 
     val driveManager = DriveManager(getApplication())
-    val webhookManager = WebhookManager(
-        application = getApplication(),
-        _uiState = _uiState,
-        viewModelScope = viewModelScope,
-        healthRepo = healthRepo
-    )
-    val scheduleManager = ScheduleManager(getApplication()) { update ->
-        _uiState.update(update)
-    }
+    val webhookManager =
+        WebhookManager(
+            application = getApplication(),
+            _uiState = _uiState,
+            viewModelScope = viewModelScope,
+            healthRepo = healthRepo,
+        )
+    val scheduleManager =
+        ScheduleManager(getApplication()) { update ->
+            _uiState.update(update)
+        }
 
     /** Набор разрешений для запроса Health Connect */
     var pendingPermissions: Set<String>? = null
@@ -130,8 +140,11 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
 
     // Helper to get localized strings from resources
     private fun str(id: Int): String = getApplication<Application>().getString(id)
-    private fun str(id: Int, vararg args: Any?): String =
-        getApplication<Application>().getString(id, *args)
+
+    private fun str(
+        id: Int,
+        vararg args: Any?,
+    ): String = getApplication<Application>().getString(id, *args)
 
     init {
         loadSelectedTypes()
@@ -166,9 +179,15 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
         val prefs = getApplication<Application>().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val saved = prefs.getStringSet(KEY_SELECTED_TYPES, null)
         if (saved != null && saved.isNotEmpty()) {
-            val types = saved.mapNotNull { name ->
-                try { HealthDataType.valueOf(name) } catch (_: IllegalArgumentException) { null }
-            }.toSet()
+            val types =
+                saved
+                    .mapNotNull { name ->
+                        try {
+                            HealthDataType.valueOf(name)
+                        } catch (_: IllegalArgumentException) {
+                            null
+                        }
+                    }.toSet()
             if (types.isNotEmpty()) {
                 _uiState.update { it.copy(selectedTypes = types) }
             }
@@ -202,9 +221,14 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
         // Load the preset selection. If a sliding preset (7/30 days) is active,
         // recompute the window from the current date instead of restoring frozen dates.
         val presetName = prefs.getString(KEY_DATE_RANGE_PRESET, null)
-        val preset = presetName?.let {
-            try { DateRangePreset.valueOf(it) } catch (_: IllegalArgumentException) { null }
-        }
+        val preset =
+            presetName?.let {
+                try {
+                    DateRangePreset.valueOf(it)
+                } catch (_: IllegalArgumentException) {
+                    null
+                }
+            }
 
         if (preset != null && preset != DateRangePreset.NONE) {
             val (start, end) = preset.calcRange(LocalDate.now())
@@ -223,13 +247,20 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
                 _uiState.update {
                     it.copy(dateRangePreset = DateRangePreset.NONE, startDate = start, endDate = end)
                 }
-            } catch (_: Exception) { /* ignore invalid dates */ }
+            } catch (_: Exception) {
+                // ignore invalid dates
+            }
         }
     }
 
-    private fun saveDateRange(preset: DateRangePreset, start: LocalDate, end: LocalDate) {
+    private fun saveDateRange(
+        preset: DateRangePreset,
+        start: LocalDate,
+        end: LocalDate,
+    ) {
         val prefs = getApplication<Application>().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit()
+        prefs
+            .edit()
             .putString(KEY_DATE_RANGE_PRESET, preset.name)
             .putString(KEY_START_DATE, start.toString())
             .putString(KEY_END_DATE, end.toString())
@@ -243,11 +274,12 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
      * immediately and on every subsequent launch/export.
      */
     fun setDateRange(preset: DateRangePreset) {
-        val (start, end) = if (preset == DateRangePreset.NONE) {
-            _uiState.value.startDate to _uiState.value.endDate
-        } else {
-            preset.calcRange(LocalDate.now())
-        }
+        val (start, end) =
+            if (preset == DateRangePreset.NONE) {
+                _uiState.value.startDate to _uiState.value.endDate
+            } else {
+                preset.calcRange(LocalDate.now())
+            }
         _uiState.update {
             it.copy(dateRangePreset = preset, startDate = start, endDate = end)
         }
@@ -261,7 +293,7 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
      */
     fun refreshSlidingDateRange() {
         val preset = _uiState.value.dateRangePreset
-        if (preset == null || preset == DateRangePreset.NONE) return
+        if (preset == DateRangePreset.NONE) return
         val (start, end) = preset.calcRange(LocalDate.now())
         if (start != _uiState.value.startDate || end != _uiState.value.endDate) {
             _uiState.update { it.copy(startDate = start, endDate = end) }
@@ -280,7 +312,9 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
     private fun saveSourcePreference(sourcePackage: String?) {
         getApplication<Application>()
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putString(KEY_SOURCE_PACKAGE, sourcePackage).apply()
+            .edit()
+            .putString(KEY_SOURCE_PACKAGE, sourcePackage)
+            .apply()
     }
 
     fun setSourcePackage(sourcePackage: String?) {
@@ -304,9 +338,10 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun loadLocale() {
-        val code = getApplication<Application>().let {
-            LocaleManager.getSavedLocale(it)
-        }
+        val code =
+            getApplication<Application>().let {
+                LocaleManager.getSavedLocale(it)
+            }
         _uiState.update { it.copy(locale = code) }
     }
 
@@ -320,7 +355,9 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
     private fun saveAutoSyncDrive(enabled: Boolean) {
         getApplication<Application>()
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putBoolean(KEY_AUTO_SYNC_DRIVE, enabled).apply()
+            .edit()
+            .putBoolean(KEY_AUTO_SYNC_DRIVE, enabled)
+            .apply()
     }
 
     fun setDarkTheme(darkTheme: Boolean?) {
@@ -350,7 +387,10 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
         saveSelectedTypes(types)
     }
 
-    fun setDateRange(start: LocalDate, end: LocalDate) {
+    fun setDateRange(
+        start: LocalDate,
+        end: LocalDate,
+    ) {
         _uiState.update {
             it.copy(dateRangePreset = DateRangePreset.NONE, startDate = start, endDate = end)
         }
@@ -371,13 +411,14 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
     private fun loadExportFormat() {
         val prefs = getApplication<Application>().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val name = prefs.getString(KEY_EXPORT_FORMAT, null)
-        val format = name?.let {
-            try {
-                ExportFormat.valueOf(it)
-            } catch (_: IllegalArgumentException) {
-                null
+        val format =
+            name?.let {
+                try {
+                    ExportFormat.valueOf(it)
+                } catch (_: IllegalArgumentException) {
+                    null
+                }
             }
-        }
         if (format != null) {
             _uiState.update { it.copy(exportFormat = format) }
         }
@@ -482,15 +523,17 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
      * Deletes an exported file (both JSON and CSV variants for that day).
      */
     fun deleteExportFile(file: File) {
-        val dateStr = file.name
-            .removePrefix("health_")
-            .removeSuffix(".json")
-            .removeSuffix(".csv")
-        val date = try {
-            LocalDate.parse(dateStr)
-        } catch (e: Exception) {
-            null
-        }
+        val dateStr =
+            file.name
+                .removePrefix("health_")
+                .removeSuffix(".json")
+                .removeSuffix(".csv")
+        val date =
+            try {
+                LocalDate.parse(dateStr)
+            } catch (e: Exception) {
+                null
+            }
         if (date != null) {
             localRepo.deleteExport(date, currentExportConfig())
             refreshLocalFiles()
@@ -543,6 +586,15 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
 
     fun exportNow() {
         Log.d("ExportViewModel", "exportNow() called")
+        val currentState = _uiState.value
+        if (currentState.selectedTypes.isEmpty()) {
+            _uiState.update { it.copy(message = str(R.string.vm_no_data_types)) }
+            return
+        }
+        if (currentState.startDate.isAfter(currentState.endDate)) {
+            _uiState.update { it.copy(message = str(R.string.vm_invalid_date_range)) }
+            return
+        }
         // If already exporting — cancel instead
         if (_uiState.value.isLoading) {
             cancelExport()
@@ -553,110 +605,112 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
         // before exporting so the period moves as days pass.
         refreshSlidingDateRange()
 
-        val job = exportScope.launch {
-            try {
-                val state = _uiState.value
+        val job =
+            exportScope.launch {
+                try {
+                    val state = _uiState.value
 
-                exportUseCase.execute(
-                    context = getApplication(),
-                    config = currentExportConfig(),
-                    startDate = state.startDate,
-                    endDate = state.endDate
-                ).collect { step ->
-                    when (step) {
-                        is ExportStep.CheckingPermissions -> {
-                            _uiState.update {
-                                it.copy(isLoading = true, exportProgress = str(R.string.vm_check_permissions))
-                            }
-                        }
-                        is ExportStep.HealthNotAvailable -> {
-                            _uiState.update {
-                                it.copy(isLoading = false, message = str(R.string.vm_health_not_available))
-                            }
-                        }
-                        is ExportStep.HealthNotInstalled -> {
-                            _uiState.update {
-                                it.copy(isLoading = false, message = str(R.string.vm_health_not_installed))
-                            }
-                        }
-                        is ExportStep.PermissionsRequired -> {
-                            pendingPermissions = step.permissions
-                            _uiState.update {
-                                it.copy(isLoading = false, message = str(R.string.vm_permissions_required))
-                            }
-                        }
-                        is ExportStep.Progress -> {
-                            val parts = step.message.split(":")
-                            when {
-                                // Save progress: "save:current:total:date"
-                                parts.size == 4 && parts[0] == "save" -> {
+                    exportUseCase
+                        .execute(
+                            context = getApplication(),
+                            config = currentExportConfig(),
+                            startDate = state.startDate,
+                            endDate = state.endDate,
+                        ).collect { step ->
+                            when (step) {
+                                is ExportStep.CheckingPermissions -> {
+                                    _uiState.update {
+                                        it.copy(isLoading = true, exportProgress = str(R.string.vm_check_permissions))
+                                    }
+                                }
+                                is ExportStep.HealthNotAvailable -> {
+                                    _uiState.update {
+                                        it.copy(isLoading = false, message = str(R.string.vm_health_not_available))
+                                    }
+                                }
+                                is ExportStep.HealthNotInstalled -> {
+                                    _uiState.update {
+                                        it.copy(isLoading = false, message = str(R.string.vm_health_not_installed))
+                                    }
+                                }
+                                is ExportStep.PermissionsRequired -> {
+                                    pendingPermissions = step.permissions
+                                    _uiState.update {
+                                        it.copy(isLoading = false, message = str(R.string.vm_permissions_required))
+                                    }
+                                }
+                                is ExportStep.Progress -> {
+                                    val parts = step.message.split(":")
+                                    when {
+                                        // Save progress: "save:current:total:date"
+                                        parts.size == 4 && parts[0] == "save" -> {
+                                            _uiState.update {
+                                                it.copy(
+                                                    exportProgress = step.message,
+                                                    progressPhase = "save",
+                                                    progressCurrent = parts[1].toIntOrNull() ?: 0,
+                                                    progressTotal = parts[2].toIntOrNull() ?: 0,
+                                                    progressDate = parts[3],
+                                                )
+                                            }
+                                        }
+                                        // Read page progress: "read:typeName:pageNumber"
+                                        parts.size == 3 && parts[0] == "read" -> {
+                                            _uiState.update {
+                                                it.copy(
+                                                    exportProgress = step.message,
+                                                    progressPhase = "read",
+                                                    progressCurrent = parts[2].toIntOrNull() ?: 0,
+                                                    progressTotal = 0, // unknown total pages
+                                                    progressDate = parts[1], // type name
+                                                )
+                                            }
+                                        }
+                                        else -> {
+                                            _uiState.update { it.copy(exportProgress = step.message) }
+                                        }
+                                    }
+                                }
+                                is ExportStep.Complete -> {
                                     _uiState.update {
                                         it.copy(
-                                            exportProgress = step.message,
-                                            progressPhase = "save",
-                                            progressCurrent = parts[1].toIntOrNull() ?: 0,
-                                            progressTotal = parts[2].toIntOrNull() ?: 0,
-                                            progressDate = parts[3]
+                                            isLoading = false,
+                                            exportProgress = str(R.string.vm_saved_files, step.files.size),
+                                            exportedFiles = step.files,
+                                            exportSummary = step.summary,
+                                            message = str(R.string.vm_export_complete, step.files.size),
+                                        )
+                                    }
+                                    // Refresh the full file list from disk so the UI shows all exported files,
+                                    // not just the ones from this export run
+                                    refreshLocalFiles()
+                                    // Apply the retention policy after a successful export
+                                    applyRetentionCleanup()
+                                    // Post-export: auto-sync to Drive
+                                    if (state.autoSyncDrive && driveManager.driveRepo.isSignedIn()) {
+                                        syncToDrive(step.files)
+                                    }
+                                    // Post-export: send to webhook
+                                    if (state.autoSendWebhook && state.webhookUrl.isNotBlank()) {
+                                        webhookManager.sendToWebhook(state.webhookUrl, state.webhookAuthToken, step.records)
+                                    }
+                                }
+                                is ExportStep.Error -> {
+                                    _uiState.update {
+                                        it.copy(
+                                            isLoading = false,
+                                            message = step.message,
                                         )
                                     }
                                 }
-                                // Read page progress: "read:typeName:pageNumber"
-                                parts.size == 3 && parts[0] == "read" -> {
-                                    _uiState.update {
-                                        it.copy(
-                                            exportProgress = step.message,
-                                            progressPhase = "read",
-                                            progressCurrent = parts[2].toIntOrNull() ?: 0,
-                                            progressTotal = 0, // unknown total pages
-                                            progressDate = parts[1] // type name
-                                        )
-                                    }
-                                }
-                                else -> {
-                                    _uiState.update { it.copy(exportProgress = step.message) }
-                                }
                             }
                         }
-                        is ExportStep.Complete -> {
-                            _uiState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    exportProgress = str(R.string.vm_saved_files, step.files.size),
-                                    exportedFiles = step.files,
-                                    exportSummary = step.summary,
-                                    message = str(R.string.vm_export_complete, step.files.size)
-                                )
-                            }
-                            // Refresh the full file list from disk so the UI shows all exported files,
-                            // not just the ones from this export run
-                            refreshLocalFiles()
-                            // Apply the retention policy after a successful export
-                            applyRetentionCleanup()
-                            // Post-export: auto-sync to Drive
-                            if (state.autoSyncDrive && driveManager.driveRepo.isSignedIn()) {
-                                syncToDrive(step.files)
-                            }
-                            // Post-export: send to webhook
-                            if (state.autoSendWebhook && state.webhookUrl.isNotBlank()) {
-                                webhookManager.sendToWebhook(state.webhookUrl, state.webhookAuthToken, step.records)
-                            }
-                        }
-                        is ExportStep.Error -> {
-                            _uiState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    message = step.message
-                                )
-                            }
-                        }
-                    }
+                } catch (e: CancellationException) {
+                    // Export was cancelled — do nothing, cancelExport() already reset state
+                } finally {
+                    currentExportJob = null
                 }
-            } catch (e: CancellationException) {
-                // Export was cancelled — do nothing, cancelExport() already reset state
-            } finally {
-                currentExportJob = null
             }
-        }
         currentExportJob = job
     }
 
@@ -675,7 +729,7 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
                 progressCurrent = 0,
                 progressTotal = 0,
                 progressDate = "",
-                message = str(R.string.vm_export_cancelled)
+                message = str(R.string.vm_export_cancelled),
             )
         }
     }
@@ -694,20 +748,24 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
                 exportNow()
             } else {
                 val missing = required - actualGranted
-                val missingNames = missing.mapNotNull { perm ->
-                    val type = HealthDataType.entries
-                        .sortedByDescending { it.name.length }
-                        .firstOrNull { perm.contains(it.name) }
-                    if (type != null) {
-                        val resName = "data_type_${type.name}"
-                        val ctx = getApplication<Application>()
-                        val resId = ctx.resources.getIdentifier(resName, "string", ctx.packageName)
-                        if (resId != 0) str(resId) else type.displayName
-                    } else null
-                }
+                val missingNames =
+                    missing.mapNotNull { perm ->
+                        val type =
+                            HealthDataType.entries
+                                .sortedByDescending { it.name.length }
+                                .firstOrNull { perm.contains(it.name) }
+                        if (type != null) {
+                            val resName = "data_type_${type.name}"
+                            val ctx = getApplication<Application>()
+                            val resId = ctx.resources.getIdentifier(resName, "string", ctx.packageName)
+                            if (resId != 0) str(resId) else type.displayName
+                        } else {
+                            null
+                        }
+                    }
                 _uiState.update {
                     it.copy(
-                        message = str(R.string.vm_permissions_missing, missingNames.joinToString(", "))
+                        message = str(R.string.vm_permissions_missing, missingNames.joinToString(", ")),
                     )
                 }
             }
@@ -722,7 +780,7 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
                 driveStatus = driveState.status,
                 // Only overwrite message if Drive has one to show;
                 // preserves messages set by the caller (e.g. export complete)
-                message = driveState.message ?: it.message
+                message = driveState.message ?: it.message,
             )
         }
     }
@@ -765,21 +823,25 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
      * When a newer version is found, also fetches its release notes.
      * The URLs can be overridden for testing.
      */
-    fun checkForUpdates(releasesUrl: String? = null, apiReleasesUrl: String? = null) {
+    fun checkForUpdates(
+        releasesUrl: String? = null,
+        apiReleasesUrl: String? = null,
+    ) {
         if (_uiState.value.updateCheckState is UpdateCheckState.Checking) return
         _uiState.update { it.copy(updateCheckState = UpdateCheckState.Checking) }
 
         val url = releasesUrl ?: getApplication<Application>().getString(R.string.releases_url)
         val apiUrl = apiReleasesUrl ?: getApplication<Application>().getString(R.string.api_releases_url)
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                val version = fetchLatestRelease(url)
-                if (version is UpdateCheckState.Available) {
-                    version.copy(releaseNotes = fetchLatestReleaseNotes(apiUrl))
-                } else {
-                    version
+            val result =
+                withContext(Dispatchers.IO) {
+                    val version = fetchLatestRelease(url)
+                    if (version is UpdateCheckState.Available) {
+                        version.copy(releaseNotes = fetchLatestReleaseNotes(apiUrl))
+                    } else {
+                        version
+                    }
                 }
-            }
             _uiState.update { it.copy(updateCheckState = result) }
         }
     }
@@ -813,11 +875,12 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
                 }
 
                 // Location can be relative (/kas-cor/.../tag/v1.7) or absolute (https://github.com/...)
-                val resolvedUrl = if (location.startsWith("http")) {
-                    location
-                } else {
-                    "https://github.com$location"
-                }
+                val resolvedUrl =
+                    if (location.startsWith("http")) {
+                        location
+                    } else {
+                        "https://github.com$location"
+                    }
                 // GitHub redirects /releases/latest to a /releases/tag/ URL. Anything else
                 // (e.g. /releases when the repository has no releases) is not a version
                 // we can compare against.
@@ -832,7 +895,7 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
                 if (isVersionNewer(tagVersion, BuildConfig.VERSION_NAME)) {
                     UpdateCheckState.Available(
                         latestVersion = tagVersion,
-                        downloadUrl = resolvedUrl
+                        downloadUrl = resolvedUrl,
                     )
                 } else {
                     UpdateCheckState.UpToDate
@@ -849,7 +912,10 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
      * Compares two dotted version strings (e.g. "1.7.2" vs "1.6").
      * Returns true if [latest] is strictly newer than [current].
      */
-    internal fun isVersionNewer(latest: String, current: String): Boolean {
+    internal fun isVersionNewer(
+        latest: String,
+        current: String,
+    ): Boolean {
         val latestParts = latest.split(".").map { it.toIntOrNull() ?: 0 }
         val currentParts = current.split(".").map { it.toIntOrNull() ?: 0 }
         for (i in 0 until maxOf(latestParts.size, currentParts.size)) {
@@ -896,7 +962,10 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
      * Caps response body reads to 1 MB to avoid OOM on a misbehaving/gigantic
      * response (mirrors the defensive read in WebhookRepository).
      */
-    private fun readBounded(reader: java.io.Reader, maxBytes: Int = MAX_RESPONSE_BYTES): String {
+    private fun readBounded(
+        reader: java.io.Reader,
+        maxBytes: Int = MAX_RESPONSE_BYTES,
+    ): String {
         val buffer = CharArray(8192)
         val out = StringBuilder()
         var total = 0
@@ -917,16 +986,24 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
  * Subset of the GitHub API release payload used to read the release notes.
  */
 @Serializable
-private data class GitHubRelease(val body: String = "")
+private data class GitHubRelease(
+    val body: String = "",
+)
 
 sealed class UpdateCheckState {
     data object Idle : UpdateCheckState()
+
     data object Checking : UpdateCheckState()
+
     data object UpToDate : UpdateCheckState()
+
     data class Available(
         val latestVersion: String,
         val downloadUrl: String,
         val releaseNotes: String? = null,
     ) : UpdateCheckState()
-    data class Error(val message: String) : UpdateCheckState()
+
+    data class Error(
+        val message: String,
+    ) : UpdateCheckState()
 }

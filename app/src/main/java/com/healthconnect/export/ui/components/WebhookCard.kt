@@ -25,7 +25,7 @@ fun WebhookCard(
     onTokenChange: (String) -> Unit,
     onToggle: (Boolean) -> Unit,
     onTestClick: () -> Unit = {},
-    onCancelTestClick: () -> Unit = {}
+    onCancelTestClick: () -> Unit = {},
 ) {
     val urlHasError = webhookUrl.isNotBlank() && webhookUrlError != null
 
@@ -46,10 +46,13 @@ fun WebhookCard(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 isError = urlHasError,
-                supportingText = if (urlHasError) {
-                    { Text(webhookUrlError ?: "", color = MaterialTheme.colorScheme.error) }
-                } else null,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+                supportingText =
+                    if (urlHasError) {
+                        { Text(webhookUrlError ?: "", color = MaterialTheme.colorScheme.error) }
+                    } else {
+                        null
+                    },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -61,23 +64,26 @@ fun WebhookCard(
                 placeholder = { Text(stringResource(R.string.bearer_token_placeholder)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             )
 
             Spacer(modifier = Modifier.height(8.dp))
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Checkbox(
                     checked = autoSendWebhook,
                     onCheckedChange = onToggle,
-                    enabled = webhookUrl.isNotBlank()
+                    enabled = webhookUrl.isNotBlank(),
                 )
                 Text(
-                    if (webhookUrl.isBlank()) stringResource(R.string.enter_url_first)
-                    else stringResource(R.string.send_json)
+                    if (webhookUrl.isBlank()) {
+                        stringResource(R.string.enter_url_first)
+                    } else {
+                        stringResource(R.string.send_json)
+                    },
                 )
             }
 
@@ -85,12 +91,12 @@ fun WebhookCard(
             if (isTestingWebhook) {
                 OutlinedButton(
                     onClick = onCancelTestClick,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = null,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(16.dp),
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(stringResource(R.string.cancel_export))
@@ -99,12 +105,12 @@ fun WebhookCard(
                 OutlinedButton(
                     onClick = onTestClick,
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = webhookUrl.isNotBlank() && webhookUrlError == null
+                    enabled = webhookUrl.isNotBlank() && webhookUrlError == null,
                 ) {
                     Icon(
                         imageVector = Icons.Default.Http,
                         contentDescription = null,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(16.dp),
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(stringResource(R.string.webhook_test))

@@ -16,7 +16,6 @@ import java.time.LocalDate
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class DateRangeCardTest {
-
     @get:Rule
     val composeTestRule = createComposeRule()
 
@@ -32,7 +31,7 @@ class DateRangeCardTest {
                 onPresetChange = { },
                 onDateRangeChange = { _, _ -> },
                 onStartDateChange = { },
-                onEndDateChange = { }
+                onEndDateChange = { },
             )
         }
 
@@ -50,7 +49,7 @@ class DateRangeCardTest {
                 onPresetChange = { },
                 onDateRangeChange = { _, _ -> },
                 onStartDateChange = { },
-                onEndDateChange = { }
+                onEndDateChange = { },
             )
         }
 
@@ -71,7 +70,7 @@ class DateRangeCardTest {
                 onPresetChange = { },
                 onDateRangeChange = { _, _ -> },
                 onStartDateChange = { },
-                onEndDateChange = { }
+                onEndDateChange = { },
             )
         }
 

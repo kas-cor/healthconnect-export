@@ -19,28 +19,26 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -51,7 +49,6 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -81,8 +78,8 @@ import com.healthconnect.export.ui.components.DataSourceCard
 import com.healthconnect.export.ui.components.DataTypeCard
 import com.healthconnect.export.ui.components.DateRangeCard
 import com.healthconnect.export.ui.components.DriveStatusCard
-import com.healthconnect.export.ui.components.ExportedFilesCard
 import com.healthconnect.export.ui.components.ExportSummaryCard
+import com.healthconnect.export.ui.components.ExportedFilesCard
 import com.healthconnect.export.ui.components.JsonViewerDialog
 import com.healthconnect.export.ui.components.MaterialCard
 import com.healthconnect.export.ui.components.MaterialSectionHeader
@@ -91,7 +88,6 @@ import com.healthconnect.export.ui.components.ScheduleCard
 import com.healthconnect.export.ui.components.WebhookCard
 import com.healthconnect.export.viewmodel.ExportViewModel
 import com.healthconnect.export.viewmodel.UpdateCheckState
-import androidx.compose.material3.ExperimentalMaterial3Api
 import java.io.File
 
 private enum class ExportDestination(
@@ -151,8 +147,9 @@ fun ExportScreen(
         if (available != null) {
             ReleaseNotesDialog(
                 version = available.latestVersion,
-                releaseNotes = available.releaseNotes
-                    ?: stringResource(R.string.release_notes_unavailable),
+                releaseNotes =
+                    available.releaseNotes
+                        ?: stringResource(R.string.release_notes_unavailable),
                 onDownload = {
                     uriHandler.openUri(available.downloadUrl)
                     viewModel.resetUpdateCheck()
@@ -163,8 +160,9 @@ fun ExportScreen(
         }
     }
 
-    val destination = ExportDestination.entries.firstOrNull { it.route == selectedRoute }
-        ?: ExportDestination.EXPORT
+    val destination =
+        ExportDestination.entries.firstOrNull { it.route == selectedRoute }
+            ?: ExportDestination.EXPORT
 
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
@@ -176,9 +174,10 @@ fun ExportScreen(
                         style = MaterialTheme.typography.titleLarge,
                     )
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
                 actions = {
                     UpdateCheckAction(
                         state = uiState.updateCheckState,
@@ -211,62 +210,69 @@ fun ExportScreen(
                                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                             )
                         },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
+                        colors =
+                            NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            ),
                     )
                 }
             }
         },
     ) { paddingValues ->
         when (destination) {
-            ExportDestination.EXPORT -> ExportHomeContent(
-                uiState = uiState,
-                viewModel = viewModel,
-                modifier = Modifier.padding(paddingValues),
-            )
-            ExportDestination.HISTORY -> HistoryContent(
-                files = uiState.exportedFiles,
-                summary = uiState.exportSummary,
-                showAll = showAllHistoryFiles,
-                onShowAllChange = { showAllHistoryFiles = it },
-                onFileClick = { selectedJsonFilePath = it.absolutePath },
-                onShareFile = viewModel::shareExportFile,
-                onDeleteFile = viewModel::deleteExportFile,
-                modifier = Modifier.padding(paddingValues),
-            )
-            ExportDestination.INTEGRATIONS -> IntegrationsContent(
-                uiState = uiState,
-                viewModel = viewModel,
-                onSignInClick = onSignInClick,
-                modifier = Modifier.padding(paddingValues),
-            )
-            ExportDestination.SCHEDULE -> ScheduleContent(
-                uiState = uiState,
-                viewModel = viewModel,
-                modifier = Modifier.padding(paddingValues),
-            )
-            ExportDestination.SETTINGS -> SettingsContent(
-                uiState = uiState,
-                viewModel = viewModel,
-                onShowReleaseNotes = { showReleaseNotes = true },
-                modifier = Modifier.padding(paddingValues),
-            )
+            ExportDestination.EXPORT ->
+                ExportHomeContent(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    modifier = Modifier.padding(paddingValues),
+                )
+            ExportDestination.HISTORY ->
+                HistoryContent(
+                    files = uiState.exportedFiles,
+                    summary = uiState.exportSummary,
+                    showAll = showAllHistoryFiles,
+                    onShowAllChange = { showAllHistoryFiles = it },
+                    onFileClick = { selectedJsonFilePath = it.absolutePath },
+                    onShareFile = viewModel::shareExportFile,
+                    onDeleteFile = viewModel::deleteExportFile,
+                    modifier = Modifier.padding(paddingValues),
+                )
+            ExportDestination.INTEGRATIONS ->
+                IntegrationsContent(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    onSignInClick = onSignInClick,
+                    modifier = Modifier.padding(paddingValues),
+                )
+            ExportDestination.SCHEDULE ->
+                ScheduleContent(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    modifier = Modifier.padding(paddingValues),
+                )
+            ExportDestination.SETTINGS ->
+                SettingsContent(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    onShowReleaseNotes = { showReleaseNotes = true },
+                    modifier = Modifier.padding(paddingValues),
+                )
         }
     }
 }
 
-private fun destinationIcon(destination: ExportDestination) = when (destination) {
-    ExportDestination.EXPORT -> Icons.Default.FileUpload
-    ExportDestination.HISTORY -> Icons.Default.History
-    ExportDestination.INTEGRATIONS -> Icons.Default.Cloud
-    ExportDestination.SCHEDULE -> Icons.Default.Schedule
-    ExportDestination.SETTINGS -> Icons.Default.Settings
-}
+private fun destinationIcon(destination: ExportDestination) =
+    when (destination) {
+        ExportDestination.EXPORT -> Icons.Default.FileUpload
+        ExportDestination.HISTORY -> Icons.Default.History
+        ExportDestination.INTEGRATIONS -> Icons.Default.Cloud
+        ExportDestination.SCHEDULE -> Icons.Default.Schedule
+        ExportDestination.SETTINGS -> Icons.Default.Settings
+    }
 
 /**
  * App bar action for the GitHub update check. Shows a small spinner while
@@ -283,9 +289,10 @@ private fun UpdateCheckAction(
             val checkingDescription = stringResource(R.string.checking_for_updates)
             IconButton(onClick = onCheck, enabled = false) {
                 CircularProgressIndicator(
-                    modifier = Modifier
-                        .size(18.dp)
-                        .semantics { contentDescription = checkingDescription },
+                    modifier =
+                        Modifier
+                            .size(18.dp)
+                            .semantics { contentDescription = checkingDescription },
                     strokeWidth = 2.dp,
                 )
             }
@@ -310,13 +317,14 @@ private fun UpdateCheckAction(
                 ) {
                     Icon(
                         imageVector = Icons.Default.SystemUpdate,
-                        contentDescription = stringResource(
-                            if (hasUpdate) {
-                                R.string.update_available_badge
-                            } else {
-                                R.string.check_for_updates
-                            }
-                        ),
+                        contentDescription =
+                            stringResource(
+                                if (hasUpdate) {
+                                    R.string.update_available_badge
+                                } else {
+                                    R.string.check_for_updates
+                                },
+                            ),
                     )
                 }
             }
@@ -331,9 +339,10 @@ private fun ExportHomeContent(
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
-        modifier = modifier
-            .padding(horizontal = 16.dp)
-            .padding(top = 8.dp),
+        modifier =
+            modifier
+                .padding(horizontal = 16.dp)
+                .padding(top = 8.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item {
@@ -350,11 +359,12 @@ private fun ExportHomeContent(
             DataTypeCard(
                 selectedTypes = uiState.selectedTypes,
                 onTypeToggle = { type ->
-                    val newTypes = if (type in uiState.selectedTypes) {
-                        uiState.selectedTypes - type
-                    } else {
-                        uiState.selectedTypes + type
-                    }
+                    val newTypes =
+                        if (type in uiState.selectedTypes) {
+                            uiState.selectedTypes - type
+                        } else {
+                            uiState.selectedTypes + type
+                        }
                     viewModel.selectTypes(newTypes)
                 },
                 onSelectAll = { viewModel.selectTypes(HealthDataType.entries.toSet()) },
@@ -410,9 +420,10 @@ private fun HistoryContent(
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
-        modifier = modifier
-            .padding(horizontal = 16.dp)
-            .padding(top = 8.dp),
+        modifier =
+            modifier
+                .padding(horizontal = 16.dp)
+                .padding(top = 8.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         if (files.isEmpty()) {
@@ -474,9 +485,10 @@ private fun IntegrationsContent(
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
-        modifier = modifier
-            .padding(horizontal = 16.dp)
-            .padding(top = 8.dp),
+        modifier =
+            modifier
+                .padding(horizontal = 16.dp)
+                .padding(top = 8.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item {
@@ -533,9 +545,10 @@ private fun ScheduleContent(
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
-        modifier = modifier
-            .padding(horizontal = 16.dp)
-            .padding(top = 8.dp),
+        modifier =
+            modifier
+                .padding(horizontal = 16.dp)
+                .padding(top = 8.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item {
@@ -564,9 +577,10 @@ private fun SettingsContent(
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
-        modifier = modifier
-            .padding(horizontal = 16.dp)
-            .padding(top = 8.dp),
+        modifier =
+            modifier
+                .padding(horizontal = 16.dp)
+                .padding(top = 8.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item {
@@ -578,16 +592,18 @@ private fun SettingsContent(
                 Spacer(modifier = Modifier.size(8.dp))
                 SettingDropdown(
                     label = stringResource(R.string.theme_label),
-                    selectedLabel = when (uiState.isDarkTheme) {
-                        null -> stringResource(R.string.theme_system)
-                        false -> stringResource(R.string.theme_light)
-                        true -> stringResource(R.string.theme_dark)
-                    },
-                    options = listOf(
-                        stringResource(R.string.theme_system) to { viewModel.setDarkTheme(null) },
-                        stringResource(R.string.theme_light) to { viewModel.setDarkTheme(false) },
-                        stringResource(R.string.theme_dark) to { viewModel.setDarkTheme(true) },
-                    ),
+                    selectedLabel =
+                        when (uiState.isDarkTheme) {
+                            null -> stringResource(R.string.theme_system)
+                            false -> stringResource(R.string.theme_light)
+                            true -> stringResource(R.string.theme_dark)
+                        },
+                    options =
+                        listOf(
+                            stringResource(R.string.theme_system) to { viewModel.setDarkTheme(null) },
+                            stringResource(R.string.theme_light) to { viewModel.setDarkTheme(false) },
+                            stringResource(R.string.theme_dark) to { viewModel.setDarkTheme(true) },
+                        ),
                     icon = Icons.Default.Settings,
                 )
             }
@@ -601,16 +617,18 @@ private fun SettingsContent(
                 Spacer(modifier = Modifier.size(8.dp))
                 SettingDropdown(
                     label = stringResource(R.string.language_label),
-                    selectedLabel = when (uiState.locale) {
-                        "en" -> stringResource(R.string.locale_en)
-                        "ru" -> stringResource(R.string.locale_ru)
-                        else -> stringResource(R.string.locale_system)
-                    },
-                    options = listOf(
-                        stringResource(R.string.locale_system) to { viewModel.setLocale(null) },
-                        stringResource(R.string.locale_en) to { viewModel.setLocale("en") },
-                        stringResource(R.string.locale_ru) to { viewModel.setLocale("ru") },
-                    ),
+                    selectedLabel =
+                        when (uiState.locale) {
+                            "en" -> stringResource(R.string.locale_en)
+                            "ru" -> stringResource(R.string.locale_ru)
+                            else -> stringResource(R.string.locale_system)
+                        },
+                    options =
+                        listOf(
+                            stringResource(R.string.locale_system) to { viewModel.setLocale(null) },
+                            stringResource(R.string.locale_en) to { viewModel.setLocale("en") },
+                            stringResource(R.string.locale_ru) to { viewModel.setLocale("ru") },
+                        ),
                     icon = Icons.Default.Language,
                 )
             }
@@ -624,18 +642,20 @@ private fun SettingsContent(
                 Spacer(modifier = Modifier.size(8.dp))
                 SettingDropdown(
                     label = stringResource(R.string.export_format_label),
-                    selectedLabel = when (uiState.exportFormat) {
-                        ExportFormat.JSON -> stringResource(R.string.export_format_json)
-                        ExportFormat.CSV -> stringResource(R.string.export_format_csv)
-                    },
-                    options = listOf(
-                        stringResource(R.string.export_format_json) to {
-                            viewModel.setExportFormat(ExportFormat.JSON)
+                    selectedLabel =
+                        when (uiState.exportFormat) {
+                            ExportFormat.JSON -> stringResource(R.string.export_format_json)
+                            ExportFormat.CSV -> stringResource(R.string.export_format_csv)
                         },
-                        stringResource(R.string.export_format_csv) to {
-                            viewModel.setExportFormat(ExportFormat.CSV)
-                        },
-                    ),
+                    options =
+                        listOf(
+                            stringResource(R.string.export_format_json) to {
+                                viewModel.setExportFormat(ExportFormat.JSON)
+                            },
+                            stringResource(R.string.export_format_csv) to {
+                                viewModel.setExportFormat(ExportFormat.CSV)
+                            },
+                        ),
                     icon = Icons.Default.Save,
                 )
                 Spacer(modifier = Modifier.size(8.dp))
@@ -708,12 +728,13 @@ private fun RetentionCard(
             SettingDropdown(
                 label = stringResource(R.string.retention_days_label),
                 selectedLabel = stringResource(R.string.retention_days_format, retentionDays),
-                options = listOf(
-                    stringResource(R.string.retention_days_format, 7) to { onRetentionDaysChange(7) },
-                    stringResource(R.string.retention_days_format, 14) to { onRetentionDaysChange(14) },
-                    stringResource(R.string.retention_days_format, 30) to { onRetentionDaysChange(30) },
-                    stringResource(R.string.retention_days_format, 90) to { onRetentionDaysChange(90) },
-                ),
+                options =
+                    listOf(
+                        stringResource(R.string.retention_days_format, 7) to { onRetentionDaysChange(7) },
+                        stringResource(R.string.retention_days_format, 14) to { onRetentionDaysChange(14) },
+                        stringResource(R.string.retention_days_format, 30) to { onRetentionDaysChange(30) },
+                        stringResource(R.string.retention_days_format, 90) to { onRetentionDaysChange(90) },
+                    ),
                 icon = Icons.Default.Delete,
             )
             Spacer(modifier = Modifier.size(4.dp))
@@ -744,12 +765,12 @@ private fun SettingDropdown(
     ) {
         TextButton(
             onClick = { expanded = true },
-            modifier = Modifier
-                .menuAnchor(
-                    type = ExposedDropdownMenuAnchorType.PrimaryNotEditable,
-                    enabled = true,
-                )
-                .fillMaxWidth(),
+            modifier =
+                Modifier
+                    .menuAnchor(
+                        type = ExposedDropdownMenuAnchorType.PrimaryNotEditable,
+                        enabled = true,
+                    ).fillMaxWidth(),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -847,9 +868,10 @@ private fun AboutCard(
             }
             is UpdateCheckState.Checking -> {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     CircularProgressIndicator(
@@ -892,9 +914,10 @@ private fun AboutCard(
             }
             is UpdateCheckState.Available -> {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
@@ -1018,9 +1041,10 @@ private fun ExportActionButton(
 ) {
     Button(
         onClick = if (isLoading) onCancel else onExport,
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(tween(300)),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .animateContentSize(tween(300)),
         enabled = isLoading || selectedTypesCount > 0,
     ) {
         if (!isLoading) {

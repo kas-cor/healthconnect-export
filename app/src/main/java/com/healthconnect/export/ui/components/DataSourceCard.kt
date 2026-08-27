@@ -19,7 +19,7 @@ fun DataSourceCard(
     selectedSourcePackage: String?,
     sourcesLoading: Boolean,
     onSourceSelected: (String?) -> Unit,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
 ) {
     MaterialCard {
         Column {
@@ -33,26 +33,26 @@ fun DataSourceCard(
             if (sourcesLoading) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         stringResource(R.string.scanning_sources),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             } else if (availableSources.isEmpty()) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
                         stringResource(R.string.no_sources_found),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                     TextButton(onClick = onRefresh) {
                         Text(stringResource(R.string.refresh))
@@ -62,24 +62,25 @@ fun DataSourceCard(
                 // Auto option
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(40.dp)
-                        .clickable { onSourceSelected(null) }
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(40.dp)
+                            .clickable { onSourceSelected(null) },
                 ) {
                     RadioButton(
                         selected = selectedSourcePackage == null,
-                        onClick = { onSourceSelected(null) }
+                        onClick = { onSourceSelected(null) },
                     )
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             stringResource(R.string.source_auto),
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyMedium,
                         )
                         Text(
                             stringResource(R.string.source_auto_desc),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -91,24 +92,25 @@ fun DataSourceCard(
                     val isSelected = selectedSourcePackage == packageName
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .clickable { onSourceSelected(packageName) }
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .clickable { onSourceSelected(packageName) },
                     ) {
                         RadioButton(
                             selected = isSelected,
-                            onClick = { onSourceSelected(packageName) }
+                            onClick = { onSourceSelected(packageName) },
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = sourceDisplayName(packageName),
-                                style = MaterialTheme.typography.bodyMedium
+                                style = MaterialTheme.typography.bodyMedium,
                             )
                             Text(
                                 text = packageName,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -119,12 +121,12 @@ fun DataSourceCard(
                 // Refresh button
                 OutlinedButton(
                     onClick = onRefresh,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = null,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(16.dp),
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(stringResource(R.string.refresh_sources))

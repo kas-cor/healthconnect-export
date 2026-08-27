@@ -3,29 +3,29 @@ package com.healthconnect.export.repository
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import androidx.annotation.VisibleForTesting
 import androidx.activity.result.contract.ActivityResultContract
+import androidx.annotation.VisibleForTesting
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
-import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.*
+import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.metadata.DataOrigin
-import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import com.healthconnect.export.BuildConfig
 import com.healthconnect.export.data.*
-import kotlin.reflect.KClass
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
+import kotlin.reflect.KClass
 
-class HealthConnectRepository(private val context: Context) {
-
+class HealthConnectRepository(
+    private val context: Context,
+) {
     companion object {
         private const val TAG = "HealthConnectRepo"
         private const val HEALTH_CONNECT_PACKAGE = "com.google.android.apps.healthdata"
@@ -36,7 +36,9 @@ class HealthConnectRepository(private val context: Context) {
          * Берётся из KNOWN_SOURCE_PACKAGES в DataModels.kt.
          * Если данные есть от нескольких источников, берётся первый из списка.
          */
-        val PREFERRED_PACKAGES: List<String> = com.healthconnect.export.data.KNOWN_SOURCE_PACKAGES.keys.toList()
+        val PREFERRED_PACKAGES: List<String> =
+            com.healthconnect.export.data.KNOWN_SOURCE_PACKAGES.keys
+                .toList()
     }
 
     private var client: HealthConnectClient? = null
@@ -54,42 +56,37 @@ class HealthConnectRepository(private val context: Context) {
             return field
         }
 
-    suspend fun isHealthConnectAvailable(): Boolean {
-        return client != null
-    }
+    suspend fun isHealthConnectAvailable(): Boolean = client != null
 
     /**
      * Проверяет, установлено ли приложение Health Connect на устройстве
      */
-    fun isHealthConnectInstalled(): Boolean {
-        return try {
+    fun isHealthConnectInstalled(): Boolean =
+        try {
             context.packageManager.getPackageInfo(HEALTH_CONNECT_PACKAGE, 0)
             true
         } catch (_: Exception) {
             false
         }
-    }
 
     /**
      * Создаёт Intent для открытия экрана разрешений Health Connect
      * через ACTION_REQUEST_PERMISSIONS с разрешениями в extra
      */
-    fun createHealthPermissionsIntent(permissions: Set<String>): Intent {
-        return Intent("androidx.health.ACTION_REQUEST_PERMISSIONS").apply {
+    fun createHealthPermissionsIntent(permissions: Set<String>): Intent =
+        Intent("androidx.health.ACTION_REQUEST_PERMISSIONS").apply {
             `package` = HEALTH_CONNECT_PACKAGE
             putStringArrayListExtra(
                 "androidx.health.extra.PERMISSION_NAMES",
-                ArrayList(permissions)
+                ArrayList(permissions),
             )
         }
-    }
 
     /**
      * Возвращает ActivityResultContract для запроса разрешений Health Connect
      */
-    fun createPermissionRequestContract(): ActivityResultContract<Set<String>, Set<String>> {
-        return PermissionController.createRequestPermissionResultContract(context.packageName)
-    }
+    fun createPermissionRequestContract(): ActivityResultContract<Set<String>, Set<String>> =
+        PermissionController.createRequestPermissionResultContract(context.packageName)
 
     /**
      * Возвращает набор Health Connect разрешений для указанных типов данных
@@ -145,43 +142,52 @@ class HealthConnectRepository(private val context: Context) {
      * Discovers available data source packages by querying recent health records.
      * Returns a set of package names that have data available on device.
      */
-    suspend fun getAvailableSources(): Set<String> = withContext(Dispatchers.IO) {
-        val c = client ?: return@withContext emptySet()
-        val now = Instant.now()
-        val weekAgo = now.minus(7, ChronoUnit.DAYS)
-        val timeFilter = TimeRangeFilter.between(weekAgo, now)
+    suspend fun getAvailableSources(): Set<String> =
+        withContext(Dispatchers.IO) {
+            val c = client ?: return@withContext emptySet()
+            val now = Instant.now()
+            val weekAgo = now.minus(7, ChronoUnit.DAYS)
+            val timeFilter = TimeRangeFilter.between(weekAgo, now)
 
-        val origins = mutableSetOf<String>()
+            val origins = mutableSetOf<String>()
 
-        // Query steps as a representative data type to discover origins
-        try {
-            val stepsRequest = ReadRecordsRequest(
-                StepsRecord::class,
-                timeRangeFilter = timeFilter,
-                pageSize = 1
-            )
-            val stepsResponse = c.readRecords(stepsRequest)
-            stepsResponse.records.forEach { record ->
-                record.metadata.dataOrigin?.packageName?.let { origins.add(it) }
+            // Query steps as a representative data type to discover origins
+            try {
+                val stepsRequest =
+                    ReadRecordsRequest(
+                        StepsRecord::class,
+                        timeRangeFilter = timeFilter,
+                        pageSize = 1,
+                    )
+                val stepsResponse = c.readRecords(stepsRequest)
+                stepsResponse.records.forEach { record ->
+                    record.metadata.dataOrigin
+                        ?.packageName
+                        ?.let { origins.add(it) }
+                }
+            } catch (_: Exception) {
             }
-        } catch (_: Exception) {}
 
-        // Also query heart rate for more complete origin discovery
-        try {
-            val hrRequest = ReadRecordsRequest(
-                HeartRateRecord::class,
-                timeRangeFilter = timeFilter,
-                pageSize = 1
-            )
-            val hrResponse = c.readRecords(hrRequest)
-            hrResponse.records.forEach { record ->
-                record.metadata.dataOrigin?.packageName?.let { origins.add(it) }
+            // Also query heart rate for more complete origin discovery
+            try {
+                val hrRequest =
+                    ReadRecordsRequest(
+                        HeartRateRecord::class,
+                        timeRangeFilter = timeFilter,
+                        pageSize = 1,
+                    )
+                val hrResponse = c.readRecords(hrRequest)
+                hrResponse.records.forEach { record ->
+                    record.metadata.dataOrigin
+                        ?.packageName
+                        ?.let { origins.add(it) }
+                }
+            } catch (_: Exception) {
             }
-        } catch (_: Exception) {}
 
-        Log.d(TAG, "getAvailableSources: $origins")
-        origins
-    }
+            Log.d(TAG, "getAvailableSources: $origins")
+            origins
+        }
 
     // ===== Pagination helper =====
 
@@ -194,7 +200,7 @@ class HealthConnectRepository(private val context: Context) {
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     internal suspend fun <T : Record> readAllPages(
         request: ReadRecordsRequest<T>,
-        onPageProgress: ((typeName: String, pageNumber: Int) -> Unit)? = null
+        onPageProgress: ((typeName: String, pageNumber: Int) -> Unit)? = null,
     ): List<T> {
         val c = client ?: return emptyList()
         val allRecords = mutableListOf<T>()
@@ -210,14 +216,15 @@ class HealthConnectRepository(private val context: Context) {
             val recordType = request.recordType
             val typeName = recordType.simpleName ?: "Unknown"
             onPageProgress?.invoke(typeName, pageCount)
-            val pageRequest = ReadRecordsRequest(
-                recordType = recordType,
-                timeRangeFilter = request.timeRangeFilter,
-                dataOriginFilter = request.dataOriginFilter,
-                ascendingOrder = request.ascendingOrder,
-                pageSize = PAGE_SIZE,
-                pageToken = pageToken
-            )
+            val pageRequest =
+                ReadRecordsRequest(
+                    recordType = recordType,
+                    timeRangeFilter = request.timeRangeFilter,
+                    dataOriginFilter = request.dataOriginFilter,
+                    ascendingOrder = request.ascendingOrder,
+                    pageSize = PAGE_SIZE,
+                    pageToken = pageToken,
+                )
             val response = c.readRecords(pageRequest)
             val recordsOnPage = response.records.size
             if (recordsOnPage == 0 && pageToken != null) {
@@ -226,14 +233,20 @@ class HealthConnectRepository(private val context: Context) {
             }
             allRecords.addAll(response.records)
             pageToken = response.pageToken
-            Log.d(TAG, "readAllPages(${request.recordType.simpleName}): page=$pageCount, got=$recordsOnPage, total=${allRecords.size}, nextToken=$pageToken")
+            Log.d(
+                TAG,
+                "readAllPages(${request.recordType.simpleName}): page=$pageCount, got=$recordsOnPage, total=${allRecords.size}, nextToken=$pageToken",
+            )
         } while (pageToken != null)
         return allRecords
     }
 
     // ===== Extraction functions (pure aggregation logic, no API calls) =====
 
-    private fun extractSteps(records: List<StepsRecord>, selectedSourcePackage: String? = null): StepsData? {
+    private fun extractSteps(
+        records: List<StepsRecord>,
+        selectedSourcePackage: String? = null,
+    ): StepsData? {
         if (records.isEmpty()) return null
         val filtered = filterByPreferredOrigin(records, selectedSourcePackage)
         if (filtered.isEmpty()) return null
@@ -251,15 +264,16 @@ class HealthConnectRepository(private val context: Context) {
             avgBpm = beats.average(),
             minBpm = beats.min().toInt(),
             maxBpm = beats.max().toInt(),
-            recordsCount = records.size
+            recordsCount = records.size,
         )
     }
 
     private fun extractSleep(records: List<SleepSessionRecord>): SleepData? {
         if (records.isEmpty()) return null
-        val totalMinutes = records.sumOf {
-            ChronoUnit.MINUTES.between(it.startTime, it.endTime)
-        }
+        val totalMinutes =
+            records.sumOf {
+                ChronoUnit.MINUTES.between(it.startTime, it.endTime)
+            }
         val stageDurations = mutableMapOf<String, Long>()
         records.forEach { record ->
             record.stages.forEach { stage ->
@@ -273,11 +287,14 @@ class HealthConnectRepository(private val context: Context) {
         return SleepData(
             totalDurationMinutes = totalMinutes,
             sleepStages = stageDurations,
-            recordsCount = records.size
+            recordsCount = records.size,
         )
     }
 
-    private fun extractCalories(records: List<TotalCaloriesBurnedRecord>, selectedSourcePackage: String? = null): CaloriesData? {
+    private fun extractCalories(
+        records: List<TotalCaloriesBurnedRecord>,
+        selectedSourcePackage: String? = null,
+    ): CaloriesData? {
         if (records.isEmpty()) return null
         val filtered = filterByPreferredOrigin(records, selectedSourcePackage)
         if (filtered.isEmpty()) return null
@@ -285,7 +302,10 @@ class HealthConnectRepository(private val context: Context) {
         return CaloriesData(totalCalories = total, recordsCount = filtered.size)
     }
 
-    private fun extractDistance(records: List<DistanceRecord>, selectedSourcePackage: String? = null): DistanceData? {
+    private fun extractDistance(
+        records: List<DistanceRecord>,
+        selectedSourcePackage: String? = null,
+    ): DistanceData? {
         if (records.isEmpty()) return null
         val filtered = filterByPreferredOrigin(records, selectedSourcePackage)
         if (filtered.isEmpty()) return null
@@ -293,7 +313,10 @@ class HealthConnectRepository(private val context: Context) {
         return DistanceData(totalDistanceMeters = total, recordsCount = filtered.size)
     }
 
-    private fun extractFloorsClimbed(records: List<FloorsClimbedRecord>, selectedSourcePackage: String? = null): FloorsClimbedData? {
+    private fun extractFloorsClimbed(
+        records: List<FloorsClimbedRecord>,
+        selectedSourcePackage: String? = null,
+    ): FloorsClimbedData? {
         if (records.isEmpty()) return null
         val filtered = filterByPreferredOrigin(records, selectedSourcePackage)
         if (filtered.isEmpty()) return null
@@ -301,7 +324,10 @@ class HealthConnectRepository(private val context: Context) {
         return FloorsClimbedData(totalFloors = total, recordsCount = filtered.size)
     }
 
-    private fun extractActiveCalories(records: List<ActiveCaloriesBurnedRecord>, selectedSourcePackage: String? = null): ActiveCaloriesData? {
+    private fun extractActiveCalories(
+        records: List<ActiveCaloriesBurnedRecord>,
+        selectedSourcePackage: String? = null,
+    ): ActiveCaloriesData? {
         if (records.isEmpty()) return null
         val filtered = filterByPreferredOrigin(records, selectedSourcePackage)
         if (filtered.isEmpty()) return null
@@ -330,7 +356,7 @@ class HealthConnectRepository(private val context: Context) {
             systolicMmHg = systolicAvg,
             diastolicMmHg = diastolicAvg,
             bodyPosition = position,
-            recordsCount = records.size
+            recordsCount = records.size,
         )
     }
 
@@ -343,7 +369,7 @@ class HealthConnectRepository(private val context: Context) {
             level = avg,
             specimenSource = source,
             mealType = mealType,
-            recordsCount = records.size
+            recordsCount = records.size,
         )
     }
 
@@ -360,7 +386,7 @@ class HealthConnectRepository(private val context: Context) {
         return BodyTemperatureData(
             temperatureCelsius = avg,
             measurementLocation = location,
-            recordsCount = records.size
+            recordsCount = records.size,
         )
     }
 
@@ -383,7 +409,7 @@ class HealthConnectRepository(private val context: Context) {
             avgBpm = bpmValues.average(),
             minBpm = bpmValues.min(),
             maxBpm = bpmValues.max(),
-            recordsCount = records.size
+            recordsCount = records.size,
         )
     }
 
@@ -396,7 +422,7 @@ class HealthConnectRepository(private val context: Context) {
                 endTime = record.endTime.toDateTimeString(),
                 durationMinutes = ChronoUnit.MINUTES.between(record.startTime, record.endTime),
                 title = record.title,
-                notes = record.notes
+                notes = record.notes,
             )
         }
     }
@@ -423,7 +449,7 @@ class HealthConnectRepository(private val context: Context) {
                 ironMg = record.iron?.inMilligrams,
                 magnesiumMg = record.magnesium?.inMilligrams,
                 vitaminCMg = record.vitaminC?.inMilligrams,
-                vitaminDMcg = record.vitaminD?.inMicrograms
+                vitaminDMcg = record.vitaminD?.inMicrograms,
             )
         }
     }
@@ -435,7 +461,7 @@ class HealthConnectRepository(private val context: Context) {
         val avgSpeed = allSamples.map { it.speed.inMetersPerSecond }.average()
         return SpeedData(
             avgSpeedMetersPerSecond = avgSpeed,
-            recordsCount = records.size
+            recordsCount = records.size,
         )
     }
 
@@ -444,7 +470,7 @@ class HealthConnectRepository(private val context: Context) {
         val record = records.first()
         return MenstruationData(
             flowType = menstruationFlowToString(record.flow),
-            time = record.time.toDateTimeString()
+            time = record.time.toDateTimeString(),
         )
     }
 
@@ -461,111 +487,152 @@ class HealthConnectRepository(private val context: Context) {
         val recordClass: KClass<out Record>,
         val timeSelector: (Any) -> Instant,
         val extract: (List<*>, String?) -> Any?,
-        val updateRecord: (DailyHealthRecord, Any?) -> DailyHealthRecord
+        val updateRecord: (DailyHealthRecord, Any?) -> DailyHealthRecord,
     )
 
-    private val typeHandlers: Map<HealthDataType, TypeHandler> = mapOf(
-        HealthDataType.STEPS to TypeHandler(
-            StepsRecord::class, { (it as StepsRecord).startTime },
-            { r, p -> extractSteps(r as List<StepsRecord>, p) },
-            { r, d -> r.copy(steps = d as StepsData?) }
-        ),
-        HealthDataType.HEART_RATE to TypeHandler(
-            HeartRateRecord::class, { (it as HeartRateRecord).startTime },
-            { r, _ -> extractHeartRate(r as List<HeartRateRecord>) },
-            { r, d -> r.copy(heartRate = d as HeartRateData?) }
-        ),
-        HealthDataType.SLEEP to TypeHandler(
-            SleepSessionRecord::class, { (it as SleepSessionRecord).startTime },
-            { r, _ -> extractSleep(r as List<SleepSessionRecord>) },
-            { r, d -> r.copy(sleep = d as SleepData?) }
-        ),
-        HealthDataType.CALORIES to TypeHandler(
-            TotalCaloriesBurnedRecord::class, { (it as TotalCaloriesBurnedRecord).startTime },
-            { r, p -> extractCalories(r as List<TotalCaloriesBurnedRecord>, p) },
-            { r, d -> r.copy(calories = d as CaloriesData?) }
-        ),
-        HealthDataType.DISTANCE to TypeHandler(
-            DistanceRecord::class, { (it as DistanceRecord).startTime },
-            { r, p -> extractDistance(r as List<DistanceRecord>, p) },
-            { r, d -> r.copy(distance = d as DistanceData?) }
-        ),
-        HealthDataType.FLOORS_CLIMBED to TypeHandler(
-            FloorsClimbedRecord::class, { (it as FloorsClimbedRecord).startTime },
-            { r, p -> extractFloorsClimbed(r as List<FloorsClimbedRecord>, p) },
-            { r, d -> r.copy(floorsClimbed = d as FloorsClimbedData?) }
-        ),
-        HealthDataType.ACTIVE_CALORIES to TypeHandler(
-            ActiveCaloriesBurnedRecord::class, { (it as ActiveCaloriesBurnedRecord).startTime },
-            { r, p -> extractActiveCalories(r as List<ActiveCaloriesBurnedRecord>, p) },
-            { r, d -> r.copy(activeCalories = d as ActiveCaloriesData?) }
-        ),
-        HealthDataType.WEIGHT to TypeHandler(
-            WeightRecord::class, { (it as WeightRecord).time },
-            { r, _ -> extractWeight(r as List<WeightRecord>) },
-            { r, d -> r.copy(weight = d as WeightData?) }
-        ),
-        HealthDataType.BODY_FAT to TypeHandler(
-            BodyFatRecord::class, { (it as BodyFatRecord).time },
-            { r, _ -> extractBodyFat(r as List<BodyFatRecord>) },
-            { r, d -> r.copy(bodyFat = d as BodyFatData?) }
-        ),
-        HealthDataType.BLOOD_PRESSURE to TypeHandler(
-            BloodPressureRecord::class, { (it as BloodPressureRecord).time },
-            { r, _ -> extractBloodPressure(r as List<BloodPressureRecord>) },
-            { r, d -> r.copy(bloodPressure = d as BloodPressureData?) }
-        ),
-        HealthDataType.BLOOD_GLUCOSE to TypeHandler(
-            BloodGlucoseRecord::class, { (it as BloodGlucoseRecord).time },
-            { r, _ -> extractBloodGlucose(r as List<BloodGlucoseRecord>) },
-            { r, d -> r.copy(bloodGlucose = d as BloodGlucoseData?) }
-        ),
-        HealthDataType.OXYGEN_SATURATION to TypeHandler(
-            OxygenSaturationRecord::class, { (it as OxygenSaturationRecord).time },
-            { r, _ -> extractOxygenSaturation(r as List<OxygenSaturationRecord>) },
-            { r, d -> r.copy(oxygenSaturation = d as OxygenSaturationData?) }
-        ),
-        HealthDataType.BODY_TEMPERATURE to TypeHandler(
-            BodyTemperatureRecord::class, { (it as BodyTemperatureRecord).time },
-            { r, _ -> extractBodyTemperature(r as List<BodyTemperatureRecord>) },
-            { r, d -> r.copy(bodyTemperature = d as BodyTemperatureData?) }
-        ),
-        HealthDataType.RESPIRATORY_RATE to TypeHandler(
-            RespiratoryRateRecord::class, { (it as RespiratoryRateRecord).time },
-            { r, _ -> extractRespiratoryRate(r as List<RespiratoryRateRecord>) },
-            { r, d -> r.copy(respiratoryRate = d as RespiratoryRateData?) }
-        ),
-        HealthDataType.HYDRATION to TypeHandler(
-            HydrationRecord::class, { (it as HydrationRecord).startTime },
-            { r, _ -> extractHydration(r as List<HydrationRecord>) },
-            { r, d -> r.copy(hydration = d as HydrationData?) }
-        ),
-        HealthDataType.RESTING_HEART_RATE to TypeHandler(
-            RestingHeartRateRecord::class, { (it as RestingHeartRateRecord).time },
-            { r, _ -> extractRestingHeartRate(r as List<RestingHeartRateRecord>) },
-            { r, d -> r.copy(restingHeartRate = d as RestingHeartRateData?) }
-        ),
-        HealthDataType.EXERCISE to TypeHandler(
-            ExerciseSessionRecord::class, { (it as ExerciseSessionRecord).startTime },
-            { r, _ -> extractExercises(r as List<ExerciseSessionRecord>) },
-            { r, d -> r.copy(exercises = d as List<ExerciseData>?) }
-        ),
-        HealthDataType.NUTRITION to TypeHandler(
-            NutritionRecord::class, { (it as NutritionRecord).startTime },
-            { r, _ -> extractNutrition(r as List<NutritionRecord>) },
-            { r, d -> r.copy(nutrition = d as List<NutritionData>?) }
-        ),
-        HealthDataType.SPEED to TypeHandler(
-            SpeedRecord::class, { (it as SpeedRecord).startTime },
-            { r, _ -> extractSpeed(r as List<SpeedRecord>) },
-            { r, d -> r.copy(speed = d as SpeedData?) }
-        ),
-        HealthDataType.MENSTRUATION to TypeHandler(
-            MenstruationFlowRecord::class, { (it as MenstruationFlowRecord).time },
-            { r, _ -> extractMenstruation(r as List<MenstruationFlowRecord>) },
-            { r, d -> r.copy(menstruation = d as MenstruationData?) }
+    private val typeHandlers: Map<HealthDataType, TypeHandler> =
+        mapOf(
+            HealthDataType.STEPS to
+                TypeHandler(
+                    StepsRecord::class,
+                    { (it as StepsRecord).startTime },
+                    { r, p -> extractSteps(r as List<StepsRecord>, p) },
+                    { r, d -> r.copy(steps = d as StepsData?) },
+                ),
+            HealthDataType.HEART_RATE to
+                TypeHandler(
+                    HeartRateRecord::class,
+                    { (it as HeartRateRecord).startTime },
+                    { r, _ -> extractHeartRate(r as List<HeartRateRecord>) },
+                    { r, d -> r.copy(heartRate = d as HeartRateData?) },
+                ),
+            HealthDataType.SLEEP to
+                TypeHandler(
+                    SleepSessionRecord::class,
+                    { (it as SleepSessionRecord).startTime },
+                    { r, _ -> extractSleep(r as List<SleepSessionRecord>) },
+                    { r, d -> r.copy(sleep = d as SleepData?) },
+                ),
+            HealthDataType.CALORIES to
+                TypeHandler(
+                    TotalCaloriesBurnedRecord::class,
+                    { (it as TotalCaloriesBurnedRecord).startTime },
+                    { r, p -> extractCalories(r as List<TotalCaloriesBurnedRecord>, p) },
+                    { r, d -> r.copy(calories = d as CaloriesData?) },
+                ),
+            HealthDataType.DISTANCE to
+                TypeHandler(
+                    DistanceRecord::class,
+                    { (it as DistanceRecord).startTime },
+                    { r, p -> extractDistance(r as List<DistanceRecord>, p) },
+                    { r, d -> r.copy(distance = d as DistanceData?) },
+                ),
+            HealthDataType.FLOORS_CLIMBED to
+                TypeHandler(
+                    FloorsClimbedRecord::class,
+                    { (it as FloorsClimbedRecord).startTime },
+                    { r, p -> extractFloorsClimbed(r as List<FloorsClimbedRecord>, p) },
+                    { r, d -> r.copy(floorsClimbed = d as FloorsClimbedData?) },
+                ),
+            HealthDataType.ACTIVE_CALORIES to
+                TypeHandler(
+                    ActiveCaloriesBurnedRecord::class,
+                    { (it as ActiveCaloriesBurnedRecord).startTime },
+                    { r, p -> extractActiveCalories(r as List<ActiveCaloriesBurnedRecord>, p) },
+                    { r, d -> r.copy(activeCalories = d as ActiveCaloriesData?) },
+                ),
+            HealthDataType.WEIGHT to
+                TypeHandler(
+                    WeightRecord::class,
+                    { (it as WeightRecord).time },
+                    { r, _ -> extractWeight(r as List<WeightRecord>) },
+                    { r, d -> r.copy(weight = d as WeightData?) },
+                ),
+            HealthDataType.BODY_FAT to
+                TypeHandler(
+                    BodyFatRecord::class,
+                    { (it as BodyFatRecord).time },
+                    { r, _ -> extractBodyFat(r as List<BodyFatRecord>) },
+                    { r, d -> r.copy(bodyFat = d as BodyFatData?) },
+                ),
+            HealthDataType.BLOOD_PRESSURE to
+                TypeHandler(
+                    BloodPressureRecord::class,
+                    { (it as BloodPressureRecord).time },
+                    { r, _ -> extractBloodPressure(r as List<BloodPressureRecord>) },
+                    { r, d -> r.copy(bloodPressure = d as BloodPressureData?) },
+                ),
+            HealthDataType.BLOOD_GLUCOSE to
+                TypeHandler(
+                    BloodGlucoseRecord::class,
+                    { (it as BloodGlucoseRecord).time },
+                    { r, _ -> extractBloodGlucose(r as List<BloodGlucoseRecord>) },
+                    { r, d -> r.copy(bloodGlucose = d as BloodGlucoseData?) },
+                ),
+            HealthDataType.OXYGEN_SATURATION to
+                TypeHandler(
+                    OxygenSaturationRecord::class,
+                    { (it as OxygenSaturationRecord).time },
+                    { r, _ -> extractOxygenSaturation(r as List<OxygenSaturationRecord>) },
+                    { r, d -> r.copy(oxygenSaturation = d as OxygenSaturationData?) },
+                ),
+            HealthDataType.BODY_TEMPERATURE to
+                TypeHandler(
+                    BodyTemperatureRecord::class,
+                    { (it as BodyTemperatureRecord).time },
+                    { r, _ -> extractBodyTemperature(r as List<BodyTemperatureRecord>) },
+                    { r, d -> r.copy(bodyTemperature = d as BodyTemperatureData?) },
+                ),
+            HealthDataType.RESPIRATORY_RATE to
+                TypeHandler(
+                    RespiratoryRateRecord::class,
+                    { (it as RespiratoryRateRecord).time },
+                    { r, _ -> extractRespiratoryRate(r as List<RespiratoryRateRecord>) },
+                    { r, d -> r.copy(respiratoryRate = d as RespiratoryRateData?) },
+                ),
+            HealthDataType.HYDRATION to
+                TypeHandler(
+                    HydrationRecord::class,
+                    { (it as HydrationRecord).startTime },
+                    { r, _ -> extractHydration(r as List<HydrationRecord>) },
+                    { r, d -> r.copy(hydration = d as HydrationData?) },
+                ),
+            HealthDataType.RESTING_HEART_RATE to
+                TypeHandler(
+                    RestingHeartRateRecord::class,
+                    { (it as RestingHeartRateRecord).time },
+                    { r, _ -> extractRestingHeartRate(r as List<RestingHeartRateRecord>) },
+                    { r, d -> r.copy(restingHeartRate = d as RestingHeartRateData?) },
+                ),
+            HealthDataType.EXERCISE to
+                TypeHandler(
+                    ExerciseSessionRecord::class,
+                    { (it as ExerciseSessionRecord).startTime },
+                    { r, _ -> extractExercises(r as List<ExerciseSessionRecord>) },
+                    { r, d -> r.copy(exercises = d as List<ExerciseData>?) },
+                ),
+            HealthDataType.NUTRITION to
+                TypeHandler(
+                    NutritionRecord::class,
+                    { (it as NutritionRecord).startTime },
+                    { r, _ -> extractNutrition(r as List<NutritionRecord>) },
+                    { r, d -> r.copy(nutrition = d as List<NutritionData>?) },
+                ),
+            HealthDataType.SPEED to
+                TypeHandler(
+                    SpeedRecord::class,
+                    { (it as SpeedRecord).startTime },
+                    { r, _ -> extractSpeed(r as List<SpeedRecord>) },
+                    { r, d -> r.copy(speed = d as SpeedData?) },
+                ),
+            HealthDataType.MENSTRUATION to
+                TypeHandler(
+                    MenstruationFlowRecord::class,
+                    { (it as MenstruationFlowRecord).time },
+                    { r, _ -> extractMenstruation(r as List<MenstruationFlowRecord>) },
+                    { r, d -> r.copy(menstruation = d as MenstruationData?) },
+                ),
         )
-    )
 
     /**
      * Processes a single health data type: reads all pages, groups by day,
@@ -577,27 +644,35 @@ class HealthConnectRepository(private val context: Context) {
         daysMap: MutableMap<String, DailyHealthRecord>,
         timeFilter: TimeRangeFilter,
         selectedSourcePackage: String?,
-        onPageProgress: ((typeName: String, pageNumber: Int) -> Unit)?
+        onPageProgress: ((typeName: String, pageNumber: Int) -> Unit)?,
     ) {
         val typeName = type.displayName
         // When a specific source is selected, push the filter down to the API so we don't
         // read (and then discard) records from every other source. In auto mode we still
         // read all sources and let filterByPreferredOrigin pick the best one.
-        val originFilter: Set<DataOrigin>? = selectedSourcePackage?.takeIf { it.isNotBlank() }
-            ?.let { setOf(DataOrigin(it)) }
-        val allRecords = if (originFilter != null) {
-            readAllPages(
-                ReadRecordsRequest(handler.recordClass, timeRangeFilter = timeFilter, dataOriginFilter = originFilter)
-            ) { _, page -> onPageProgress?.invoke(typeName, page) }
-        } else {
-            readAllPages(
-                ReadRecordsRequest(handler.recordClass, timeRangeFilter = timeFilter)
-            ) { _, page -> onPageProgress?.invoke(typeName, page) }
-        }
+        val originFilter: Set<DataOrigin>? =
+            selectedSourcePackage
+                ?.takeIf { it.isNotBlank() }
+                ?.let { setOf(DataOrigin(it)) }
+        val allRecords =
+            if (originFilter != null) {
+                readAllPages(
+                    ReadRecordsRequest(handler.recordClass, timeRangeFilter = timeFilter, dataOriginFilter = originFilter),
+                ) { _, page -> onPageProgress?.invoke(typeName, page) }
+            } else {
+                readAllPages(
+                    ReadRecordsRequest(handler.recordClass, timeRangeFilter = timeFilter),
+                ) { _, page -> onPageProgress?.invoke(typeName, page) }
+            }
 
-        val byDay = allRecords.groupBy {
-            handler.timeSelector(it).atZone(ZoneId.systemDefault()).toLocalDate().toString()
-        }
+        val byDay =
+            allRecords.groupBy {
+                handler
+                    .timeSelector(it)
+                    .atZone(ZoneId.systemDefault())
+                    .toLocalDate()
+                    .toString()
+            }
         byDay.forEach { (dateStr, records) ->
             val existing = requireNotNull(daysMap[dateStr]) { "Date $dateStr not pre-populated in daysMap" }
             daysMap[dateStr] = handler.updateRecord(existing, handler.extract(records, selectedSourcePackage))
@@ -611,58 +686,66 @@ class HealthConnectRepository(private val context: Context) {
         endDate: LocalDate,
         types: Set<HealthDataType>,
         selectedSourcePackage: String? = null,
-        onPageProgress: ((typeName: String, pageNumber: Int) -> Unit)? = null
-    ): List<DailyHealthRecord> = withContext(Dispatchers.IO) {
-        val start = startDate.atStartOfDay(ZoneId.systemDefault()).toInstant()
-        val end = endDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
-        val timeFilter = TimeRangeFilter.between(start, end)
+        onPageProgress: ((typeName: String, pageNumber: Int) -> Unit)? = null,
+    ): List<DailyHealthRecord> =
+        withContext(Dispatchers.IO) {
+            val start = startDate.atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val end = endDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val timeFilter = TimeRangeFilter.between(start, end)
 
-        Log.d(TAG, "readPeriodInBatch: start=$startDate, end=$endDate, types=$types, source=$selectedSourcePackage")
-        Log.d(TAG, "readPeriodInBatch: timeFilter start=$start, end=$end")
+            Log.d(TAG, "readPeriodInBatch: start=$startDate, end=$endDate, types=$types, source=$selectedSourcePackage")
+            Log.d(TAG, "readPeriodInBatch: timeFilter start=$start, end=$end")
 
-        val metadata = ExportMetadata(
-            appVersion = BuildConfig.VERSION_NAME,
-            exportTimestamp = Instant.now().toDateTimeString(),
-            timezone = ZoneId.systemDefault().id,
-            sourceDevice = android.os.Build.MODEL
-        )
+            val metadata =
+                ExportMetadata(
+                    appVersion = BuildConfig.VERSION_NAME,
+                    exportTimestamp = Instant.now().toDateTimeString(),
+                    timezone = ZoneId.systemDefault().id,
+                    sourceDevice = android.os.Build.MODEL,
+                )
 
-        // Build a map: date -> record, pre-populated for every day in range
-        val daysMap = mutableMapOf<String, DailyHealthRecord>()
-        var current = startDate
-        while (!current.isAfter(endDate)) {
-            daysMap[current.toString()] = DailyHealthRecord(
-                date = current.toString(),
-                metadata = metadata
-            )
-            current = current.plusDays(1)
-        }
-
-        // Process each requested data type through its registered handler
-        types.forEach { type ->
-            val handler = typeHandlers[type]
-            if (handler != null) {
-                processTypeData(handler, type, daysMap, timeFilter, selectedSourcePackage, onPageProgress)
-            } else {
-                Log.w(TAG, "readPeriodInBatch: no handler registered for $type")
+            // Build a map: date -> record, pre-populated for every day in range
+            val daysMap = mutableMapOf<String, DailyHealthRecord>()
+            var current = startDate
+            while (!current.isAfter(endDate)) {
+                daysMap[current.toString()] =
+                    DailyHealthRecord(
+                        date = current.toString(),
+                        metadata = metadata,
+                    )
+                current = current.plusDays(1)
             }
-        }
 
-        // Build sorted result list (compatible with minSdk 28)
-        val result = mutableListOf<DailyHealthRecord>()
-        var day = startDate
-        while (!day.isAfter(endDate)) {
-            result.add(daysMap[day.toString()] ?: DailyHealthRecord(date = day.toString(), metadata = metadata))
-            day = day.plusDays(1)
-        }
+            // Process each requested data type through its registered handler
+            types.forEach { type ->
+                val handler = typeHandlers[type]
+                if (handler != null) {
+                    processTypeData(handler, type, daysMap, timeFilter, selectedSourcePackage, onPageProgress)
+                } else {
+                    Log.w(TAG, "readPeriodInBatch: no handler registered for $type")
+                }
+            }
 
-        val daysWithData = result.count { r ->
-            r.steps != null || r.heartRate != null || r.sleep != null ||
-            r.calories != null || r.distance != null || r.weight != null
+            // Build sorted result list (compatible with minSdk 28)
+            val result = mutableListOf<DailyHealthRecord>()
+            var day = startDate
+            while (!day.isAfter(endDate)) {
+                result.add(daysMap[day.toString()] ?: DailyHealthRecord(date = day.toString(), metadata = metadata))
+                day = day.plusDays(1)
+            }
+
+            val daysWithData =
+                result.count { r ->
+                    r.steps != null ||
+                        r.heartRate != null ||
+                        r.sleep != null ||
+                        r.calories != null ||
+                        r.distance != null ||
+                        r.weight != null
+                }
+            Log.d(TAG, "readPeriodInBatch: completed, ${result.size} days total, $daysWithData days with data")
+            result
         }
-        Log.d(TAG, "readPeriodInBatch: completed, ${result.size} days total, $daysWithData days with data")
-        result
-    }
 
     // ===== Private readers (now delegate to extraction functions) =====
 
@@ -675,13 +758,17 @@ class HealthConnectRepository(private val context: Context) {
      * @return отфильтрованные записи от одного источника
      */
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
-    internal fun <T> filterByPreferredOrigin(records: List<T>, selectedSourcePackage: String? = null): List<T> {
+    internal fun <T> filterByPreferredOrigin(
+        records: List<T>,
+        selectedSourcePackage: String? = null,
+    ): List<T> {
         if (records.isEmpty()) return records
 
-        val groupedByOrigin = records.groupBy { record ->
-            val origin = (record as? androidx.health.connect.client.records.Record)?.metadata?.dataOrigin
-            origin?.packageName ?: "unknown"
-        }
+        val groupedByOrigin =
+            records.groupBy { record ->
+                val origin = (record as? androidx.health.connect.client.records.Record)?.metadata?.dataOrigin
+                origin?.packageName ?: "unknown"
+            }
 
         Log.d(TAG, "filterByPreferredOrigin: sources=${groupedByOrigin.keys}, selected=$selectedSourcePackage")
 
@@ -699,7 +786,10 @@ class HealthConnectRepository(private val context: Context) {
         for (preferred in PREFERRED_PACKAGES) {
             if (groupedByOrigin.containsKey(preferred)) {
                 val selected = groupedByOrigin[preferred]!!
-                Log.d(TAG, "filterByPreferredOrigin: using '$preferred' (${selected.size} records), ignoring ${groupedByOrigin.keys - preferred}")
+                Log.d(
+                    TAG,
+                    "filterByPreferredOrigin: using '$preferred' (${selected.size} records), ignoring ${groupedByOrigin.keys - preferred}",
+                )
                 return selected
             }
         }
@@ -708,7 +798,10 @@ class HealthConnectRepository(private val context: Context) {
         val bestSource = groupedByOrigin.maxByOrNull { (_, records) -> records.size }
         if (bestSource != null) {
             val (source, selected) = bestSource
-            Log.d(TAG, "filterByPreferredOrigin: no preferred, using '$source' with most records (${selected.size}), ignoring ${groupedByOrigin.keys - source}")
+            Log.d(
+                TAG,
+                "filterByPreferredOrigin: no preferred, using '$source' with most records (${selected.size}), ignoring ${groupedByOrigin.keys - source}",
+            )
             return selected
         }
 

@@ -57,10 +57,11 @@ fun ReleaseNotesDialog(
             Text(
                 text = releaseNotes,
                 style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 320.dp)
-                    .verticalScroll(rememberScrollState()),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp)
+                        .verticalScroll(rememberScrollState()),
             )
         },
         confirmButton = {

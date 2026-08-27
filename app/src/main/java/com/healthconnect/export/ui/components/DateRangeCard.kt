@@ -17,7 +17,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -42,7 +41,7 @@ fun DateRangeCard(
     onPresetChange: (DateRangePreset) -> Unit,
     onDateRangeChange: (LocalDate, LocalDate) -> Unit,
     onStartDateChange: (LocalDate) -> Unit,
-    onEndDateChange: (LocalDate) -> Unit
+    onEndDateChange: (LocalDate) -> Unit,
 ) {
     val context = LocalContext.current
 
@@ -66,13 +65,13 @@ fun DateRangeCard(
                 // 7 days preset
                 if (is7dPreset) {
                     Button(
-                        onClick = { onPresetChange(DateRangePreset.LAST_7_DAYS) }
+                        onClick = { onPresetChange(DateRangePreset.LAST_7_DAYS) },
                     ) {
                         Text(stringResource(R.string.days_7))
                     }
                 } else {
                     OutlinedButton(
-                        onClick = { onPresetChange(DateRangePreset.LAST_7_DAYS) }
+                        onClick = { onPresetChange(DateRangePreset.LAST_7_DAYS) },
                     ) {
                         Text(stringResource(R.string.days_7))
                     }
@@ -80,13 +79,13 @@ fun DateRangeCard(
                 // 30 days preset
                 if (is30dPreset) {
                     Button(
-                        onClick = { onPresetChange(DateRangePreset.LAST_30_DAYS) }
+                        onClick = { onPresetChange(DateRangePreset.LAST_30_DAYS) },
                     ) {
                         Text(stringResource(R.string.days_30))
                     }
                 } else {
                     OutlinedButton(
-                        onClick = { onPresetChange(DateRangePreset.LAST_30_DAYS) }
+                        onClick = { onPresetChange(DateRangePreset.LAST_30_DAYS) },
                     ) {
                         Text(stringResource(R.string.days_30))
                     }
@@ -97,19 +96,19 @@ fun DateRangeCard(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 DatePickerButton(
                     modifier = Modifier.weight(1f),
                     label = stringResource(R.string.from_label),
                     date = startDate,
-                    onDateSelected = onStartDateChange
+                    onDateSelected = onStartDateChange,
                 )
                 DatePickerButton(
                     modifier = Modifier.weight(1f),
                     label = stringResource(R.string.to_label),
                     date = endDate,
-                    onDateSelected = onEndDateChange
+                    onDateSelected = onEndDateChange,
                 )
             }
 
@@ -117,23 +116,23 @@ fun DateRangeCard(
 
             Surface(
                 shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
+                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f),
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
                         imageVector = Icons.Default.Warning,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f)
+                        tint = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f),
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = stringResource(R.string.health_connect_access_limit),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+                        color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f),
                     )
                 }
             }
@@ -146,64 +145,79 @@ fun DatePickerButton(
     modifier: Modifier = Modifier,
     label: String,
     date: LocalDate,
-    onDateSelected: (LocalDate) -> Unit
+    onDateSelected: (LocalDate) -> Unit,
 ) {
     val context = LocalContext.current
 
     // Check if date is at a preset value (defaults)
-    val isPreset = date == LocalDate.now().minusDays(6) ||
-        date == LocalDate.now() ||
-        date == LocalDate.now().minusDays(29)
+    val isPreset =
+        date == LocalDate.now().minusDays(6) ||
+            date == LocalDate.now() ||
+            date == LocalDate.now().minusDays(29)
 
-    val containerColor = if (isPreset) MaterialTheme.colorScheme.surfaceVariant
-                         else MaterialTheme.colorScheme.primaryContainer
-    val contentColor = if (isPreset) MaterialTheme.colorScheme.onSurface
-                       else MaterialTheme.colorScheme.onPrimaryContainer
-    val labelColor = if (isPreset) MaterialTheme.colorScheme.onSurfaceVariant
-                     else MaterialTheme.colorScheme.onPrimaryContainer
+    val containerColor =
+        if (isPreset) {
+            MaterialTheme.colorScheme.surfaceVariant
+        } else {
+            MaterialTheme.colorScheme.primaryContainer
+        }
+    val contentColor =
+        if (isPreset) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        }
+    val labelColor =
+        if (isPreset) {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        } else {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        }
 
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = containerColor,
-        modifier = modifier
-            .height(56.dp)
-            .clickable {
-                val calendar = Calendar.getInstance()
-                calendar.set(date.year, date.monthValue - 1, date.dayOfMonth)
-                DatePickerDialog(
-                    context,
-                    { _, year, month, day ->
-                        onDateSelected(LocalDate.of(year, month + 1, day))
-                    },
-                    calendar.get(Calendar.YEAR),
-                    calendar.get(Calendar.MONTH),
-                    calendar.get(Calendar.DAY_OF_MONTH)
-                ).show()
-            }
+        modifier =
+            modifier
+                .height(56.dp)
+                .clickable {
+                    val calendar = Calendar.getInstance()
+                    calendar.set(date.year, date.monthValue - 1, date.dayOfMonth)
+                    DatePickerDialog(
+                        context,
+                        { _, year, month, day ->
+                            onDateSelected(LocalDate.of(year, month + 1, day))
+                        },
+                        calendar.get(Calendar.YEAR),
+                        calendar.get(Calendar.MONTH),
+                        calendar.get(Calendar.DAY_OF_MONTH),
+                    ).show()
+                },
     ) {
         Row(
-            modifier = Modifier
-                .padding(horizontal = 12.dp)
-                .fillMaxSize(),
+            modifier =
+                Modifier
+                    .padding(horizontal = 12.dp)
+                    .fillMaxSize(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Icon(
                 imageVector = Icons.Default.CalendarMonth,
                 contentDescription = null,
                 modifier = Modifier.size(18.dp),
-                tint = contentColor
+                tint = contentColor,
             )
             Column {
                 Text(
                     text = label,
                     style = MaterialTheme.typography.labelSmall,
-                    color = labelColor
+                    color = labelColor,
                 )
                 Text(
                     text = date.format(DateTimeFormatter.ofPattern("MMM d, yyyy")),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = contentColor
+                    color = contentColor,
                 )
             }
         }
