@@ -14,11 +14,9 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.ServerSocket
 
-
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class WebhookRepositoryTest {
-
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val repo = WebhookRepository(context)
 
@@ -29,18 +27,20 @@ class WebhookRepositoryTest {
     private fun createTestRecord(date: String = "2026-05-24"): DailyHealthRecord =
         DailyHealthRecord(
             date = date,
-            metadata = ExportMetadata(
-                appVersion = "1.0.0",
-                exportTimestamp = "2026-05-24T12:00:00",
-                timezone = "UTC"
-            )
+            metadata =
+                ExportMetadata(
+                    appVersion = "1.0.0",
+                    exportTimestamp = "2026-05-24T12:00:00",
+                    timezone = "UTC",
+                ),
         )
 
     private val singleRecord = listOf(createTestRecord())
-    private val multipleRecords = listOf(
-        createTestRecord("2026-05-24"),
-        createTestRecord("2026-05-25")
-    )
+    private val multipleRecords =
+        listOf(
+            createTestRecord("2026-05-24"),
+            createTestRecord("2026-05-25"),
+        )
 
     // =============================================
     // Helper: start a local HTTP server
@@ -53,47 +53,56 @@ class WebhookRepositoryTest {
     private fun withServer(
         responseCode: Int = 200,
         responseBody: String = "{}",
-        testBlock: (url: String) -> Unit
+        testBlock: (url: String) -> Unit,
     ) {
         val server = ServerSocket(0)
         server.soTimeout = 5_000
         val port = server.localPort
         val url = "http://127.0.0.1:$port/hook"
 
-        val serverThread = Thread {
-            try {
-                // Accept up to 2 connections (to handle retry)
-                for (i in 1..2) {
-                    val client = try { server.accept() } catch (_: Exception) { break }
-                    client.use { socket ->
-                        val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
-                        val requestLines = mutableListOf<String>()
-                        var line = reader.readLine()
-                        while (line != null && line.isNotEmpty()) {
-                            requestLines.add(line)
-                            line = reader.readLine()
-                        }
+        val serverThread =
+            Thread {
+                try {
+                    // Accept up to 2 connections (to handle retry)
+                    for (i in 1..2) {
+                        val client =
+                            try {
+                                server.accept()
+                            } catch (_: Exception) {
+                                break
+                            }
+                        client.use { socket ->
+                            val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
+                            val requestLines = mutableListOf<String>()
+                            var line = reader.readLine()
+                            while (line != null && line.isNotEmpty()) {
+                                requestLines.add(line)
+                                line = reader.readLine()
+                            }
 
-                        val contentLength = requestLines
-                            .firstOrNull { it.startsWith("Content-Length:", ignoreCase = true) }
-                            ?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
-                        if (contentLength > 0) {
-                            val body = CharArray(contentLength)
-                            reader.read(body, 0, contentLength)
-                            requestLines.add(String(body))
-                        }
+                            val contentLength =
+                                requestLines
+                                    .firstOrNull { it.startsWith("Content-Length:", ignoreCase = true) }
+                                    ?.substringAfter(":")
+                                    ?.trim()
+                                    ?.toIntOrNull() ?: 0
+                            if (contentLength > 0) {
+                                val body = CharArray(contentLength)
+                                reader.read(body, 0, contentLength)
+                                requestLines.add(String(body))
+                            }
 
-                        val responseBytes =
-                            "HTTP/1.1 $responseCode \r\nContent-Length: ${responseBody.toByteArray().size}\r\nConnection: close\r\n\r\n$responseBody"
-                                .toByteArray()
-                        socket.getOutputStream().write(responseBytes)
-                        socket.getOutputStream().flush()
+                            val responseBytes =
+                                "HTTP/1.1 $responseCode \r\nContent-Length: ${responseBody.toByteArray().size}\r\nConnection: close\r\n\r\n$responseBody"
+                                    .toByteArray()
+                            socket.getOutputStream().write(responseBytes)
+                            socket.getOutputStream().flush()
+                        }
                     }
+                } catch (_: Exception) {
+                    // Server closed — ignore
                 }
-            } catch (_: Exception) {
-                // Server closed — ignore
             }
-        }
         serverThread.start()
 
         try {
@@ -111,7 +120,7 @@ class WebhookRepositoryTest {
     private fun withServerAndCapture(
         responseCode: Int = 200,
         responseBody: String = "{}",
-        block: (url: String) -> Unit
+        block: (url: String) -> Unit,
     ): String {
         val server = ServerSocket(0)
         server.soTimeout = 5_000
@@ -120,43 +129,52 @@ class WebhookRepositoryTest {
 
         var capturedRequest: String? = null
 
-        val serverThread = Thread {
-            try {
-                // Accept up to 2 connections (to handle retry)
-                for (i in 1..2) {
-                    val client = try { server.accept() } catch (_: Exception) { break }
-                    client.use { socket ->
-                        val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
-                        val requestLines = mutableListOf<String>()
-                        var line = reader.readLine()
-                        while (line != null && line.isNotEmpty()) {
-                            requestLines.add(line)
-                            line = reader.readLine()
+        val serverThread =
+            Thread {
+                try {
+                    // Accept up to 2 connections (to handle retry)
+                    for (i in 1..2) {
+                        val client =
+                            try {
+                                server.accept()
+                            } catch (_: Exception) {
+                                break
+                            }
+                        client.use { socket ->
+                            val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
+                            val requestLines = mutableListOf<String>()
+                            var line = reader.readLine()
+                            while (line != null && line.isNotEmpty()) {
+                                requestLines.add(line)
+                                line = reader.readLine()
+                            }
+
+                            val contentLength =
+                                requestLines
+                                    .firstOrNull { it.startsWith("Content-Length:", ignoreCase = true) }
+                                    ?.substringAfter(":")
+                                    ?.trim()
+                                    ?.toIntOrNull() ?: 0
+                            var bodyString = ""
+                            if (contentLength > 0) {
+                                val body = CharArray(contentLength)
+                                reader.read(body, 0, contentLength)
+                                bodyString = String(body)
+                            }
+
+                            capturedRequest = requestLines.joinToString("\n") + "\n\n" + bodyString
+
+                            val responseBytes =
+                                "HTTP/1.1 $responseCode \r\nContent-Length: ${responseBody.toByteArray().size}\r\nConnection: close\r\n\r\n$responseBody"
+                                    .toByteArray()
+                            socket.getOutputStream().write(responseBytes)
+                            socket.getOutputStream().flush()
                         }
-
-                        val contentLength = requestLines
-                            .firstOrNull { it.startsWith("Content-Length:", ignoreCase = true) }
-                            ?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
-                        var bodyString = ""
-                        if (contentLength > 0) {
-                            val body = CharArray(contentLength)
-                            reader.read(body, 0, contentLength)
-                            bodyString = String(body)
-                        }
-
-                        capturedRequest = requestLines.joinToString("\n") + "\n\n" + bodyString
-
-                        val responseBytes =
-                            "HTTP/1.1 $responseCode \r\nContent-Length: ${responseBody.toByteArray().size}\r\nConnection: close\r\n\r\n$responseBody"
-                                .toByteArray()
-                        socket.getOutputStream().write(responseBytes)
-                        socket.getOutputStream().flush()
                     }
+                } catch (_: Exception) {
+                    // Server closed — ignore
                 }
-            } catch (_: Exception) {
-                // Server closed — ignore
             }
-        }
         serverThread.start()
 
         try {
@@ -176,9 +194,10 @@ class WebhookRepositoryTest {
     fun `sendRecords returns Success on 200`() {
         val body = """{"status":"ok","id":"abc123"}"""
         withServer(responseCode = 200, responseBody = body) { url ->
-            val result = runBlocking {
-                repo.sendRecords(url, singleRecord, null)
-            }
+            val result =
+                runBlocking {
+                    repo.sendRecords(url, singleRecord, null)
+                }
 
             assertTrue(result is WebhookResult.Success)
             assertEquals(200, (result as WebhookResult.Success).statusCode)
@@ -189,9 +208,10 @@ class WebhookRepositoryTest {
     @Test
     fun `sendRecords returns Success on 201`() {
         withServer(responseCode = 201, responseBody = "Created") { url ->
-            val result = runBlocking {
-                repo.sendRecords(url, singleRecord, null)
-            }
+            val result =
+                runBlocking {
+                    repo.sendRecords(url, singleRecord, null)
+                }
 
             assertTrue(result is WebhookResult.Success)
             assertEquals(201, (result as WebhookResult.Success).statusCode)
@@ -201,9 +221,10 @@ class WebhookRepositoryTest {
     @Test
     fun `sendRecords returns Success on 204`() {
         withServer(responseCode = 204, responseBody = "") { url ->
-            val result = runBlocking {
-                repo.sendRecords(url, singleRecord, null)
-            }
+            val result =
+                runBlocking {
+                    repo.sendRecords(url, singleRecord, null)
+                }
 
             assertTrue(result is WebhookResult.Success)
             assertEquals(204, (result as WebhookResult.Success).statusCode)
@@ -219,9 +240,10 @@ class WebhookRepositoryTest {
     fun `sendRecords returns Error on 400`() {
         val errorBody = """{"error":"bad request"}"""
         withServer(responseCode = 400, responseBody = errorBody) { url ->
-            val result = runBlocking {
-                repo.sendRecords(url, singleRecord, null)
-            }
+            val result =
+                runBlocking {
+                    repo.sendRecords(url, singleRecord, null)
+                }
 
             assertTrue(result is WebhookResult.Error)
             val error = result as WebhookResult.Error
@@ -235,9 +257,10 @@ class WebhookRepositoryTest {
     fun `sendRecords returns Error on 500`() {
         val errorBody = "Internal Server Error"
         withServer(responseCode = 500, responseBody = errorBody) { url ->
-            val result = runBlocking {
-                repo.sendRecords(url, singleRecord, null)
-            }
+            val result =
+                runBlocking {
+                    repo.sendRecords(url, singleRecord, null)
+                }
 
             assertTrue(result is WebhookResult.Error)
             val error = result as WebhookResult.Error
@@ -249,9 +272,10 @@ class WebhookRepositoryTest {
     @Test
     fun `sendRecords returns Error on 403`() {
         withServer(responseCode = 403, responseBody = "Forbidden") { url ->
-            val result = runBlocking {
-                repo.sendRecords(url, singleRecord, null)
-            }
+            val result =
+                runBlocking {
+                    repo.sendRecords(url, singleRecord, null)
+                }
 
             assertTrue(result is WebhookResult.Error)
             assertEquals(403, (result as WebhookResult.Error).statusCode)
@@ -265,9 +289,10 @@ class WebhookRepositoryTest {
     @Test
     fun `sendRecords returns Error on network exception`() {
         // Connect to a closed port — triggers connection refused
-        val result = runBlocking {
-            repo.sendRecords("http://127.0.0.1:1/hook", singleRecord, null)
-        }
+        val result =
+            runBlocking {
+                repo.sendRecords("http://127.0.0.1:1/hook", singleRecord, null)
+            }
 
         assertTrue(result is WebhookResult.Error)
         val error = result as WebhookResult.Error
@@ -278,9 +303,10 @@ class WebhookRepositoryTest {
 
     @Test
     fun `sendRecords returns Error on invalid URL`() {
-        val result = runBlocking {
-            repo.sendRecords("http://nonexistent-domain-xyz-12345.com/hook", singleRecord, null)
-        }
+        val result =
+            runBlocking {
+                repo.sendRecords("http://nonexistent-domain-xyz-12345.com/hook", singleRecord, null)
+            }
 
         assertTrue(result is WebhookResult.Error)
         assertEquals(0, (result as WebhookResult.Error).statusCode)
@@ -292,40 +318,43 @@ class WebhookRepositoryTest {
 
     @Test
     fun `sendRecords sets Bearer token when authToken provided`() {
-        val request = withServerAndCapture { url ->
-            runBlocking {
-                repo.sendRecords(url, singleRecord, "my-secret-token")
+        val request =
+            withServerAndCapture { url ->
+                runBlocking {
+                    repo.sendRecords(url, singleRecord, "my-secret-token")
+                }
             }
-        }
 
         assertTrue(request.contains("Authorization: Bearer my-secret-token"))
     }
 
     @Test
     fun `sendRecords does not set Authorization when authToken is null`() {
-        val request = withServerAndCapture { url ->
-            runBlocking {
-                repo.sendRecords(url, singleRecord, null)
+        val request =
+            withServerAndCapture { url ->
+                runBlocking {
+                    repo.sendRecords(url, singleRecord, null)
+                }
             }
-        }
 
         assertFalse(
             "Authorization header should not be present for null token",
-            request.contains("Authorization:", ignoreCase = true)
+            request.contains("Authorization:", ignoreCase = true),
         )
     }
 
     @Test
     fun `sendRecords does not set Authorization when authToken is blank`() {
-        val request = withServerAndCapture { url ->
-            runBlocking {
-                repo.sendRecords(url, singleRecord, "")
+        val request =
+            withServerAndCapture { url ->
+                runBlocking {
+                    repo.sendRecords(url, singleRecord, "")
+                }
             }
-        }
 
         assertFalse(
             "Authorization header should not be present for blank token",
-            request.contains("Authorization:", ignoreCase = true)
+            request.contains("Authorization:", ignoreCase = true),
         )
     }
 
@@ -335,11 +364,12 @@ class WebhookRepositoryTest {
 
     @Test
     fun `sendRecords sets Content-Type and Accept headers`() {
-        val request = withServerAndCapture { url ->
-            runBlocking {
-                repo.sendRecords(url, singleRecord, null)
+        val request =
+            withServerAndCapture { url ->
+                runBlocking {
+                    repo.sendRecords(url, singleRecord, null)
+                }
             }
-        }
 
         assertTrue(request.contains("Content-Type: application/json"))
         assertTrue(request.contains("Accept: application/json"))
@@ -347,15 +377,16 @@ class WebhookRepositoryTest {
 
     @Test
     fun `sendRecords uses POST method`() {
-        val request = withServerAndCapture { url ->
-            runBlocking {
-                repo.sendRecords(url, singleRecord, null)
+        val request =
+            withServerAndCapture { url ->
+                runBlocking {
+                    repo.sendRecords(url, singleRecord, null)
+                }
             }
-        }
 
         assertTrue(
             "Request should start with POST",
-            request.startsWith("POST")
+            request.startsWith("POST"),
         )
     }
 
@@ -366,9 +397,10 @@ class WebhookRepositoryTest {
     @Test
     fun `sendRecords with multiple records works correctly`() {
         withServer(responseCode = 200, responseBody = "ok") { url ->
-            val result = runBlocking {
-                repo.sendRecords(url, multipleRecords, null)
-            }
+            val result =
+                runBlocking {
+                    repo.sendRecords(url, multipleRecords, null)
+                }
 
             assertTrue(result is WebhookResult.Success)
             assertEquals(200, (result as WebhookResult.Success).statusCode)
@@ -382,11 +414,12 @@ class WebhookRepositoryTest {
     @Test
     fun `sendRecords sends Bearer token with special characters`() {
         val complexToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.secret-token-value"
-        val request = withServerAndCapture { url ->
-            runBlocking {
-                repo.sendRecords(url, singleRecord, complexToken)
+        val request =
+            withServerAndCapture { url ->
+                runBlocking {
+                    repo.sendRecords(url, singleRecord, complexToken)
+                }
             }
-        }
 
         assertTrue(request.contains("Authorization: Bearer $complexToken"))
     }
@@ -397,11 +430,12 @@ class WebhookRepositoryTest {
 
     @Test
     fun `sendRecords serializes records inside messages key in body`() {
-        val request = withServerAndCapture { url ->
-            runBlocking {
-                repo.sendRecords(url, singleRecord, null)
+        val request =
+            withServerAndCapture { url ->
+                runBlocking {
+                    repo.sendRecords(url, singleRecord, null)
+                }
             }
-        }
 
         val body = request.substringAfter("\n\n")
         assertTrue("Body should contain record date", body.contains("2026-05-24"))
@@ -534,9 +568,10 @@ class WebhookRepositoryTest {
     fun `error stream is null falls back to empty string`() {
         // Server returns 500 with Content-Length: 0 — errorStream will be empty
         withServer(responseCode = 500, responseBody = "") { url ->
-            val result = runBlocking {
-                repo.sendRecords(url, singleRecord, null)
-            }
+            val result =
+                runBlocking {
+                    repo.sendRecords(url, singleRecord, null)
+                }
 
             assertTrue(result is WebhookResult.Error)
             val error = result as WebhookResult.Error

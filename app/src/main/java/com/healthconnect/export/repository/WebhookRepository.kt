@@ -16,15 +16,15 @@ import java.net.URL
 
 @Serializable
 data class WebhookPayload(
-    val messages: List<DailyHealthRecord>
+    val messages: List<DailyHealthRecord>,
 )
 
 class WebhookRepository(
-    private val context: Context
+    private val context: Context,
 ) {
-
     companion object {
         private const val TAG = "WebhookRepo"
+
         // Cap response body read to 1 MB to avoid OOM on a misbehaving/gigantic response.
         private const val MAX_RESPONSE_BYTES = 1_048_576
     }
@@ -44,10 +44,11 @@ class WebhookRepository(
         return out.toString()
     }
 
-    private val json = Json {
-        prettyPrint = true
-        ignoreUnknownKeys = true
-    }
+    private val json =
+        Json {
+            prettyPrint = true
+            ignoreUnknownKeys = true
+        }
 
     /**
      * Отправляет массив записей на webhook URL через POST с JSON телом
@@ -57,35 +58,36 @@ class WebhookRepository(
     suspend fun sendRecords(
         webhookUrl: String,
         records: List<DailyHealthRecord>,
-        authToken: String? = null
-    ): WebhookResult = withContext(Dispatchers.IO) {
-        val maxAttempts = 2
-        var lastResult: WebhookResult? = null
-        for (attempt in 1..maxAttempts) {
-            lastResult = trySend(webhookUrl, records, authToken)
-            when (lastResult) {
-                is WebhookResult.Success -> return@withContext lastResult
-                is WebhookResult.Error -> {
-                    val error = lastResult as WebhookResult.Error
-                    // Retry only on network/timeout/server errors (status 0 = connection error, 5xx = server error)
-                    if (attempt < maxAttempts && (error.statusCode == 0 || error.statusCode in 500..599)) {
-                        Log.w(TAG, "sendRecords attempt $attempt failed (${error.statusCode}), retrying...")
-                        delay(1000)
-                    } else {
-                        return@withContext lastResult
+        authToken: String? = null,
+    ): WebhookResult =
+        withContext(Dispatchers.IO) {
+            val maxAttempts = 2
+            var lastResult: WebhookResult? = null
+            for (attempt in 1..maxAttempts) {
+                lastResult = trySend(webhookUrl, records, authToken)
+                when (lastResult) {
+                    is WebhookResult.Success -> return@withContext lastResult
+                    is WebhookResult.Error -> {
+                        val error = lastResult as WebhookResult.Error
+                        // Retry only on network/timeout/server errors (status 0 = connection error, 5xx = server error)
+                        if (attempt < maxAttempts && (error.statusCode == 0 || error.statusCode in 500..599)) {
+                            Log.w(TAG, "sendRecords attempt $attempt failed (${error.statusCode}), retrying...")
+                            delay(1000)
+                        } else {
+                            return@withContext lastResult
+                        }
                     }
                 }
             }
+            lastResult ?: WebhookResult.Error(0, "No result from sendRecords")
         }
-        lastResult ?: WebhookResult.Error(0, "No result from sendRecords")
-    }
 
     private suspend fun trySend(
         webhookUrl: String,
         records: List<DailyHealthRecord>,
-        authToken: String?
-    ): WebhookResult {
-        return try {
+        authToken: String?,
+    ): WebhookResult =
+        try {
             val url = URL(webhookUrl)
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
@@ -106,32 +108,32 @@ class WebhookRepository(
             }
 
             val responseCode = connection.responseCode
-            val responseBody = if (responseCode in 200..299) {
-                connection.inputStream.bufferedReader().use { readBounded(it) }
-            } else {
-                connection.errorStream?.bufferedReader()?.use { readBounded(it) } ?: ""
-            }
+            val responseBody =
+                if (responseCode in 200..299) {
+                    connection.inputStream.bufferedReader().use { readBounded(it) }
+                } else {
+                    connection.errorStream?.bufferedReader()?.use { readBounded(it) } ?: ""
+                }
 
             connection.disconnect()
 
             if (responseCode in 200..299) {
                 WebhookResult.Success(
                     statusCode = responseCode,
-                    responseBody = responseBody
+                    responseBody = responseBody,
                 )
             } else {
                 WebhookResult.Error(
                     statusCode = responseCode,
-                    message = context.getString(R.string.webhook_server_error, responseCode, responseBody)
+                    message = context.getString(R.string.webhook_server_error, responseCode, responseBody),
                 )
             }
         } catch (e: Exception) {
             WebhookResult.Error(
                 statusCode = 0,
-                message = e.message ?: context.getString(R.string.webhook_unknown_error)
+                message = e.message ?: context.getString(R.string.webhook_unknown_error),
             )
         }
-    }
 
     /**
      * Проверяет, что URL выглядит как валидный webhook
@@ -151,11 +153,11 @@ class WebhookRepository(
 sealed class WebhookResult {
     data class Success(
         val statusCode: Int,
-        val responseBody: String
+        val responseBody: String,
     ) : WebhookResult()
 
     data class Error(
         val statusCode: Int,
-        val message: String
+        val message: String,
     ) : WebhookResult()
 }

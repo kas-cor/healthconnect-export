@@ -28,33 +28,39 @@ fun DriveStatusCard(
     onSignInClick: () -> Unit,
     onSignOutClick: () -> Unit,
 ) {
-    val (icon, title, color) = when (status) {
-        is DriveStatus.NotConnected -> Triple(
-            Icons.Default.CloudOff,
-            stringResource(R.string.drive_not_connected),
-            MaterialTheme.colorScheme.error,
-        )
-        is DriveStatus.Connected -> Triple(
-            Icons.Default.Cloud,
-            stringResource(R.string.drive_connected),
-            MaterialTheme.colorScheme.primary,
-        )
-        is DriveStatus.Syncing -> Triple(
-            Icons.Default.Refresh,
-            stringResource(R.string.drive_syncing),
-            MaterialTheme.colorScheme.tertiary,
-        )
-        is DriveStatus.Synced -> Triple(
-            Icons.Default.Cloud,
-            stringResource(R.string.drive_synced, status.filesCount),
-            MaterialTheme.colorScheme.primary,
-        )
-        is DriveStatus.Error -> Triple(
-            Icons.Default.CloudOff,
-            stringResource(R.string.drive_error, status.error),
-            MaterialTheme.colorScheme.error,
-        )
-    }
+    val (icon, title, color) =
+        when (status) {
+            is DriveStatus.NotConnected ->
+                Triple(
+                    Icons.Default.CloudOff,
+                    stringResource(R.string.drive_not_connected),
+                    MaterialTheme.colorScheme.error,
+                )
+            is DriveStatus.Connected ->
+                Triple(
+                    Icons.Default.Cloud,
+                    stringResource(R.string.drive_connected),
+                    MaterialTheme.colorScheme.primary,
+                )
+            is DriveStatus.Syncing ->
+                Triple(
+                    Icons.Default.Refresh,
+                    stringResource(R.string.drive_syncing),
+                    MaterialTheme.colorScheme.tertiary,
+                )
+            is DriveStatus.Synced ->
+                Triple(
+                    Icons.Default.Cloud,
+                    stringResource(R.string.drive_synced, status.filesCount),
+                    MaterialTheme.colorScheme.primary,
+                )
+            is DriveStatus.Error ->
+                Triple(
+                    Icons.Default.CloudOff,
+                    stringResource(R.string.drive_error, status.error),
+                    MaterialTheme.colorScheme.error,
+                )
+        }
 
     MaterialCard(
         prominent = true,

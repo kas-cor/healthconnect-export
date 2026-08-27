@@ -62,9 +62,10 @@ fun ExportedFilesCard(
     var pendingDelete by rememberSaveable { mutableStateOf<File?>(null) }
 
     val hasMore = files.size > INITIAL_VISIBLE_FILES
-    val visibleFiles = remember(files, showAll) {
-        visibleExportFiles(files, showAll, INITIAL_VISIBLE_FILES)
-    }
+    val visibleFiles =
+        remember(files, showAll) {
+            visibleExportFiles(files, showAll, INITIAL_VISIBLE_FILES)
+        }
     val totalSize = remember(files) { files.sumOf { it.length() } }
 
     MaterialCard(
@@ -75,18 +76,20 @@ fun ExportedFilesCard(
             MaterialSectionHeader(
                 icon = Icons.Default.Save,
                 title = stringResource(R.string.exported_files_title, files.size),
-                supportingText = stringResource(
-                    R.string.exported_files_total_size,
-                    formatFileSize(totalSize)
-                ),
+                supportingText =
+                    stringResource(
+                        R.string.exported_files_total_size,
+                        formatFileSize(totalSize),
+                    ),
             )
 
             Spacer(modifier = Modifier.height(8.dp))
 
             LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = MAX_LIST_HEIGHT),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = MAX_LIST_HEIGHT),
             ) {
                 items(visibleFiles, key = { it.absolutePath }) { file ->
                     ExportedFileRow(
@@ -113,20 +116,22 @@ fun ExportedFilesCard(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = if (showAll) {
-                                stringResource(R.string.exported_files_show_less)
-                            } else {
-                                stringResource(R.string.exported_files_show_all, files.size)
-                            },
+                            text =
+                                if (showAll) {
+                                    stringResource(R.string.exported_files_show_less)
+                                } else {
+                                    stringResource(R.string.exported_files_show_all, files.size)
+                                },
                             modifier = Modifier.weight(1f),
                             textAlign = TextAlign.Start,
                         )
                         Icon(
                             imageVector = Icons.Default.ExpandMore,
                             contentDescription = null,
-                            modifier = Modifier
-                                .size(18.dp)
-                                .rotate(rotation),
+                            modifier =
+                                Modifier
+                                    .size(18.dp)
+                                    .rotate(rotation),
                         )
                     }
                 }
@@ -145,7 +150,7 @@ fun ExportedFilesCard(
                     onClick = {
                         pendingDelete = null
                         onDeleteFile(file)
-                    }
+                    },
                 ) {
                     Text(stringResource(R.string.file_delete_confirm))
                 }
@@ -154,7 +159,7 @@ fun ExportedFilesCard(
                 TextButton(onClick = { pendingDelete = null }) {
                     Text(stringResource(R.string.file_delete_cancel))
                 }
-            }
+            },
         )
     }
 }
@@ -168,27 +173,28 @@ private fun ExportedFileRow(
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onFileClick(file) }
-            .padding(vertical = 4.dp)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable { onFileClick(file) }
+                .padding(vertical = 4.dp),
     ) {
         Icon(
             imageVector = Icons.Default.Description,
             contentDescription = null,
             modifier = Modifier.size(16.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = file.name,
-                style = MaterialTheme.typography.bodySmall
+                style = MaterialTheme.typography.bodySmall,
             )
             Text(
                 text = formatFileSize(file.length()),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         IconButton(onClick = onShareClick) {
@@ -196,7 +202,7 @@ private fun ExportedFileRow(
                 imageVector = Icons.Default.Share,
                 contentDescription = stringResource(R.string.share_file),
                 modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.primary
+                tint = MaterialTheme.colorScheme.primary,
             )
         }
         IconButton(onClick = onDeleteClick) {
@@ -204,7 +210,7 @@ private fun ExportedFileRow(
                 imageVector = Icons.Default.Delete,
                 contentDescription = stringResource(R.string.file_delete_title),
                 modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.error
+                tint = MaterialTheme.colorScheme.error,
             )
         }
     }
@@ -228,10 +234,9 @@ internal fun visibleExportFiles(
 }
 
 @Composable
-private fun formatFileSize(bytes: Long): String {
-    return when {
+private fun formatFileSize(bytes: Long): String =
+    when {
         bytes < 1024 -> stringResource(R.string.file_size_bytes, bytes)
         bytes < 1024 * 1024 -> stringResource(R.string.file_size_kb, bytes / 1024)
         else -> stringResource(R.string.file_size_mb, bytes / (1024.0 * 1024.0))
     }
-}

@@ -3,25 +3,23 @@ package com.healthconnect.export.repository
 import android.content.Context
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.api.services.drive.Drive
-import com.google.api.services.drive.DriveScopes
 import com.healthconnect.export.data.ExportConfig
 import com.healthconnect.export.data.ExportFrequency
 import com.healthconnect.export.data.HealthDataType
 import kotlinx.coroutines.runBlocking
 import org.junit.After
-import org.junit.Assert.*
 import org.junit.Before
+import org.junit.Assert.*
 import org.junit.Test
+import org.mockito.kotlin.*
 import org.junit.runner.RunWith
 import org.mockito.Mock
 import org.mockito.junit.MockitoJUnitRunner
-import org.mockito.kotlin.*
 import java.io.File
 import java.lang.reflect.Field
 
 @RunWith(MockitoJUnitRunner.Silent::class)
 class GoogleDriveRepositoryTest {
-
     @Mock
     private lateinit var mockContext: Context
 
@@ -76,11 +74,12 @@ class GoogleDriveRepositoryTest {
     private lateinit var repoSpy: GoogleDriveRepository
 
     private val localTestFile = File("test.json")
-    private val defaultConfig = ExportConfig(
-        enabledTypes = setOf(HealthDataType.STEPS),
-        frequency = ExportFrequency.DAILY,
-        autoSyncDrive = false
-    )
+    private val defaultConfig =
+        ExportConfig(
+            enabledTypes = setOf(HealthDataType.STEPS),
+            frequency = ExportFrequency.DAILY,
+            autoSyncDrive = false,
+        )
 
     @Before
     fun setup() {
@@ -219,8 +218,8 @@ class GoogleDriveRepositoryTest {
             // Second execute (check existing files): returns empty list
             whenever(mockFiles.list()).thenReturn(mockListRequest)
             whenever(mockListRequest.execute()).thenReturn(
-                mockFolderListResponse,   // folder found
-                mockEmptyFileListResponse  // no existing file
+                mockFolderListResponse, // folder found
+                mockEmptyFileListResponse, // no existing file
             )
 
             whenever(mockFiles.create(any(), any())).thenReturn(mockCreateRequest)
@@ -244,8 +243,8 @@ class GoogleDriveRepositoryTest {
             // Second execute (check existing files): returns existing file
             whenever(mockFiles.list()).thenReturn(mockListRequest)
             whenever(mockListRequest.execute()).thenReturn(
-                mockFolderListResponse,  // folder found
-                mockFileListResponse     // existing file found
+                mockFolderListResponse, // folder found
+                mockFileListResponse, // existing file found
             )
 
             whenever(mockFiles.create(any(), any())).thenReturn(mockCreateRequest)
@@ -279,8 +278,8 @@ class GoogleDriveRepositoryTest {
             // Second execute (check existing files): returns multiple files
             whenever(mockFiles.list()).thenReturn(mockListRequest)
             whenever(mockListRequest.execute()).thenReturn(
-                mockFolderListResponse,  // folder found
-                multiFileResponse        // multiple existing files
+                mockFolderListResponse, // folder found
+                multiFileResponse, // multiple existing files
             )
 
             whenever(mockFiles.create(any(), any())).thenReturn(mockCreateRequest)
@@ -328,10 +327,10 @@ class GoogleDriveRepositoryTest {
             // Second uploadFile call: list() called 2 more times
             whenever(mockFiles.list()).thenReturn(mockListRequest)
             whenever(mockListRequest.execute()).thenReturn(
-                mockFolderListResponse,   // findFolder (1st call)
+                mockFolderListResponse, // findFolder (1st call)
                 mockEmptyFileListResponse, // findFile (1st call)
-                mockFolderListResponse,   // findFolder (2nd call)
-                mockEmptyFileListResponse  // findFile (2nd call)
+                mockFolderListResponse, // findFolder (2nd call)
+                mockEmptyFileListResponse, // findFile (2nd call)
             )
 
             whenever(mockFiles.create(any(), any())).thenReturn(mockCreateRequest)
@@ -414,7 +413,7 @@ class GoogleDriveRepositoryTest {
             whenever(mockFiles.list()).thenReturn(mockListRequest)
             whenever(mockListRequest.execute()).thenReturn(
                 mockFolderListResponse,
-                fileListResponse
+                fileListResponse,
             )
 
             val result = repoSpy.listDriveFiles()
@@ -450,8 +449,8 @@ class GoogleDriveRepositoryTest {
             // Folder doesn't exist → create folder → then check files
             whenever(mockFiles.list()).thenReturn(mockListRequest)
             whenever(mockListRequest.execute()).thenReturn(
-                mockEmptyFolderListResponse,  // no existing folder
-                mockEmptyFileListResponse      // no existing file
+                mockEmptyFolderListResponse, // no existing folder
+                mockEmptyFileListResponse, // no existing file
             )
 
             val createFolderResponse = mock<com.google.api.services.drive.model.File>()
@@ -478,8 +477,8 @@ class GoogleDriveRepositoryTest {
 
             whenever(mockFiles.list()).thenReturn(mockListRequest)
             whenever(mockListRequest.execute()).thenReturn(
-                mockFolderListResponse,  // folder found
-                mockFileListResponse     // existing file found
+                mockFolderListResponse, // folder found
+                mockFileListResponse, // existing file found
             )
 
             // Delete throws — should be caught and return null
@@ -503,7 +502,7 @@ class GoogleDriveRepositoryTest {
             // Folder found but subsequent file list throws
             whenever(mockFiles.list()).thenReturn(mockListRequest)
             whenever(mockListRequest.execute()).thenReturn(
-                mockFolderListResponse   // folder found (first execute)
+                mockFolderListResponse, // folder found (first execute)
             )
             // Second list() call throws
             val mockListRequest2 = mock<Drive.Files.List>()
@@ -534,8 +533,8 @@ class GoogleDriveRepositoryTest {
 
             whenever(mockFiles.list()).thenReturn(mockListRequest)
             whenever(mockListRequest.execute()).thenReturn(
-                mockFolderListResponse,   // folder found
-                mockEmptyFileListResponse  // no existing file
+                mockFolderListResponse, // folder found
+                mockEmptyFileListResponse, // no existing file
             )
 
             whenever(mockFiles.create(any(), any())).thenReturn(mockCreateRequest)

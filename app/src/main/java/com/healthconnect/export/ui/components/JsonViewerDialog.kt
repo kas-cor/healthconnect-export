@@ -10,8 +10,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,8 +27,10 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import org.json.JSONObject
 import com.healthconnect.export.R
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
 
 /**
@@ -59,7 +61,7 @@ private object JsonViewerColors {
 @Composable
 fun JsonViewerDialog(
     file: File,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
 
@@ -71,13 +73,14 @@ fun JsonViewerDialog(
 
     LaunchedEffect(file) {
         try {
-            val content = file.readText()
+            val content = withContext(Dispatchers.IO) { file.readText() }
             // Non-JSON files (e.g. CSV exports) are shown as plain text
-            prettyJson = try {
-                JSONObject(content).toString(2)
-            } catch (e: Exception) {
-                content
-            }
+            prettyJson =
+                try {
+                    JSONObject(content).toString(2)
+                } catch (e: Exception) {
+                    content
+                }
         } catch (e: Exception) {
             error = openErrorMsg
         }
@@ -91,36 +94,38 @@ fun JsonViewerDialog(
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(8.dp),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(8.dp),
             shape = RoundedCornerShape(16.dp),
-            color = viewerBackground
+            color = viewerBackground,
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Header
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(viewerHeaderBg)
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .background(viewerHeaderBg)
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
                 ) {
                     Icon(
                         imageVector = Icons.Default.Description,
                         contentDescription = null,
                         tint = JsonViewerColors.iconBlue,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(20.dp),
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = stringResource(R.string.json_viewer_title, file.name),
                         style = MaterialTheme.typography.titleMedium,
                         color = viewerTextColor,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                     // Copy to clipboard button
                     IconButton(onClick = {
@@ -129,9 +134,9 @@ fun JsonViewerDialog(
                         clipboard.setPrimaryClip(clip)
                     }) {
                         Icon(
-                            imageVector = Icons.Default.Save,
+                            imageVector = Icons.Default.ContentCopy,
                             contentDescription = stringResource(R.string.json_viewer_copy),
-                            tint = JsonViewerColors.iconGreen
+                            tint = JsonViewerColors.iconGreen,
                         )
                     }
 
@@ -139,7 +144,7 @@ fun JsonViewerDialog(
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = stringResource(R.string.json_viewer_close),
-                            tint = viewerTextColor
+                            tint = viewerTextColor,
                         )
                     }
                 }
@@ -148,16 +153,17 @@ fun JsonViewerDialog(
 
                 // JSON content area
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(8.dp)
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(8.dp),
                 ) {
                     when {
                         error != null -> {
                             Text(
                                 text = error!!,
                                 color = JsonViewerColors.error,
-                                modifier = Modifier.padding(16.dp)
+                                modifier = Modifier.padding(16.dp),
                             )
                         }
                         prettyJson != null -> {
@@ -167,19 +173,21 @@ fun JsonViewerDialog(
                             Text(
                                 text = highlightJsonSyntax(formattedJson),
                                 fontFamily = FontFamily.Monospace,
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    color = viewerTextColor
-                                ),
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .verticalScroll(scrollState)
-                                    .padding(12.dp)
+                                style =
+                                    MaterialTheme.typography.bodySmall.copy(
+                                        color = viewerTextColor,
+                                    ),
+                                modifier =
+                                    Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(scrollState)
+                                        .padding(12.dp),
                             )
                         }
                         else -> {
                             CircularProgressIndicator(
                                 modifier = Modifier.align(Alignment.Center),
-                                color = Color(0xFF569CD6)
+                                color = Color(0xFF569CD6),
                             )
                         }
                     }
@@ -240,7 +248,11 @@ internal fun highlightJsonSyntax(json: String): androidx.compose.ui.text.Annotat
                 json[i] == '-' || json[i].isDigit() -> {
                     val start = i
                     if (json[i] == '-') i++
-                    while (i < json.length && (json[i].isDigit() || json[i] == '.' || json[i] == 'e' || json[i] == 'E' || json[i] == '+' || json[i] == '-')) i++
+                    while (i < json.length &&
+                        (json[i].isDigit() || json[i] == '.' || json[i] == 'e' || json[i] == 'E' || json[i] == '+' || json[i] == '-')
+                    ) {
+                        i++
+                    }
                     withStyle(SpanStyle(color = numberColor)) {
                         append(json.substring(start, i))
                     }

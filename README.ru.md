@@ -418,17 +418,17 @@ cp README.md README.fr.md
 | Компонент | Версия |
 |---|---|
 | Язык | Kotlin 2.4.10 |
-| UI | Jetpack Compose + Material3 (BOM 2026.05) |
-| Сборка | AGP 9.3.1 / Gradle 9.6.1 |
+| UI | Jetpack Compose + Material3 (BOM 2026.08) |
+| Сборка | AGP 9.3.1 / Gradle 9.7.0 |
 | Health Connect | `connect-client:1.1.0` |
-| Google Drive | `google-api-services-drive:v3-rev20240123`, `google-http-client-gson:2.1.0` |
+| Google Drive | `google-api-services-drive:v3-rev20240123`, `google-http-client-gson:2.2.0` |
 | Авторизация | `play-services-auth:21.6.0` |
 | Фон | WorkManager `work-runtime-ktx:2.11.2` |
 | Сериализация | `kotlinx-serialization-json:1.11.0` |
-| minSdk / targetSdk / compileSdk | 28 / 36 / 36 |
+| minSdk / targetSdk / compileSdk | 28 / 37 / 37 |
 | JVM | 21 |
 | Тестирование | JUnit 4.13.2, Mockito 5.23.0, mockito-kotlin 6.3.0 |
-| Покрытие | JaCoCo 0.8.11 |
+| Покрытие | JaCoCo 0.8.12 |
 | CI | GitHub Actions |
 
 ## Список изменений 📋

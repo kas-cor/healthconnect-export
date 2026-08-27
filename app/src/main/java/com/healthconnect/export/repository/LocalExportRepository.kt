@@ -14,20 +14,24 @@ import java.io.File
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
-class LocalExportRepository(private val context: Context) {
-
-    private val json = Json {
-        prettyPrint = true
-        ignoreUnknownKeys = true
-    }
+class LocalExportRepository(
+    private val context: Context,
+) {
+    private val json =
+        Json {
+            prettyPrint = true
+            ignoreUnknownKeys = true
+        }
 
     /**
      * Gets the export directory. Tries external documents dir first, falls back to app files.
      */
     fun getExportDirectory(config: ExportConfig): File {
-        val baseDir = ContextCompat.getExternalFilesDirs(context, null)
-            .firstOrNull { it != null && (it.exists() || it.mkdirs()) }
-            ?: context.filesDir
+        val baseDir =
+            ContextCompat
+                .getExternalFilesDirs(context, null)
+                .firstOrNull { it != null && (it.exists() || it.mkdirs()) }
+                ?: context.filesDir
         val exportDir = File(baseDir, config.outputDirectory)
         if (!exportDir.exists()) exportDir.mkdirs()
         return exportDir
@@ -36,18 +40,25 @@ class LocalExportRepository(private val context: Context) {
     /**
      * Returns the expected filename for a given date in the given [format].
      */
-    fun getFilenameForDate(date: LocalDate, format: ExportFormat = ExportFormat.JSON): String {
-        val extension = when (format) {
-            ExportFormat.JSON -> "json"
-            ExportFormat.CSV -> "csv"
-        }
+    fun getFilenameForDate(
+        date: LocalDate,
+        format: ExportFormat = ExportFormat.JSON,
+    ): String {
+        val extension =
+            when (format) {
+                ExportFormat.JSON -> "json"
+                ExportFormat.CSV -> "csv"
+            }
         return "health_${date.format(DateTimeFormatter.ISO_LOCAL_DATE)}.$extension"
     }
 
     /**
      * Checks if a day's export already exists in the configured format
      */
-    fun isExported(date: LocalDate, config: ExportConfig): Boolean {
+    fun isExported(
+        date: LocalDate,
+        config: ExportConfig,
+    ): Boolean {
         val file = File(getExportDirectory(config), getFilenameForDate(date, config.exportFormat))
         return file.exists() && file.length() > 0
     }
@@ -59,30 +70,33 @@ class LocalExportRepository(private val context: Context) {
      */
     suspend fun saveDailyRecord(
         record: DailyHealthRecord,
-        config: ExportConfig
-    ): File = withContext(Dispatchers.IO) {
-        val dir = getExportDirectory(config)
-        val date = LocalDate.parse(record.date)
-        val file = File(dir, getFilenameForDate(date, config.exportFormat))
-        val counterpartFormat = if (config.exportFormat == ExportFormat.JSON) ExportFormat.CSV else ExportFormat.JSON
-        File(dir, getFilenameForDate(date, counterpartFormat)).delete()
-        val content = when (config.exportFormat) {
-            ExportFormat.JSON -> json.encodeToString(record)
-            ExportFormat.CSV -> CsvMapper.header() + "\n" + CsvMapper.recordToCsv(record)
+        config: ExportConfig,
+    ): File =
+        withContext(Dispatchers.IO) {
+            val dir = getExportDirectory(config)
+            val date = LocalDate.parse(record.date)
+            val file = File(dir, getFilenameForDate(date, config.exportFormat))
+            val counterpartFormat = if (config.exportFormat == ExportFormat.JSON) ExportFormat.CSV else ExportFormat.JSON
+            File(dir, getFilenameForDate(date, counterpartFormat)).delete()
+            val content =
+                when (config.exportFormat) {
+                    ExportFormat.JSON -> json.encodeToString(record)
+                    ExportFormat.CSV -> CsvMapper.header() + "\n" + CsvMapper.recordToCsv(record)
+                }
+            file.writeText(content)
+            file
         }
-        file.writeText(content)
-        file
-    }
 
     /**
      * Saves multiple daily records
      */
     suspend fun saveRecords(
         records: List<DailyHealthRecord>,
-        config: ExportConfig
-    ): List<File> = withContext(Dispatchers.IO) {
-        records.map { saveDailyRecord(it, config) }
-    }
+        config: ExportConfig,
+    ): List<File> =
+        withContext(Dispatchers.IO) {
+            records.map { saveDailyRecord(it, config) }
+        }
 
     /**
      * Lists all exported files (JSON and CSV) with their dates
@@ -91,23 +105,28 @@ class LocalExportRepository(private val context: Context) {
         val dir = getExportDirectory(config)
         val files = dir.listFiles { f -> f.name.endsWith(".json") || f.name.endsWith(".csv") }
         if (files == null) return emptyList()
-        return files.mapNotNull { file ->
-            val dateStr = file.name
-                .removePrefix("health_")
-                .removeSuffix(".json")
-                .removeSuffix(".csv")
-            try {
-                LocalDate.parse(dateStr) to file
-            } catch (_: Exception) {
-                null
-            }
-        }.sortedBy { it.first }
+        return files
+            .mapNotNull { file ->
+                val dateStr =
+                    file.name
+                        .removePrefix("health_")
+                        .removeSuffix(".json")
+                        .removeSuffix(".csv")
+                try {
+                    LocalDate.parse(dateStr) to file
+                } catch (_: Exception) {
+                    null
+                }
+            }.sortedBy { it.first }
     }
 
     /**
      * Deletes exports older than the retention period (in days)
      */
-    fun cleanupOldExports(daysToKeep: Int, config: ExportConfig) {
+    fun cleanupOldExports(
+        daysToKeep: Int,
+        config: ExportConfig,
+    ) {
         val cutoff = LocalDate.now().minusDays(daysToKeep.toLong())
         listExportedFiles(config).forEach { (date, file) ->
             if (date.isBefore(cutoff)) file.delete()
@@ -118,7 +137,10 @@ class LocalExportRepository(private val context: Context) {
      * Deletes all export files (JSON and CSV) for the given date.
      * Returns true if any file was deleted, false if none existed.
      */
-    fun deleteExport(date: LocalDate, config: ExportConfig): Boolean {
+    fun deleteExport(
+        date: LocalDate,
+        config: ExportConfig,
+    ): Boolean {
         val dir = getExportDirectory(config)
         val jsonFile = File(dir, getFilenameForDate(date, ExportFormat.JSON))
         val csvFile = File(dir, getFilenameForDate(date, ExportFormat.CSV))

@@ -15,41 +15,51 @@ import com.healthconnect.export.worker.DailyExportWorker
  */
 sealed class ScheduleStatus {
     object NotScheduled : ScheduleStatus()
-    data class Scheduled(val nextRun: String) : ScheduleStatus()
+
+    data class Scheduled(
+        val nextRun: String,
+    ) : ScheduleStatus()
+
     object Running : ScheduleStatus()
 }
 
 class ScheduleManager(
     private val application: Application,
-    private val onStateUpdate: (ExportUiState.() -> ExportUiState) -> Unit
+    private val onStateUpdate: (ExportUiState.() -> ExportUiState) -> Unit,
 ) {
-
     // Helper to get localized strings from resources
     private fun str(id: Int): String = application.getString(id)
-    private fun str(id: Int, vararg args: Any?): String =
-        application.getString(id, *args)
+
+    private fun str(
+        id: Int,
+        vararg args: Any?,
+    ): String = application.getString(id, *args)
 
     /**
      * Builds an [ExportConfig] from the current UI state snapshot.
      */
-    private fun buildConfig(state: ExportUiState): ExportConfig = ExportConfig(
-        enabledTypes = state.selectedTypes,
-        frequency = state.frequency,
-        autoSyncDrive = state.autoSyncDrive,
-        webhookUrl = state.webhookUrl,
-        webhookAuthToken = state.webhookAuthToken,
-        autoSendWebhook = state.autoSendWebhook,
-        autoSendWebhookEvery2Hours = state.autoSendWebhookEvery2Hours,
-        selectedSourcePackage = state.selectedSourcePackage,
-        exportFormat = state.exportFormat,
-        scheduleHour = state.scheduleHour
-    )
+    private fun buildConfig(state: ExportUiState): ExportConfig =
+        ExportConfig(
+            enabledTypes = state.selectedTypes,
+            frequency = state.frequency,
+            autoSyncDrive = state.autoSyncDrive,
+            webhookUrl = state.webhookUrl,
+            webhookAuthToken = state.webhookAuthToken,
+            autoSendWebhook = state.autoSendWebhook,
+            autoSendWebhookEvery2Hours = state.autoSendWebhookEvery2Hours,
+            selectedSourcePackage = state.selectedSourcePackage,
+            exportFormat = state.exportFormat,
+            scheduleHour = state.scheduleHour,
+        )
 
     /**
      * Updates the export frequency in the UI state.
      */
     fun setFrequency(freq: ExportFrequency) {
         onStateUpdate { copy(frequency = freq) }
+        if (freq == ExportFrequency.MANUAL) {
+            DailyExportWorker.cancel(application)
+        }
     }
 
     /**
@@ -60,17 +70,26 @@ class ScheduleManager(
      *   when called at app start ([ExportViewModel] init), so launching the app
      *   does not pop up an unnecessary "Scheduled export set" message.
      */
-    fun scheduleExport(state: ExportUiState, showMessage: Boolean = true) {
+    fun scheduleExport(
+        state: ExportUiState,
+        showMessage: Boolean = true,
+    ) {
         val config = buildConfig(state)
         DailyExportWorker.schedule(application, config)
         onStateUpdate {
             copy(
-                scheduleStatus = ScheduleStatus.Scheduled(str(R.string.next_run)),
-                message = if (showMessage) {
-                    str(R.string.schedule_set, config.frequency.displayName)
-                } else {
-                    null
-                }
+                scheduleStatus =
+                    if (config.frequency == ExportFrequency.MANUAL) {
+                        ScheduleStatus.NotScheduled
+                    } else {
+                        ScheduleStatus.Scheduled(str(R.string.next_run))
+                    },
+                message =
+                    if (showMessage && config.frequency != ExportFrequency.MANUAL) {
+                        str(R.string.schedule_set, config.frequency.displayName)
+                    } else {
+                        null
+                    },
             )
         }
     }
@@ -83,7 +102,7 @@ class ScheduleManager(
         onStateUpdate {
             copy(
                 scheduleStatus = ScheduleStatus.NotScheduled,
-                message = str(R.string.schedule_cancelled)
+                message = str(R.string.schedule_cancelled),
             )
         }
     }

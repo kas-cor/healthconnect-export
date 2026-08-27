@@ -25,7 +25,7 @@ import java.io.File
  * into its UI state.
  */
 class DriveManager(
-    private val application: Application
+    private val application: Application,
 ) {
     /** Scope for async Drive operations. Made internal for testability. */
     internal var scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -54,8 +54,11 @@ class DriveManager(
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private fun str(id: Int): String = application.getString(id)
-    private fun str(id: Int, vararg args: Any?): String =
-        application.getString(id, *args)
+
+    private fun str(
+        id: Int,
+        vararg args: Any?,
+    ): String = application.getString(id, *args)
 
     // ── Sign-in / Sign-out ───────────────────────────────────────────────────
 
@@ -70,17 +73,19 @@ class DriveManager(
             if (account != null) {
                 // A fresh manual sign-in re-enables silent sign-in for this session
                 signedOutThisSession = false
-                _driveState.value = DriveState(
-                    status = DriveStatus.Connected,
-                    message = str(R.string.vm_drive_connected, account.email)
-                )
+                _driveState.value =
+                    DriveState(
+                        status = DriveStatus.Connected,
+                        message = str(R.string.vm_drive_connected, account.email),
+                    )
                 refreshDriveStatus()
             }
         } catch (e: ApiException) {
-            _driveState.value = DriveState(
-                status = DriveStatus.Error(str(R.string.vm_drive_signin_error, e.statusCode)),
-                message = str(R.string.vm_drive_signin_error, e.statusCode)
-            )
+            _driveState.value =
+                DriveState(
+                    status = DriveStatus.Error(str(R.string.vm_drive_signin_error, e.statusCode)),
+                    message = str(R.string.vm_drive_signin_error, e.statusCode),
+                )
         }
     }
 
@@ -93,10 +98,11 @@ class DriveManager(
         // sign-out is not silently undone (e.g. by a status refresh).
         signedOutThisSession = true
         googleSignInClient.signOut().addOnCompleteListener {
-            _driveState.value = DriveState(
-                status = DriveStatus.NotConnected,
-                message = str(R.string.vm_drive_signed_out)
-            )
+            _driveState.value =
+                DriveState(
+                    status = DriveStatus.NotConnected,
+                    message = str(R.string.vm_drive_signed_out),
+                )
         }
     }
 
@@ -110,10 +116,11 @@ class DriveManager(
      */
     fun syncToDrive(files: List<File>) {
         if (!driveRepo.isSignedIn()) {
-            _driveState.value = DriveState(
-                status = DriveStatus.NotConnected,
-                message = str(R.string.vm_drive_not_connected)
-            )
+            _driveState.value =
+                DriveState(
+                    status = DriveStatus.NotConnected,
+                    message = str(R.string.vm_drive_not_connected),
+                )
             return
         }
 
@@ -122,14 +129,16 @@ class DriveManager(
             try {
                 val results = driveRepo.syncFiles(files)
                 val syncedCount = results.count { it != null }
-                _driveState.value = DriveState(
-                    status = DriveStatus.Synced(syncedCount),
-                    message = str(R.string.vm_drive_synced, syncedCount)
-                )
+                _driveState.value =
+                    DriveState(
+                        status = DriveStatus.Synced(syncedCount),
+                        message = str(R.string.vm_drive_synced, syncedCount),
+                    )
             } catch (e: Exception) {
-                _driveState.value = DriveState(
-                    status = DriveStatus.Error(e.message ?: "Unknown error")
-                )
+                _driveState.value =
+                    DriveState(
+                        status = DriveStatus.Error(e.message ?: "Unknown error"),
+                    )
             }
         }
     }
@@ -164,7 +173,8 @@ class DriveManager(
      * available.
      */
     fun silentSignIn() {
-        googleSignInClient.silentSignIn()
+        googleSignInClient
+            .silentSignIn()
             .addOnSuccessListener { account ->
                 // Guard against a stale attempt reconnecting the user after an
                 // explicit sign-out completed while the attempt was in flight.
@@ -172,8 +182,7 @@ class DriveManager(
                     signedOutThisSession = false
                     updateConnectedState()
                 }
-            }
-            .addOnFailureListener {
+            }.addOnFailureListener {
                 // No cached session (or the token expired) — keep NotConnected.
                 // Guard against a stale failure clobbering a fresh manual sign-in
                 // that completed while the silent attempt was in flight.
@@ -204,7 +213,7 @@ class DriveManager(
  */
 data class DriveState(
     val status: DriveStatus = DriveStatus.NotConnected,
-    val message: String? = null
+    val message: String? = null,
 ) {
     /** Convenience: true when the user is currently signed in. */
     val isConnected: Boolean get() = status is DriveStatus.Connected || status is DriveStatus.Synced || status is DriveStatus.Syncing

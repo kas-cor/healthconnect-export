@@ -1,7 +1,7 @@
 package com.healthconnect.export.data
 
-import org.junit.Test
 import org.junit.Assert.*
+import org.junit.Test
 
 /**
  * Unit tests for Health Connect Int constant → human-readable string mapper functions.
@@ -22,7 +22,6 @@ import org.junit.Assert.*
  * - exerciseTypeToString (79 known + unknown + null)
  */
 class HumanReadableMapperTest {
-
     // =============================================
     // bodyPositionToString
     // =============================================
@@ -47,8 +46,6 @@ class HumanReadableMapperTest {
         assertEquals("Other (-1)", bodyPositionToString(-1))
         assertEquals("Other (99)", bodyPositionToString(99))
     }
-
-
 
     // =============================================
     // specimenSourceToString
@@ -312,6 +309,4 @@ class HumanReadableMapperTest {
         assertEquals("Other (1000)", exerciseTypeToString(1000))
         assertEquals("Other (-1)", exerciseTypeToString(-1))
     }
-
-
 }

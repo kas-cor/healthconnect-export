@@ -152,7 +152,7 @@
     <string name="vm_export_error">Ошибка экспорта: %s</string>
     <string name="vm_sending_webhook">Отправка на webhook…</string>
     <string name="vm_webhook_success">Webhook: успешно (%d)</string>
-    <string name="vm_webhook_error">Webhook: ошибка %d — %s</string>
+    <string name="vm_webhook_error">Webhook: ошибка %1$d — %2$s</string>
     <string name="vm_permissions_granted">Разрешения получены. Начинаю экспорт…</string>
     <string name="vm_permissions_missing">Разрешения Health Connect не предоставлены для: %s. Экспорт невозможен. Откройте приложение Health Connect и разрешите доступ к этим типам данных.</string>
     <string name="vm_drive_connected">Google аккаунт подключён: %s</string>
@@ -163,6 +163,8 @@
     <string name="vm_invalid_url">Неверный формат URL. Должен начинаться с http:// или https://</string>
     <string name="vm_health_not_available">Не удалось подключиться к Health Connect. Попробуйте перезапустить приложение.</string>
     <string name="vm_health_not_installed">Health Connect не установлен. Установите приложение Health Connect из Google Play.</string>
+    <string name="vm_no_data_types">Выберите хотя бы один тип данных</string>
+    <string name="vm_invalid_date_range">Дата начала не может быть позже даты окончания</string>
 
     <!-- JSON Viewer -->
     <string name="json_viewer_title">%s</string>
@@ -172,7 +174,7 @@
 
     <!-- Dashboard Summary -->
     <string name="dashboard_title">📊 Сводка экспорта</string>
-    <string name="dashboard_period">%s — %s (%d дн.)</string>
+    <string name="dashboard_period">%1$s — %2$s (%3$d дн.)</string>
     <string name="dashboard_steps">Шаги</string>
     <string name="dashboard_avg_hr">Ср. пульс</string>
     <string name="dashboard_calories">Калории</string>
@@ -190,7 +192,7 @@
 
     <!-- Export Progress -->
     <string name="export_progress_reading">Чтение %s…</string>
-    <string name="export_progress_page">%s  •  стр. %d</string>
+    <string name="export_progress_page">%1$s  •  стр. %2$d</string>
     <string name="export_progress_saving">Сохранение %s…</string>
 
     <!-- Every 2 Hours Webhook -->
@@ -203,7 +205,7 @@
     <string name="webhook_test">Тест вебхука</string>
     <string name="webhook_testing">Тестирование вебхука…</string>
     <string name="vm_webhook_test_success">Тест вебхука: успешно (%d)</string>
-    <string name="vm_webhook_test_error">Тест вебхука: ошибка %d — %s</string>
+    <string name="vm_webhook_test_error">Тест вебхука: ошибка %1$d — %2$s</string>
     <string name="vm_webhook_no_data">Нет данных о здоровье за сегодня</string>
 
     <!-- Cancel -->

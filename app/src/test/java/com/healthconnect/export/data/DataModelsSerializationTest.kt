@@ -2,11 +2,9 @@ package com.healthconnect.export.data
 
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import org.junit.Test
 import org.junit.Assert.*
+import org.junit.Test
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -25,12 +23,12 @@ import java.time.ZoneId
  * - Instant extension functions
  */
 class DataModelsSerializationTest {
-
-    private val json = Json {
-        prettyPrint = true
-        ignoreUnknownKeys = true
-        encodeDefaults = true
-    }
+    private val json =
+        Json {
+            prettyPrint = true
+            ignoreUnknownKeys = true
+            encodeDefaults = true
+        }
 
     // =============================================
     // DailyHealthRecord serialization
@@ -38,46 +36,59 @@ class DataModelsSerializationTest {
 
     @Test
     fun `DailyHealthRecord full roundtrip preserves all fields`() {
-        val original = DailyHealthRecord(
-            date = "2026-06-01",
-            steps = StepsData(totalSteps = 10000, recordsCount = 400),
-            heartRate = HeartRateData(avgBpm = 72.5, minBpm = 55, maxBpm = 142, recordsCount = 18),
-            sleep = SleepData(
-                totalDurationMinutes = 420,
-                sleepStages = mapOf("Deep sleep" to 90, "Light sleep" to 195, "REM sleep" to 105, "Awake" to 30),
-                recordsCount = 1
-            ),
-            calories = CaloriesData(totalCalories = 2150.0, recordsCount = 180),
-            distance = DistanceData(totalDistanceMeters = 8234.5, recordsCount = 620),
-            floorsClimbed = FloorsClimbedData(totalFloors = 12.0, recordsCount = 15),
-            activeCalories = ActiveCaloriesData(totalCalories = 450.0, recordsCount = 60),
-            weight = WeightData(weightKg = 78.5, recordsCount = 1),
-            bodyFat = BodyFatData(percentage = 18.5, recordsCount = 1),
-            bloodPressure = BloodPressureData(
-                systolicMmHg = 120.0, diastolicMmHg = 80.0,
-                bodyPosition = "Sitting", recordsCount = 3
-            ),
-            bloodGlucose = BloodGlucoseData(
-                level = 5.8, specimenSource = "Capillary blood",
-                mealType = "Fasting", recordsCount = 4
-            ),
-            oxygenSaturation = OxygenSaturationData(percentage = 97.5, recordsCount = 1),
-            bodyTemperature = BodyTemperatureData(
-                temperatureCelsius = 36.6, measurementLocation = "Axillary", recordsCount = 1
-            ),
-            respiratoryRate = RespiratoryRateData(rate = 16.0, recordsCount = 6),
-            hydration = HydrationData(totalVolumeLiters = 2.5, recordsCount = 8),
-            restingHeartRate = RestingHeartRateData(avgBpm = 65.0, minBpm = 62, maxBpm = 68, recordsCount = 1),
-            exercises = listOf(
-                ExerciseData("Running", "07:30", "08:15", 45, title = "Morning run")
-            ),
-            nutrition = listOf(
-                NutritionData(name = "Apple", mealType = "Snack", energyKcal = 95.0)
-            ),
-            menstruation = MenstruationData(flowType = "Medium", time = "2026-06-01T08:00:00"),
-            speed = SpeedData(avgSpeedMetersPerSecond = 1.5, recordsCount = 420),
-            metadata = ExportMetadata("1.0.0", "2026-06-01T23:00:00", "Europe/Moscow", "pixel_9")
-        )
+        val original =
+            DailyHealthRecord(
+                date = "2026-06-01",
+                steps = StepsData(totalSteps = 10000, recordsCount = 400),
+                heartRate = HeartRateData(avgBpm = 72.5, minBpm = 55, maxBpm = 142, recordsCount = 18),
+                sleep =
+                    SleepData(
+                        totalDurationMinutes = 420,
+                        sleepStages = mapOf("Deep sleep" to 90, "Light sleep" to 195, "REM sleep" to 105, "Awake" to 30),
+                        recordsCount = 1,
+                    ),
+                calories = CaloriesData(totalCalories = 2150.0, recordsCount = 180),
+                distance = DistanceData(totalDistanceMeters = 8234.5, recordsCount = 620),
+                floorsClimbed = FloorsClimbedData(totalFloors = 12.0, recordsCount = 15),
+                activeCalories = ActiveCaloriesData(totalCalories = 450.0, recordsCount = 60),
+                weight = WeightData(weightKg = 78.5, recordsCount = 1),
+                bodyFat = BodyFatData(percentage = 18.5, recordsCount = 1),
+                bloodPressure =
+                    BloodPressureData(
+                        systolicMmHg = 120.0,
+                        diastolicMmHg = 80.0,
+                        bodyPosition = "Sitting",
+                        recordsCount = 3,
+                    ),
+                bloodGlucose =
+                    BloodGlucoseData(
+                        level = 5.8,
+                        specimenSource = "Capillary blood",
+                        mealType = "Fasting",
+                        recordsCount = 4,
+                    ),
+                oxygenSaturation = OxygenSaturationData(percentage = 97.5, recordsCount = 1),
+                bodyTemperature =
+                    BodyTemperatureData(
+                        temperatureCelsius = 36.6,
+                        measurementLocation = "Axillary",
+                        recordsCount = 1,
+                    ),
+                respiratoryRate = RespiratoryRateData(rate = 16.0, recordsCount = 6),
+                hydration = HydrationData(totalVolumeLiters = 2.5, recordsCount = 8),
+                restingHeartRate = RestingHeartRateData(avgBpm = 65.0, minBpm = 62, maxBpm = 68, recordsCount = 1),
+                exercises =
+                    listOf(
+                        ExerciseData("Running", "07:30", "08:15", 45, title = "Morning run"),
+                    ),
+                nutrition =
+                    listOf(
+                        NutritionData(name = "Apple", mealType = "Snack", energyKcal = 95.0),
+                    ),
+                menstruation = MenstruationData(flowType = "Medium", time = "2026-06-01T08:00:00"),
+                speed = SpeedData(avgSpeedMetersPerSecond = 1.5, recordsCount = 420),
+                metadata = ExportMetadata("1.0.0", "2026-06-01T23:00:00", "Europe/Moscow", "pixel_9"),
+            )
 
         val jsonString = json.encodeToString(original)
         val restored = json.decodeFromString<DailyHealthRecord>(jsonString)
@@ -108,10 +119,11 @@ class DataModelsSerializationTest {
 
     @Test
     fun `DailyHealthRecord minimal record has null optional fields`() {
-        val record = DailyHealthRecord(
-            date = "2026-06-01",
-            metadata = ExportMetadata("1.0.0", "2026-06-01T23:00:00", "UTC")
-        )
+        val record =
+            DailyHealthRecord(
+                date = "2026-06-01",
+                metadata = ExportMetadata("1.0.0", "2026-06-01T23:00:00", "UTC"),
+            )
 
         val jsonString = json.encodeToString(record)
         val restored = json.decodeFromString<DailyHealthRecord>(jsonString)
@@ -130,24 +142,25 @@ class DataModelsSerializationTest {
 
     @Test
     fun `DailyHealthRecord deserialization from JSON string`() {
-        val rawJson = """
-        {
-            "date": "2026-06-01",
-            "steps": { "total_steps": 8500, "records_count": 320 },
-            "heart_rate": { "avg_bpm": 70.0, "min_bpm": 58, "max_bpm": 130, "records_count": 15 },
-            "sleep": {
-                "total_duration_minutes": 390,
-                "sleep_stages": { "Deep sleep": 80, "Light sleep": 210, "REM sleep": 85, "Awake": 15 },
-                "records_count": 1
-            },
-            "metadata": {
-                "app_version": "1.0.0",
-                "export_timestamp": "2026-06-01T23:00:00",
-                "timezone": "Europe/Moscow",
-                "source_device": "test"
+        val rawJson =
+            """
+            {
+                "date": "2026-06-01",
+                "steps": { "total_steps": 8500, "records_count": 320 },
+                "heart_rate": { "avg_bpm": 70.0, "min_bpm": 58, "max_bpm": 130, "records_count": 15 },
+                "sleep": {
+                    "total_duration_minutes": 390,
+                    "sleep_stages": { "Deep sleep": 80, "Light sleep": 210, "REM sleep": 85, "Awake": 15 },
+                    "records_count": 1
+                },
+                "metadata": {
+                    "app_version": "1.0.0",
+                    "export_timestamp": "2026-06-01T23:00:00",
+                    "timezone": "Europe/Moscow",
+                    "source_device": "test"
+                }
             }
-        }
-        """.trimIndent()
+            """.trimIndent()
 
         val record = json.decodeFromString<DailyHealthRecord>(rawJson)
 
@@ -165,12 +178,13 @@ class DataModelsSerializationTest {
 
     @Test
     fun `DailyHealthRecord JSON field names use SerialName annotations`() {
-        val record = DailyHealthRecord(
-            date = "2026-06-01",
-            steps = StepsData(5000, 200),
-            heartRate = HeartRateData(75.0, 60, 140, 10),
-            metadata = ExportMetadata("1.0.0", "2026-06-01T23:00:00", "UTC")
-        )
+        val record =
+            DailyHealthRecord(
+                date = "2026-06-01",
+                steps = StepsData(5000, 200),
+                heartRate = HeartRateData(75.0, 60, 140, 10),
+                metadata = ExportMetadata("1.0.0", "2026-06-01T23:00:00", "UTC"),
+            )
 
         val jsonString = json.encodeToString(record)
         val parsed = json.parseToJsonElement(jsonString).jsonObject
@@ -193,10 +207,11 @@ class DataModelsSerializationTest {
 
     @Test
     fun `DailyHealthRecord with null exercises and nutrition fields`() {
-        val record = DailyHealthRecord(
-            date = "2026-06-01",
-            metadata = ExportMetadata("1.0.0", "2026-06-01T23:00:00", "UTC")
-        )
+        val record =
+            DailyHealthRecord(
+                date = "2026-06-01",
+                metadata = ExportMetadata("1.0.0", "2026-06-01T23:00:00", "UTC"),
+            )
 
         // When encodeDefaults = false, null lists should still be present or absent
         // With encodeDefaults = true, null fields are serialized as null
@@ -214,16 +229,17 @@ class DataModelsSerializationTest {
 
     @Test
     fun `ExportConfig full roundtrip preserves all fields`() {
-        val original = ExportConfig(
-            enabledTypes = setOf(HealthDataType.STEPS, HealthDataType.HEART_RATE, HealthDataType.SLEEP),
-            frequency = ExportFrequency.WEEKLY,
-            autoSyncDrive = true,
-            webhookUrl = "https://example.com/hook",
-            webhookAuthToken = "secret-token",
-            autoSendWebhook = true,
-            outputDirectory = "CustomExport",
-            selectedSourcePackage = "com.test.package"
-        )
+        val original =
+            ExportConfig(
+                enabledTypes = setOf(HealthDataType.STEPS, HealthDataType.HEART_RATE, HealthDataType.SLEEP),
+                frequency = ExportFrequency.WEEKLY,
+                autoSyncDrive = true,
+                webhookUrl = "https://example.com/hook",
+                webhookAuthToken = "secret-token",
+                autoSendWebhook = true,
+                outputDirectory = "CustomExport",
+                selectedSourcePackage = "com.test.package",
+            )
 
         val jsonString = json.encodeToString(original)
         val restored = json.decodeFromString<ExportConfig>(jsonString)
@@ -240,13 +256,14 @@ class DataModelsSerializationTest {
 
     @Test
     fun `ExportConfig default values are used when fields missing`() {
-        val minimalJson = """
-        {
-            "enabledTypes": ["STEPS"],
-            "frequency": "DAILY",
-            "autoSyncDrive": false
-        }
-        """.trimIndent()
+        val minimalJson =
+            """
+            {
+                "enabledTypes": ["STEPS"],
+                "frequency": "DAILY",
+                "autoSyncDrive": false
+            }
+            """.trimIndent()
 
         val config = json.decodeFromString<ExportConfig>(minimalJson)
 
@@ -265,13 +282,14 @@ class DataModelsSerializationTest {
     @Test
     fun `ExportConfig with exportFormat and scheduleHour roundtrips`() {
         val types = setOf(HealthDataType.STEPS)
-        val original = ExportConfig(
-            enabledTypes = types,
-            frequency = ExportFrequency.DAILY,
-            autoSyncDrive = true,
-            exportFormat = ExportFormat.CSV,
-            scheduleHour = 7,
-        )
+        val original =
+            ExportConfig(
+                enabledTypes = types,
+                frequency = ExportFrequency.DAILY,
+                autoSyncDrive = true,
+                exportFormat = ExportFormat.CSV,
+                scheduleHour = 7,
+            )
 
         val jsonString = json.encodeToString(original)
         val restored = json.decodeFromString<ExportConfig>(jsonString)
@@ -291,11 +309,12 @@ class DataModelsSerializationTest {
 
     @Test
     fun `ExportConfig with all health data types serializes set`() {
-        val config = ExportConfig(
-            enabledTypes = HealthDataType.entries.toSet(),
-            frequency = ExportFrequency.DAILY,
-            autoSyncDrive = true
-        )
+        val config =
+            ExportConfig(
+                enabledTypes = HealthDataType.entries.toSet(),
+                frequency = ExportFrequency.DAILY,
+                autoSyncDrive = true,
+            )
 
         val jsonString = json.encodeToString(config)
         val restored = json.decodeFromString<ExportConfig>(jsonString)
@@ -306,11 +325,12 @@ class DataModelsSerializationTest {
 
     @Test
     fun `ExportConfig with single type serializes correctly`() {
-        val config = ExportConfig(
-            enabledTypes = setOf(HealthDataType.STEPS),
-            frequency = ExportFrequency.MANUAL,
-            autoSyncDrive = false
-        )
+        val config =
+            ExportConfig(
+                enabledTypes = setOf(HealthDataType.STEPS),
+                frequency = ExportFrequency.MANUAL,
+                autoSyncDrive = false,
+            )
 
         val jsonString = json.encodeToString(config)
         assertTrue(jsonString.contains("STEPS"))
@@ -390,17 +410,18 @@ class DataModelsSerializationTest {
 
     @Test
     fun `ExportSummary with full data`() {
-        val summary = ExportSummary(
-            totalSteps = 75000,
-            avgHeartRate = 72.5,
-            totalCalories = 12000.0,
-            totalDistanceMeters = 50000.0,
-            avgSleepMinutes = 420,
-            totalActiveCalories = 2500.0,
-            daysCount = 7,
-            startDate = "2026-05-25",
-            endDate = "2026-05-31"
-        )
+        val summary =
+            ExportSummary(
+                totalSteps = 75000,
+                avgHeartRate = 72.5,
+                totalCalories = 12000.0,
+                totalDistanceMeters = 50000.0,
+                avgSleepMinutes = 420,
+                totalActiveCalories = 2500.0,
+                daysCount = 7,
+                startDate = "2026-05-25",
+                endDate = "2026-05-31",
+            )
 
         assertEquals(75000L, summary.totalSteps)
         assertEquals(72.5, summary.avgHeartRate, 0.001)
@@ -415,17 +436,18 @@ class DataModelsSerializationTest {
 
     @Test
     fun `ExportSummary with edge case values`() {
-        val summary = ExportSummary(
-            totalSteps = Long.MAX_VALUE,
-            avgHeartRate = 220.0,  // max possible heart rate
-            totalCalories = 0.0,
-            totalDistanceMeters = -1.0,  // shouldn't happen, but test edge
-            avgSleepMinutes = 0,
-            totalActiveCalories = 999999.99,
-            daysCount = 365,
-            startDate = "",
-            endDate = "2026-12-31"
-        )
+        val summary =
+            ExportSummary(
+                totalSteps = Long.MAX_VALUE,
+                avgHeartRate = 220.0, // max possible heart rate
+                totalCalories = 0.0,
+                totalDistanceMeters = -1.0, // shouldn't happen, but test edge
+                avgSleepMinutes = 0,
+                totalActiveCalories = 999999.99,
+                daysCount = 365,
+                startDate = "",
+                endDate = "2026-12-31",
+            )
 
         assertEquals(Long.MAX_VALUE, summary.totalSteps)
         assertEquals(220.0, summary.avgHeartRate, 0.001)
@@ -597,7 +619,10 @@ class DataModelsSerializationTest {
         val data = SpeedData(avgSpeedMetersPerSecond = 1.5, recordsCount = 200)
 
         val jsonString = json.encodeToString(SpeedData.serializer(), data)
-        val parsed = kotlinx.serialization.json.Json.parseToJsonElement(jsonString).jsonObject
+        val parsed =
+            kotlinx.serialization.json.Json
+                .parseToJsonElement(jsonString)
+                .jsonObject
 
         assertTrue(parsed.containsKey("avg_speed_meters_per_second"))
         assertFalse(parsed.containsKey("avgSpeedMetersPerSecond"))

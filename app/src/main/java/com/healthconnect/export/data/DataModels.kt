@@ -32,13 +32,13 @@ data class DailyHealthRecord(
     @SerialName("nutrition") val nutrition: List<NutritionData>? = null,
     @SerialName("speed") val speed: SpeedData? = null,
     @SerialName("menstruation") val menstruation: MenstruationData? = null,
-    @SerialName("metadata") val metadata: ExportMetadata
+    @SerialName("metadata") val metadata: ExportMetadata,
 )
 
 @Serializable
 data class StepsData(
     @SerialName("total_steps") val totalSteps: Long,
-    @SerialName("records_count") val recordsCount: Int
+    @SerialName("records_count") val recordsCount: Int,
 )
 
 @Serializable
@@ -46,50 +46,50 @@ data class HeartRateData(
     @SerialName("avg_bpm") val avgBpm: Double,
     @SerialName("min_bpm") val minBpm: Int,
     @SerialName("max_bpm") val maxBpm: Int,
-    @SerialName("records_count") val recordsCount: Int
+    @SerialName("records_count") val recordsCount: Int,
 )
 
 @Serializable
 data class SleepData(
     @SerialName("total_duration_minutes") val totalDurationMinutes: Long,
     @SerialName("sleep_stages") val sleepStages: Map<String, Long>,
-    @SerialName("records_count") val recordsCount: Int
+    @SerialName("records_count") val recordsCount: Int,
 )
 
 @Serializable
 data class CaloriesData(
     @SerialName("total_calories_kcal") val totalCalories: Double,
-    @SerialName("records_count") val recordsCount: Int
+    @SerialName("records_count") val recordsCount: Int,
 )
 
 @Serializable
 data class DistanceData(
     @SerialName("total_distance_meters") val totalDistanceMeters: Double,
-    @SerialName("records_count") val recordsCount: Int
+    @SerialName("records_count") val recordsCount: Int,
 )
 
 @Serializable
 data class FloorsClimbedData(
     @SerialName("total_floors") val totalFloors: Double,
-    @SerialName("records_count") val recordsCount: Int
+    @SerialName("records_count") val recordsCount: Int,
 )
 
 @Serializable
 data class ActiveCaloriesData(
     @SerialName("total_calories_kcal") val totalCalories: Double,
-    @SerialName("records_count") val recordsCount: Int
+    @SerialName("records_count") val recordsCount: Int,
 )
 
 @Serializable
 data class WeightData(
     @SerialName("weight_kg") val weightKg: Double,
-    @SerialName("records_count") val recordsCount: Int
+    @SerialName("records_count") val recordsCount: Int,
 )
 
 @Serializable
 data class BodyFatData(
     @SerialName("percentage") val percentage: Double,
-    @SerialName("records_count") val recordsCount: Int
+    @SerialName("records_count") val recordsCount: Int,
 )
 
 @Serializable
@@ -97,7 +97,7 @@ data class BloodPressureData(
     @SerialName("systolic_mmhg") val systolicMmHg: Double,
     @SerialName("diastolic_mmhg") val diastolicMmHg: Double,
     @SerialName("body_position") val bodyPosition: String? = null,
-    @SerialName("records_count") val recordsCount: Int
+    @SerialName("records_count") val recordsCount: Int,
 )
 
 @Serializable
@@ -105,32 +105,32 @@ data class BloodGlucoseData(
     @SerialName("level_mmol_per_l") val level: Double,
     @SerialName("specimen_source") val specimenSource: String? = null,
     @SerialName("meal_type") val mealType: String? = null,
-    @SerialName("records_count") val recordsCount: Int
+    @SerialName("records_count") val recordsCount: Int,
 )
 
 @Serializable
 data class OxygenSaturationData(
     @SerialName("percentage") val percentage: Double,
-    @SerialName("records_count") val recordsCount: Int
+    @SerialName("records_count") val recordsCount: Int,
 )
 
 @Serializable
 data class BodyTemperatureData(
     @SerialName("temperature_celsius") val temperatureCelsius: Double,
     @SerialName("measurement_location") val measurementLocation: String? = null,
-    @SerialName("records_count") val recordsCount: Int
+    @SerialName("records_count") val recordsCount: Int,
 )
 
 @Serializable
 data class RespiratoryRateData(
     @SerialName("rate") val rate: Double,
-    @SerialName("records_count") val recordsCount: Int
+    @SerialName("records_count") val recordsCount: Int,
 )
 
 @Serializable
 data class HydrationData(
     @SerialName("total_volume_liters") val totalVolumeLiters: Double,
-    @SerialName("records_count") val recordsCount: Int
+    @SerialName("records_count") val recordsCount: Int,
 )
 
 @Serializable
@@ -138,7 +138,7 @@ data class RestingHeartRateData(
     @SerialName("avg_bpm") val avgBpm: Double,
     @SerialName("min_bpm") val minBpm: Long,
     @SerialName("max_bpm") val maxBpm: Long,
-    @SerialName("records_count") val recordsCount: Int
+    @SerialName("records_count") val recordsCount: Int,
 )
 
 @Serializable
@@ -148,7 +148,7 @@ data class ExerciseData(
     @SerialName("end_time") val endTime: String,
     @SerialName("duration_minutes") val durationMinutes: Long,
     @SerialName("title") val title: String? = null,
-    @SerialName("notes") val notes: String? = null
+    @SerialName("notes") val notes: String? = null,
 )
 
 @Serializable
@@ -171,19 +171,19 @@ data class NutritionData(
     @SerialName("iron_mg") val ironMg: Double? = null,
     @SerialName("magnesium_mg") val magnesiumMg: Double? = null,
     @SerialName("vitamin_c_mg") val vitaminCMg: Double? = null,
-    @SerialName("vitamin_d_mcg") val vitaminDMcg: Double? = null
+    @SerialName("vitamin_d_mcg") val vitaminDMcg: Double? = null,
 )
 
 @Serializable
 data class MenstruationData(
     @SerialName("flow_type") val flowType: String? = null,
-    @SerialName("time") val time: String
+    @SerialName("time") val time: String,
 )
 
 @Serializable
 data class SpeedData(
     @SerialName("avg_speed_meters_per_second") val avgSpeedMetersPerSecond: Double? = null,
-    @SerialName("records_count") val recordsCount: Int = 0
+    @SerialName("records_count") val recordsCount: Int = 0,
 )
 
 @Serializable
@@ -191,16 +191,19 @@ data class ExportMetadata(
     @SerialName("app_version") val appVersion: String,
     @SerialName("export_timestamp") val exportTimestamp: String,
     @SerialName("timezone") val timezone: String,
-    @SerialName("source_device") val sourceDevice: String? = null
+    @SerialName("source_device") val sourceDevice: String? = null,
 )
 
 // ===== Export Configuration =====
 
 @Serializable
-enum class ExportFrequency(val displayName: String, val hours: Long) {
+enum class ExportFrequency(
+    val displayName: String,
+    val hours: Long,
+) {
     MANUAL("Manual", 0),
     DAILY("Daily", 24),
-    WEEKLY("Weekly", 168)
+    WEEKLY("Weekly", 168),
 }
 
 /**
@@ -222,21 +225,25 @@ enum class ExportFormat(
  * window keeps sliding instead of freezing on the dates first picked.
  */
 @Serializable
-enum class DateRangePreset(val displayName: String) {
+enum class DateRangePreset(
+    val displayName: String,
+) {
     NONE("Custom"),
     LAST_7_DAYS("Last 7 days"),
-    LAST_30_DAYS("Last 30 days");
+    LAST_30_DAYS("Last 30 days"),
+    ;
 
     /**
      * Computes the [start, end] date window for this preset relative to [referenceDate].
      * 7 days → last 7 days including today; 30 days → last 30 days including today.
      * [NONE] is a custom range and has no meaning here — callers must handle it separately.
      */
-    fun calcRange(referenceDate: LocalDate): Pair<LocalDate, LocalDate> = when (this) {
-        LAST_7_DAYS -> referenceDate.minusDays(6) to referenceDate
-        LAST_30_DAYS -> referenceDate.minusDays(29) to referenceDate
-        NONE -> referenceDate to referenceDate
-    }
+    fun calcRange(referenceDate: LocalDate): Pair<LocalDate, LocalDate> =
+        when (this) {
+            LAST_7_DAYS -> referenceDate.minusDays(6) to referenceDate
+            LAST_30_DAYS -> referenceDate.minusDays(29) to referenceDate
+            NONE -> referenceDate to referenceDate
+        }
 }
 
 @Serializable
@@ -251,11 +258,13 @@ data class ExportConfig(
     val outputDirectory: String = "HealthConnectExport",
     val selectedSourcePackage: String? = null,
     val exportFormat: ExportFormat = ExportFormat.JSON,
-    val scheduleHour: Int? = null
+    val scheduleHour: Int? = null,
 )
 
 @Serializable
-enum class HealthDataType(val displayName: String) {
+enum class HealthDataType(
+    val displayName: String,
+) {
     STEPS("Steps"),
     HEART_RATE("Heart Rate"),
     SLEEP("Sleep"),
@@ -275,7 +284,7 @@ enum class HealthDataType(val displayName: String) {
     EXERCISE("Exercise"),
     NUTRITION("Nutrition"),
     SPEED("Speed"),
-    MENSTRUATION("Menstruation")
+    MENSTRUATION("Menstruation"),
 }
 
 // ===== Health Connect Int constant → Human-readable string mappers =====
@@ -462,28 +471,27 @@ fun exerciseTypeToString(value: Int?): String? {
  * Map of known health data source packages to human-readable display names.
  * Used for UI selection and filtering.
  */
-val KNOWN_SOURCE_PACKAGES: Map<String, String> = mapOf(
-    "com.mi.health" to "Xiaomi Mi Fitness",
-    "com.xiaomi.hm.health" to "Xiaomi Wear",
-    "com.google.android.apps.fitness" to "Google Fit",
-    "com.samsung.samsunghealth" to "Samsung Health",
-    "com.samsung.android.wearable.health" to "Samsung Health (Wear)",
-    "com.fitbit.FitbitMobile" to "Fitbit",
-    "com.mobvoi.companion.at" to "Mobvoi / TicWatch",
-    "com.huawei.health" to "Huawei Health",
-    "com.hmdm.wearable.health" to "Nokia Health",
-    "com.sec.android.app.shealth" to "Samsung S Health",
-    "com.htc.fitness" to "HTC Fitness",
-    "com.sonymobile.advancedwidget.health" to "Sony Health",
-    "com.google.android.wearable.app" to "Google Wear OS"
-)
+val KNOWN_SOURCE_PACKAGES: Map<String, String> =
+    mapOf(
+        "com.mi.health" to "Xiaomi Mi Fitness",
+        "com.xiaomi.hm.health" to "Xiaomi Wear",
+        "com.google.android.apps.fitness" to "Google Fit",
+        "com.samsung.samsunghealth" to "Samsung Health",
+        "com.samsung.android.wearable.health" to "Samsung Health (Wear)",
+        "com.fitbit.FitbitMobile" to "Fitbit",
+        "com.mobvoi.companion.at" to "Mobvoi / TicWatch",
+        "com.huawei.health" to "Huawei Health",
+        "com.hmdm.wearable.health" to "Nokia Health",
+        "com.sec.android.app.shealth" to "Samsung S Health",
+        "com.htc.fitness" to "HTC Fitness",
+        "com.sonymobile.advancedwidget.health" to "Sony Health",
+        "com.google.android.wearable.app" to "Google Wear OS",
+    )
 
 /**
  * Returns a human-readable name for a source package, or the raw package name if unknown.
  */
-fun sourceDisplayName(packageName: String): String {
-    return KNOWN_SOURCE_PACKAGES[packageName] ?: packageName
-}
+fun sourceDisplayName(packageName: String): String = KNOWN_SOURCE_PACKAGES[packageName] ?: packageName
 
 // ===== Export Summary =====
 
@@ -499,13 +507,11 @@ data class ExportSummary(
     val totalActiveCalories: Double = 0.0,
     val daysCount: Int = 0,
     val startDate: String = "",
-    val endDate: String = ""
+    val endDate: String = "",
 )
 
 // ===== Helpers =====
 
-fun Instant.toDateString(): String =
-    DateTimeFormatter.ISO_LOCAL_DATE.withZone(ZoneId.systemDefault()).format(this)
+fun Instant.toDateString(): String = DateTimeFormatter.ISO_LOCAL_DATE.withZone(ZoneId.systemDefault()).format(this)
 
-fun Instant.toDateTimeString(): String =
-    DateTimeFormatter.ISO_LOCAL_DATE_TIME.withZone(ZoneId.systemDefault()).format(this)
+fun Instant.toDateTimeString(): String = DateTimeFormatter.ISO_LOCAL_DATE_TIME.withZone(ZoneId.systemDefault()).format(this)

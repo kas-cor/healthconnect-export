@@ -19,8 +19,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.ViewModel
@@ -32,7 +30,6 @@ import com.healthconnect.export.util.LocaleManager
 import com.healthconnect.export.viewmodel.ExportViewModel
 
 class MainActivity : ComponentActivity() {
-
     private var lastLocale: String? = null
 
     override fun attachBaseContext(newBase: Context) {
@@ -45,14 +42,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            val viewModel: ExportViewModel = viewModel(
-                factory = object : ViewModelProvider.Factory {
-                    @Suppress("UNCHECKED_CAST")
-                    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                        return ExportViewModel(this@MainActivity.application) as T
-                    }
-                }
-            )
+            val viewModel: ExportViewModel =
+                viewModel(
+                    factory =
+                        object : ViewModelProvider.Factory {
+                            @Suppress("UNCHECKED_CAST")
+                            override fun <T : ViewModel> create(modelClass: Class<T>): T =
+                                ExportViewModel(this@MainActivity.application) as T
+                        },
+                )
 
             val uiState by viewModel.uiState.collectAsState()
             val useDarkTheme = uiState.isDarkTheme ?: isSystemInDarkTheme()
@@ -66,21 +64,24 @@ class MainActivity : ComponentActivity() {
             }
 
             // Launcher для Google Sign-In — вынесен наружу, чтобы переживал AnimatedContent
-            val signInLauncher = rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.StartActivityForResult()
-            ) { result ->
-                viewModel.handleSignInResult(result)
-            }
+            val signInLauncher =
+                rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.StartActivityForResult(),
+                ) { result ->
+                    viewModel.handleSignInResult(result)
+                }
 
             // Launcher для Health Connect permissions
-            val healthPermissionLauncher = rememberLauncherForActivityResult(
-                contract = PermissionController.createRequestPermissionResultContract(
-                    this@MainActivity.packageName
-                )
-            ) { grantedPermissions: Set<String> ->
-                Log.d("MainActivity", "Permission results: $grantedPermissions")
-                viewModel.onPermissionsResult(grantedPermissions)
-            }
+            val healthPermissionLauncher =
+                rememberLauncherForActivityResult(
+                    contract =
+                        PermissionController.createRequestPermissionResultContract(
+                            this@MainActivity.packageName,
+                        ),
+                ) { grantedPermissions: Set<String> ->
+                    Log.d("MainActivity", "Permission results: $grantedPermissions")
+                    viewModel.onPermissionsResult(grantedPermissions)
+                }
 
             val onSignInClick: () -> Unit = {
                 val signIntent = viewModel.driveManager.googleSignInClient.signInIntent
@@ -101,20 +102,22 @@ class MainActivity : ComponentActivity() {
             AnimatedContent(
                 targetState = useDarkTheme,
                 transitionSpec = {
-                    (fadeIn(animationSpec = tween(400))
-                        togetherWith fadeOut(animationSpec = tween(400)))
+                    (
+                        fadeIn(animationSpec = tween(400))
+                            togetherWith fadeOut(animationSpec = tween(400))
+                    )
                 },
-                label = "themeTransition"
+                label = "themeTransition",
             ) { isDark ->
                 AppTheme(darkTheme = isDark) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
-                        color = MaterialTheme.colorScheme.background
+                        color = MaterialTheme.colorScheme.background,
                     ) {
                         ExportScreen(
                             viewModel = viewModel,
                             onSignInClick = onSignInClick,
-                            onRequestHealthPermissions = onRequestHealthPermissions
+                            onRequestHealthPermissions = onRequestHealthPermissions,
                         )
                     }
                 }

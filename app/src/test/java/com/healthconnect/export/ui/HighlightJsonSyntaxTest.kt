@@ -3,8 +3,8 @@ package com.healthconnect.export.ui
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import com.healthconnect.export.ui.components.highlightJsonSyntax
-import org.junit.Test
 import org.junit.Assert.*
+import org.junit.Test
 
 /**
  * Unit tests for [highlightJsonSyntax] — a JSON syntax highlighter that produces
@@ -19,7 +19,6 @@ import org.junit.Assert.*
  * - Structural (brackets, commas, etc) → Color(0xFFD4D4D4)  light gray
  */
 class HighlightJsonSyntaxTest {
-
     // Colors matching the implementation in ExportScreen.kt
     private val keyColor = Color(0xFF569CD6)
     private val stringColor = Color(0xFF6A9955)
@@ -97,8 +96,8 @@ class HighlightJsonSyntaxTest {
         val json = """{"age": 42}"""
         val result = highlightJsonSyntax(json)
 
-        assertHasStyleRange(result, 1, 6, keyColor)      // "age"
-        assertHasStyleRange(result, 8, 10, numberColor)   // 42
+        assertHasStyleRange(result, 1, 6, keyColor) // "age"
+        assertHasStyleRange(result, 8, 10, numberColor) // 42
     }
 
     @Test
@@ -129,9 +128,10 @@ class HighlightJsonSyntaxTest {
         val json = """{"active": true}"""
         val result = highlightJsonSyntax(json)
 
-        val trueStyles = result.spanStyles.filter {
-            result.text.substring(it.start, it.end) == "true"
-        }
+        val trueStyles =
+            result.spanStyles.filter {
+                result.text.substring(it.start, it.end) == "true"
+            }
         assertEquals(1, trueStyles.size)
         assertEquals(boolColor, trueStyles.first().item.color)
         assertEquals(FontWeight.SemiBold, trueStyles.first().item.fontWeight)
@@ -142,9 +142,10 @@ class HighlightJsonSyntaxTest {
         val json = """{"active": false}"""
         val result = highlightJsonSyntax(json)
 
-        val falseStyles = result.spanStyles.filter {
-            result.text.substring(it.start, it.end) == "false"
-        }
+        val falseStyles =
+            result.spanStyles.filter {
+                result.text.substring(it.start, it.end) == "false"
+            }
         assertEquals(1, falseStyles.size)
         assertEquals(boolColor, falseStyles.first().item.color)
         assertEquals(FontWeight.SemiBold, falseStyles.first().item.fontWeight)
@@ -155,9 +156,10 @@ class HighlightJsonSyntaxTest {
         val json = """{"value": null}"""
         val result = highlightJsonSyntax(json)
 
-        val nullStyles = result.spanStyles.filter {
-            result.text.substring(it.start, it.end) == "null"
-        }
+        val nullStyles =
+            result.spanStyles.filter {
+                result.text.substring(it.start, it.end) == "null"
+            }
         assertEquals(1, nullStyles.size)
         assertEquals(nullColor, nullStyles.first().item.color)
         assertEquals(FontWeight.SemiBold, nullStyles.first().item.fontWeight)
@@ -173,7 +175,7 @@ class HighlightJsonSyntaxTest {
         val result = highlightJsonSyntax(json)
 
         // "{"temp": -5}" → space after :, so -5 starts at index 9
-        assertHasStyleRange(result, 9, 11, numberColor)   // -5
+        assertHasStyleRange(result, 9, 11, numberColor) // -5
     }
 
     @Test
@@ -182,7 +184,7 @@ class HighlightJsonSyntaxTest {
         val result = highlightJsonSyntax(json)
 
         // "{"pi": 3.14}" → space after :, so 3.14 starts at index 7
-        assertHasStyleRange(result, 7, 11, numberColor)   // 3.14
+        assertHasStyleRange(result, 7, 11, numberColor) // 3.14
     }
 
     @Test
@@ -190,7 +192,7 @@ class HighlightJsonSyntaxTest {
         val json = """{"e": 1.5e3}"""
         val result = highlightJsonSyntax(json)
 
-        assertHasStyleRange(result, 6, 11, numberColor)   // 1.5e3
+        assertHasStyleRange(result, 6, 11, numberColor) // 1.5e3
     }
 
     @Test
@@ -240,7 +242,7 @@ class HighlightJsonSyntaxTest {
         val result = highlightJsonSyntax(json)
 
         // "{"count": 0}" → space after :, so 0 starts at index 10
-        assertHasStyleRange(result, 10, 11, numberColor)   // 0
+        assertHasStyleRange(result, 10, 11, numberColor) // 0
     }
 
     // =============================================
@@ -337,9 +339,10 @@ class HighlightJsonSyntaxTest {
         assertHasStyleRange(result, 11, 18, keyColor)
 
         // true value
-        val trueStyles = result.spanStyles.filter {
-            result.text.substring(it.start, it.end) == "true"
-        }
+        val trueStyles =
+            result.spanStyles.filter {
+                result.text.substring(it.start, it.end) == "true"
+            }
         assertEquals(1, trueStyles.size)
         assertEquals(boolColor, trueStyles.first().item.color)
     }
@@ -353,9 +356,9 @@ class HighlightJsonSyntaxTest {
         assertHasStyleRange(result, 1, 7, keyColor)
 
         // Each number
-        assertHasStyleRange(result, 10, 11, numberColor)  // 1
-        assertHasStyleRange(result, 13, 14, numberColor)  // 2
-        assertHasStyleRange(result, 16, 17, numberColor)  // 3
+        assertHasStyleRange(result, 10, 11, numberColor) // 1
+        assertHasStyleRange(result, 13, 14, numberColor) // 2
+        assertHasStyleRange(result, 16, 17, numberColor) // 3
 
         // Structural: [ then ]
         assertHasStyleAt(result, 9, defaultColor)
@@ -377,9 +380,10 @@ class HighlightJsonSyntaxTest {
         val json = """[null]"""
         val result = highlightJsonSyntax(json)
 
-        val nullStyles = result.spanStyles.filter {
-            result.text.substring(it.start, it.end) == "null"
-        }
+        val nullStyles =
+            result.spanStyles.filter {
+                result.text.substring(it.start, it.end) == "null"
+            }
         assertEquals(1, nullStyles.size)
         assertEquals(nullColor, nullStyles.first().item.color)
     }
@@ -390,14 +394,15 @@ class HighlightJsonSyntaxTest {
 
     @Test
     fun `realistic health record JSON highlights all token types`() {
-        val json = """
-        {
-            "steps": 8500,
-            "active": true,
-            "note": null,
-            "heart_rate": 72.5
-        }
-        """.trimIndent()
+        val json =
+            """
+            {
+                "steps": 8500,
+                "active": true,
+                "note": null,
+                "heart_rate": 72.5
+            }
+            """.trimIndent()
 
         val result = highlightJsonSyntax(json)
 
@@ -413,12 +418,13 @@ class HighlightJsonSyntaxTest {
 
     @Test
     fun `text is reconstructed correctly for complex input`() {
-        val json = """
-        [
-            {"x": -1, "y": 3.5e2, "ok": true},
-            {"x": 0, "y": 0.0, "ok": false, "z": null}
-        ]
-        """.trimIndent()
+        val json =
+            """
+            [
+                {"x": -1, "y": 3.5e2, "ok": true},
+                {"x": 0, "y": 0.0, "ok": false, "z": null}
+            ]
+            """.trimIndent()
 
         val result = highlightJsonSyntax(json)
         assertEquals(json, result.text)
@@ -429,9 +435,10 @@ class HighlightJsonSyntaxTest {
         val json = """{"a": null, "b": null}"""
         val result = highlightJsonSyntax(json)
 
-        val nullStyles = result.spanStyles.filter {
-            result.text.substring(it.start, it.end) == "null"
-        }
+        val nullStyles =
+            result.spanStyles.filter {
+                result.text.substring(it.start, it.end) == "null"
+            }
         assertEquals(2, nullStyles.size)
         nullStyles.forEach { style ->
             assertEquals(nullColor, style.item.color)
@@ -452,8 +459,8 @@ class HighlightJsonSyntaxTest {
         for (i in 0 until styles.size - 1) {
             assertTrue(
                 "Styles at index $i and ${i + 1} overlap: " +
-                "[${styles[i].start},${styles[i].end}) and [${styles[i + 1].start},${styles[i + 1].end})",
-                styles[i].end <= styles[i + 1].start
+                    "[${styles[i].start},${styles[i].end}) and [${styles[i + 1].start},${styles[i + 1].end})",
+                styles[i].end <= styles[i + 1].start,
             )
         }
     }
@@ -472,7 +479,7 @@ class HighlightJsonSyntaxTest {
         val uncovered = coverage.indices.filter { !coverage[it] }
         assertTrue(
             "Characters not covered by any style at positions: $uncovered",
-            uncovered.isEmpty()
+            uncovered.isEmpty(),
         )
     }
 
@@ -488,8 +495,10 @@ class HighlightJsonSyntaxTest {
         assertHasStyleRange(result, 8, 20, stringColor)
 
         // No separate "true" token with boolColor
-        val boolTokens = result.spanStyles.filter { it.item.color == boolColor }
-                                             .map { result.text.substring(it.start, it.end) }
+        val boolTokens =
+            result.spanStyles
+                .filter { it.item.color == boolColor }
+                .map { result.text.substring(it.start, it.end) }
         assertFalse("'true' inside a string should not be separate bool token", boolTokens.contains("true"))
     }
 
@@ -500,7 +509,7 @@ class HighlightJsonSyntaxTest {
     private fun assertHasStyleAt(
         result: androidx.compose.ui.text.AnnotatedString,
         position: Int,
-        color: Color
+        color: Color,
     ) {
         assertHasStyleRange(result, position, position + 1, color)
     }
@@ -509,38 +518,42 @@ class HighlightJsonSyntaxTest {
         result: androidx.compose.ui.text.AnnotatedString,
         rangeStart: Int,
         rangeEnd: Int,
-        color: Color
+        color: Color,
     ) {
-        val matching = result.spanStyles.filter {
-            it.start == rangeStart && it.end == rangeEnd && it.item.color == color
-        }
+        val matching =
+            result.spanStyles.filter {
+                it.start == rangeStart && it.end == rangeEnd && it.item.color == color
+            }
         assertTrue(
-            "Expected style [$rangeStart,${rangeEnd}) with color $color, but not found.\n" +
-            "Actual styles covering that area: " +
-            result.spanStyles.filter { it.start <= rangeStart && it.end >= rangeEnd }
-                .joinToString("; ") { "[${it.start},${it.end}) color=${it.item.color}" },
-            matching.isNotEmpty()
+            "Expected style [$rangeStart,$rangeEnd) with color $color, but not found.\n" +
+                "Actual styles covering that area: " +
+                result.spanStyles
+                    .filter { it.start <= rangeStart && it.end >= rangeEnd }
+                    .joinToString("; ") { "[${it.start},${it.end}) color=${it.item.color}" },
+            matching.isNotEmpty(),
         )
     }
 
     private fun assertContainsColored(
         result: androidx.compose.ui.text.AnnotatedString,
         token: String,
-        color: Color
+        color: Color,
     ) {
         val startIndex = result.text.indexOf(token)
         assertNotEquals("Token '$token' not found in text", -1, startIndex)
 
         val endIndex = startIndex + token.length
-        val matching = result.spanStyles.filter {
-            it.start <= startIndex && it.end >= endIndex && it.item.color == color
-        }
+        val matching =
+            result.spanStyles.filter {
+                it.start <= startIndex && it.end >= endIndex && it.item.color == color
+            }
         assertTrue(
             "Token '$token' at [$startIndex,$endIndex) should be colored $color.\n" +
-            "Styles covering that range: " +
-            result.spanStyles.filter { it.start <= startIndex && it.end >= endIndex }
-                .joinToString("; ") { "[${it.start},${it.end}) color=${it.item.color}" },
-            matching.isNotEmpty()
+                "Styles covering that range: " +
+                result.spanStyles
+                    .filter { it.start <= startIndex && it.end >= endIndex }
+                    .joinToString("; ") { "[${it.start},${it.end}) color=${it.item.color}" },
+            matching.isNotEmpty(),
         )
     }
 }
