@@ -3,6 +3,7 @@ package com.healthconnect.export.ui.components
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
@@ -94,7 +95,7 @@ fun DriveStatusCard(
                 }
                 is DriveStatus.Syncing -> {
                     CircularProgressIndicator(
-                        modifier = Modifier.width(20.dp),
+                        modifier = Modifier.size(20.dp),
                         strokeWidth = 2.dp,
                     )
                 }
