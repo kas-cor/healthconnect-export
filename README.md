@@ -32,7 +32,7 @@ Android app for exporting Google Health Connect data to JSON format with optiona
 - **Language switching** — English / Russian via Settings tab, persists across sessions
 - **Tabbed navigation** — Export / History / Integrations / Schedule / Settings tabs
 - **Update check** — GitHub release check with notification dot in the app bar + "What's new" dialog
-- **Google Drive auto sign-in** — previous session restored silently at app start
+- **Google Drive sign-in** — Credential Manager authentication, previous account restored at app start; the Drive scope is authorized lazily on first sync
 - **History management** — expandable "Show all files" list (any file opens), file count + total size header
 - **File actions** — share any exported file via the system share sheet, or delete it (with confirmation)
 - **Export format** — JSON or CSV (one row per day, RFC 4180 escaping)
@@ -46,6 +46,7 @@ Android app for exporting Google Health Connect data to JSON format with optiona
 MainActivity → ExportScreen (Compose) → ExportViewModel
   ├─ ExportDataUseCase         — export workflow as Flow<ExportStep>
   ├─ DriveManager              — Google Drive sign-in/sync/sign-out
+  ├─ GoogleAuthProvider        — Credential Manager sign-in + Drive scope authorization
   ├─ WebhookManager            — webhook settings/send/test
   ├─ ScheduleManager           — schedule/cancel periodic exports
   ├─ HealthConnectRepository   — read Health Connect API (batch via TypeHandler)
@@ -103,7 +104,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ## Testing 🧪
 
 ```bash
-# Run all unit tests (341 tests)
+# Run all unit tests (344 tests)
 ./gradlew testDebugUnitTest
 
 # Coverage report + gate check
@@ -111,18 +112,18 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 # Open: app/build/reports/jacoco/jacocoTestReport/html/index.html
 ```
 
-**Test suites (341 total):**
+**Test suites (344 total):**
 
 | File | Tests | Scope |
 |---|---|---|
-| `ExportViewModelTest` | 54 | ViewModel states: export, webhook, Drive sign-in, silent sign-in/restore, signed-out flag, update check, export format, schedule hour, retention, file actions |
+| `ExportViewModelTest` | 54 | ViewModel states: export, webhook, Drive sign-in/session restore, signed-out flag, Drive scope consent, update check, export format, schedule hour, retention, file actions |
 | `WebhookRepositoryTest` | 39 | sendRecords via local HTTP server (success/error/auth/special chars/JSON body) + URL validation |
 | `DataModelsSerializationTest` | 39 | Roundtrip serialization: DailyHealthRecord, ExportConfig (incl. format/hour), enums, SpeedData, sourceDisplayName |
 | `LocalExportRepositoryTest` | 31 | File operations: save (JSON/CSV), list, cleanup, delete both formats, filename format |
 | `HighlightJsonSyntaxTest` | 31 | JSON syntax highlighting: strings, numbers, booleans, null, nested objects, arrays, escaped quotes |
 | `DailyExportWorkerTest` | 30 | `doWork()` (success/already-exported/empty/exceptions) + `schedule()` (daily/weekly/manual/cancel, schedule hour) |
 | `HumanReadableMapperTest` | 27 | 8 mapper functions: bodyPosition, specimenSource, sleepStage, exerciseType, etc. |
-| `GoogleDriveRepositoryTest` | 23 | Drive sync: upload, list, download, delete, scopes, special characters |
+| `GoogleDriveRepositoryTest` | 26 | Drive sync: upload, list, download, delete, token handling, special characters |
 | `Every2HoursWebhookWorkerTest` | 18 | doWork (happy path, blank URL, exceptions) + schedule/cancel |
 | `ExportDataUseCaseTest` | 16 | Export workflow: permissions, health check, progress, webhook, Drive sync |
 | `CsvMapperTest` | 13 | CSV flattening: header/row sync, RFC 4180 escaping, double formatting, missing sections |
@@ -199,12 +200,12 @@ git push origin v1.1
 
 ## Google Drive setup 🔐
 
-Для Google Sign-In требуется **два** OAuth Client ID в одном Google Cloud Project:
+Для входа в Google (Credential Manager) и доступа к Drive нужно **два** OAuth Client ID в одном Google Cloud Project:
 
 | Тип | Client ID | Назначение |
 |---|---|---|
 | **Android** (OAuth) | `730530422387-oaffqtrvfd1rqr6jn1uq8791mgbbpmlj` | Проверка SHA-1 + package name (Google Play Services) |
-| **Web application** (OAuth) | `730530422387-dveo97h089iesh4etmj74q9dn8j221f1` | `requestIdToken()` в `BuildConfig.GOOGLE_CLIENT_ID` |
+| **Web application** (OAuth) | `730530422387-dveo97h089iesh4etmj74q9dn8j221f1` | `setServerClientId()` в `BuildConfig.GOOGLE_CLIENT_ID` |
 
 ### SHA-1 fingerprints
 
@@ -294,7 +295,7 @@ Each element in the `messages` array is a `DailyHealthRecord` — one per export
 
 - **Languages**: English (default), Russian
 - **Locale switching**: Via Settings tab → Language
-- **Coverage**: All 193 strings translated in `values-ru/strings.xml`
+- **Coverage**: All 197 strings translated in `values-ru/strings.xml`
 - **Format safety**: All `%d`, `%s`, `%.1f` placeholders match between locales
 - **Persistence**: Selected locale saved in SharedPreferences
 
@@ -320,7 +321,7 @@ Each element in the `messages` array is a `DailyHealthRecord` — one per export
 **Технические детали:**
 
 - Файл перевода: `app/src/main/res/values-ru/strings.xml`
-- Все **193 строки** переведены — ни одной пропущенной английской строки
+- Все **197 строк** переведены — ни одной пропущенной английской строки
 - Форматные плейсхолдеры (`%d`, `%s`, `%.1f`) полностью совпадают с английской версией — никаких crash'ей при переключении языка
 - Выбор языка сохраняется в `SharedPreferences` и восстанавливается после перезапуска
 - На здоровье не влияет — JSON-данные экспортируются с английскими ключами независимо от языка интерфейса
@@ -426,7 +427,7 @@ Create a PR on GitHub with your translation files. After merging:
 | Build | AGP 9.3.1 / Gradle 9.7.0 |
 | Health Connect | `connect-client:1.1.0` |
 | Google Drive | `google-api-services-drive:v3-rev20240123`, `google-http-client-gson:2.2.0` |
-| Auth | `play-services-auth:21.6.0` |
+| Auth | `play-services-auth:22.0.0`, `androidx.credentials:1.6.0`, `googleid:1.2.1` |
 | Background | WorkManager `work-runtime-ktx:2.11.2` |
 | Serialization | `kotlinx-serialization-json:1.11.0` |
 | minSdk / targetSdk / compileSdk | 28 / 37 / 37 |
@@ -441,6 +442,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full release history.
 
 | Version | Date | Highlights |
 |---|---|---|
+| [v1.9](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.9) | 2026-09-21 | Google Sign-In migrated to Credential Manager (`play-services-auth` 22.0.0), lazy Drive scope authorization via AuthorizationClient, persistent Drive session store, 344 tests |
 | [v1.8](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.8) | 2026-08-10 | File actions in History (share/delete), JSON/CSV export format, auto-cleanup retention, schedule hour, 341 tests |
 | [v1.7](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.7) | 2026-08-10 | Update check + "What's new" dialog, tabbed navigation, Google Drive auto sign-in, History improvements |
 | [v1.6](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.6) | 2026-07-17 | Build script (`build.sh`), Russian README (`README.ru.md`), README sync validation |

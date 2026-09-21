@@ -32,7 +32,7 @@ Android-приложение для экспорта данных Google Health 
 - **Переключение языка** — английский / русский через вкладку «Настройки», сохраняется между сессиями
 - **Навигация по вкладкам** — Экспорт / История / Интеграции / Расписание / Настройки
 - **Проверка обновлений** — проверка релизов GitHub с точкой-уведомлением в шапке + диалог «Что нового»
-- **Автовход в Google Drive** — прошлая сессия восстанавливается автоматически при запуске
+- **Вход в Google Drive** — аутентификация через Credential Manager, прошлый аккаунт восстанавливается при запуске; доступ к Drive (scope) запрашивается лениво при первой синхронизации
 - **Управление историей** — раскрывающийся список «Показать все файлы» (открывается любой файл), счётчик файлов и общий размер в шапке
 - **Действия с файлами** — поделиться любым экспортированным файлом через системный share-меню или удалить (с подтверждением)
 - **Формат экспорта** — JSON или CSV (одна строка на день, экранирование RFC 4180)
@@ -46,6 +46,7 @@ Android-приложение для экспорта данных Google Health 
 MainActivity → ExportScreen (Compose) → ExportViewModel
   ├─ ExportDataUseCase         — рабочий процесс экспорта как Flow<ExportStep>
   ├─ DriveManager              — вход/синхронизация/выход Google Drive
+  ├─ GoogleAuthProvider        — вход через Credential Manager + авторизация Drive-скоупа
   ├─ WebhookManager            — настройки вебхука/отправка/тест
   ├─ ScheduleManager           — создание/отмена периодического экспорта
   ├─ HealthConnectRepository   — чтение Health Connect API (пакетно через TypeHandler)
@@ -103,7 +104,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ## Тестирование 🧪
 
 ```bash
-# Запустить все модульные тесты (341 тест)
+# Запустить все модульные тесты (344 теста)
 ./gradlew testDebugUnitTest
 
 # Отчёт покрытия + проверка порогов
@@ -111,18 +112,18 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 # Открыть: app/build/reports/jacoco/jacocoTestReport/html/index.html
 ```
 
-**Наборы тестов (всего 341):**
+**Наборы тестов (всего 344):**
 
 | Файл | Тестов | Что проверяет |
 |---|---|---|
-| `ExportViewModelTest` | 54 | Состояния ViewModel: экспорт, webhook, вход в Drive, тихий вход/восстановление, флаг sign-out, проверка обновлений, формат, час расписания, ретенция, действия с файлами |
+| `ExportViewModelTest` | 54 | Состояния ViewModel: экспорт, webhook, вход в Drive/восстановление сессии, флаг sign-out, согласие на Drive-скоуп, проверка обновлений, формат, час расписания, ретенция, действия с файлами |
 | `WebhookRepositoryTest` | 39 | sendRecords через локальный HTTP-сервер (успех/ошибка/авторизация/спецсимволы/JSON) + валидация URL |
 | `DataModelsSerializationTest` | 39 | Обратная сериализация: DailyHealthRecord, ExportConfig (вкл. формат/час), enum'ы, SpeedData, sourceDisplayName |
 | `LocalExportRepositoryTest` | 31 | Файловые операции: сохранение (JSON/CSV), список, очистка, удаление обоих форматов, формат имени файла |
 | `HighlightJsonSyntaxTest` | 31 | Подсветка синтаксиса JSON: строки, числа, boolean, null, вложенные объекты, массивы, экранированные кавычки |
 | `DailyExportWorkerTest` | 30 | `doWork()` (успех/уже экспортировано/пусто/исключения) + `schedule()` (ежедневно/еженедельно/вручную/отмена, час запуска) |
 | `HumanReadableMapperTest` | 27 | 8 функций-мапперов: bodyPosition, specimenSource, sleepStage, exerciseType и т.д. |
-| `GoogleDriveRepositoryTest` | 23 | Синхронизация Drive: загрузка, список, скачивание, удаление, scopes, спецсимволы |
+| `GoogleDriveRepositoryTest` | 26 | Синхронизация Drive: загрузка, список, скачивание, удаление, работа с токеном, спецсимволы |
 | `Every2HoursWebhookWorkerTest` | 18 | doWork (happy path, пустой URL, исключения) + schedule/cancel |
 | `ExportDataUseCaseTest` | 16 | Рабочий процесс экспорта: разрешения, проверка Health Connect, прогресс, webhook, Drive |
 | `CsvMapperTest` | 13 | CSV-уплощение: синхронизация заголовка/строки, RFC 4180 экранирование, форматирование чисел, отсутствующие секции |
@@ -199,12 +200,12 @@ git push origin v1.1
 
 ## Настройка Google Drive 🔐
 
-Для Google Sign-In требуется **два** OAuth Client ID в одном Google Cloud Project:
+Для входа в Google (Credential Manager) и доступа к Drive нужно **два** OAuth Client ID в одном Google Cloud Project:
 
 | Тип | Client ID | Назначение |
 |---|---|---|
 | **Android** (OAuth) | `730530422387-oaffqtrvfd1rqr6jn1uq8791mgbbpmlj` | Проверка SHA-1 + package name (Google Play Services) |
-| **Web application** (OAuth) | `730530422387-dveo97h089iesh4etmj74q9dn8j221f1` | `requestIdToken()` в `BuildConfig.GOOGLE_CLIENT_ID` |
+| **Web application** (OAuth) | `730530422387-dveo97h089iesh4etmj74q9dn8j221f1` | `setServerClientId()` в `BuildConfig.GOOGLE_CLIENT_ID` |
 
 ### SHA-1 отпечатки
 
@@ -294,7 +295,7 @@ apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
 
 - **Языки**: английский (по умолчанию), русский
 - **Переключение языка**: через вкладку «Настройки» → «Язык»
-- **Покрытие**: Все **193 строки** переведены в `values-ru/strings.xml`
+- **Покрытие**: Все **197 строк** переведены в `values-ru/strings.xml`
 - **Безопасность форматов**: все плейсхолдеры `%d`, `%s`, `%.1f` совпадают между языками
 - **Сохранение**: выбранный язык сохраняется в SharedPreferences
 
@@ -316,7 +317,7 @@ apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
 ### Технические детали
 
 - Файл перевода: `app/src/main/res/values-ru/strings.xml`
-- Все **193 строки** переведены — ни одной пропущенной английской строки
+- Все **197 строк** переведены — ни одной пропущенной английской строки
 - Форматные плейсхолдеры (`%d`, `%s`, `%.1f`) полностью совпадают с английской версией — никаких crash'ей при переключении языка
 - Выбор языка сохраняется в `SharedPreferences` и восстанавливается после перезапуска
 - На здоровье не влияет — JSON-данные экспортируются с английскими ключами независимо от языка интерфейса
@@ -422,7 +423,7 @@ cp README.md README.fr.md
 | Сборка | AGP 9.3.1 / Gradle 9.7.0 |
 | Health Connect | `connect-client:1.1.0` |
 | Google Drive | `google-api-services-drive:v3-rev20240123`, `google-http-client-gson:2.2.0` |
-| Авторизация | `play-services-auth:21.6.0` |
+| Авторизация | `play-services-auth:22.0.0`, `androidx.credentials:1.6.0`, `googleid:1.2.1` |
 | Фон | WorkManager `work-runtime-ktx:2.11.2` |
 | Сериализация | `kotlinx-serialization-json:1.11.0` |
 | minSdk / targetSdk / compileSdk | 28 / 37 / 37 |
@@ -437,6 +438,7 @@ cp README.md README.fr.md
 
 | Версия | Дата | Что нового |
 |---|---|---|
+| [v1.9](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.9) | 2026-09-21 | Вход в Google переведён на Credential Manager (`play-services-auth` 22.0.0), ленивая авторизация Drive-скоупа через AuthorizationClient, хранилище сессии Drive, 344 теста |
 | [v1.8](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.8) | 2026-08-10 | Действия с файлами в Истории (поделиться/удалить), экспорт JSON/CSV, автоочистка, час запуска расписания, 341 тест |
 | [v1.7](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.7) | 2026-08-10 | Проверка обновлений + диалог «Что нового», навигация по вкладкам, автовход в Google Drive, улучшения Истории |
 | [v1.6](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.6) | 2026-07-17 | Build-скрипт (`build.sh`), русский README (`README.ru.md`), проверка синхронизации README |

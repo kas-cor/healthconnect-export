@@ -156,7 +156,9 @@
     <string name="vm_permissions_granted">Permissions granted. Starting export…</string>
     <string name="vm_permissions_missing">Health Connect permissions not granted for: %s. Export is not possible. Open Health Connect app and grant access to these data types.</string>
     <string name="vm_drive_connected">Google account connected: %s</string>
-    <string name="vm_drive_signin_error">Sign-in failed: %d</string>
+    <string name="vm_drive_signin_failed">Google sign-in failed</string>
+    <string name="vm_drive_access_required">Google Drive access is required to sync</string>
+    <string name="vm_drive_access_denied">Google Drive access was not granted</string>
     <string name="vm_drive_signed_out">Google account signed out</string>
     <string name="vm_drive_not_connected">Google Drive not connected</string>
     <string name="vm_drive_synced">Synced with Drive: %d files</string>
