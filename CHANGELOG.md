@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.9] — 2026-09-21
+
+### Changed
+- **Google Sign-In migration:** authentication now uses Credential Manager (`androidx.credentials` + `googleid`) instead of the legacy `GoogleSignIn` API, which allowed `play-services-auth` to move from `21.6.0` to `22.0.0`. The Drive OAuth scope is authorized separately through `AuthorizationClient` and requested **lazily** — connecting an account no longer asks for Drive access up front
+- **Drive session:** the connected account is remembered by a new `DriveSessionStore` (SharedPreferences) instead of `GoogleSignIn.getLastSignedInAccount()`, which Credential Manager does not provide; sign-out clears it synchronously and also clears the credential state
+- **Drive token handling:** `GoogleDriveRepository` authorizes requests with an OAuth access token (Bearer header) and refreshes it once on HTTP 401; the Drive scope consent screen is launched from `MainActivity` via an `IntentSender` launcher
+
+### Added
+- **`GoogleAuthProvider`:** new abstraction over Credential Manager sign-in and `AuthorizationClient` Drive authorization, with a `FakeGoogleAuthProvider` test double
+- **Tests:** Credential Manager sign-in scenarios (connected, cancelled, no Activity, lazy Drive scope, session restore, sign-out) and token-based `GoogleDriveRepositoryTest` cases (344 tests total)
+- **Strings:** `vm_drive_access_required` / `vm_drive_access_denied` (197 strings per locale)
+
+---
+
 ## [1.8] — 2026-08-10
 
 ### Added
@@ -204,6 +218,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[1.9]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.9
 [1.8]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.8
 [1.7]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.7
 [1.6]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.6

@@ -1,11 +1,13 @@
 package com.healthconnect.export.repository
 
 import android.content.Context
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.api.services.drive.Drive
+import com.healthconnect.export.auth.DriveAuthorization
+import com.healthconnect.export.auth.DriveSessionStore
 import com.healthconnect.export.data.ExportConfig
 import com.healthconnect.export.data.ExportFrequency
 import com.healthconnect.export.data.HealthDataType
+import com.healthconnect.export.testutil.FakeGoogleAuthProvider
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
@@ -24,7 +26,7 @@ class GoogleDriveRepositoryTest {
     private lateinit var mockContext: Context
 
     @Mock
-    private lateinit var mockAccount: GoogleSignInAccount
+    private lateinit var mockSession: DriveSessionStore
 
     @Mock
     private lateinit var mockDrive: Drive
@@ -73,6 +75,8 @@ class GoogleDriveRepositoryTest {
     private lateinit var repo: GoogleDriveRepository
     private lateinit var repoSpy: GoogleDriveRepository
 
+    private val authProvider = FakeGoogleAuthProvider()
+
     private val localTestFile = File("test.json")
     private val defaultConfig =
         ExportConfig(
@@ -83,17 +87,17 @@ class GoogleDriveRepositoryTest {
 
     @Before
     fun setup() {
-        repo = GoogleDriveRepository(mockContext)
+        repo = GoogleDriveRepository(mockContext, authProvider, mockSession)
 
         // Inject mock Drive via testDrive field
         val driveField: Field = GoogleDriveRepository::class.java.getDeclaredField("testDrive")
         driveField.isAccessible = true
         driveField.set(repo, mockDrive)
 
-        // Spy on the repo to stub getLastAccount()
         repoSpy = spy(repo)
-        // Default: no account signed in
-        doReturn(null).`when`(repoSpy).getLastAccount()
+        // Default: an account is connected and Drive access is already granted
+        whenever(mockSession.isConnected()).thenReturn(true)
+        whenever(mockSession.connectedEmail()).thenReturn("test@example.com")
 
         // Setup Drive.Files chain
         whenever(mockDrive.files()).thenReturn(mockFiles)
@@ -131,46 +135,98 @@ class GoogleDriveRepositoryTest {
     }
 
     // ============================
-    // isSignedIn() Tests
+    // Session Tests
     // ============================
 
     @Test
-    fun `isSignedIn returns true when account exists`() {
-        doReturn(mockAccount).`when`(repoSpy).getLastAccount()
+    fun `isSignedIn returns true when a session is stored`() {
+        whenever(mockSession.isConnected()).thenReturn(true)
 
         assertTrue(repoSpy.isSignedIn())
     }
 
     @Test
-    fun `isSignedIn returns false when no account`() {
+    fun `isSignedIn returns false without a stored session`() {
+        whenever(mockSession.isConnected()).thenReturn(false)
+
         assertFalse(repoSpy.isSignedIn())
     }
 
-    // ============================
-    // getLastAccount() Tests
-    // ============================
-
     @Test
-    fun `getLastAccount returns account when signed in`() {
-        doReturn(mockAccount).`when`(repoSpy).getLastAccount()
+    fun `connectedEmail returns the stored account email`() {
+        whenever(mockSession.connectedEmail()).thenReturn("user@example.com")
 
-        assertEquals(mockAccount, repoSpy.getLastAccount())
+        assertEquals("user@example.com", repoSpy.connectedEmail())
     }
 
     @Test
-    fun `getLastAccount returns null when no account`() {
-        assertNull(repoSpy.getLastAccount())
+    fun `saveSession remembers the account email`() {
+        repoSpy.saveSession("user@example.com")
+
+        verify(mockSession).save("user@example.com")
+    }
+
+    @Test
+    fun `clearSession forgets the account and the cached token`() {
+        runBlocking {
+            authProvider.authorization = DriveAuthorization.Granted("token-1")
+            assertEquals("token-1", repoSpy.accessToken())
+
+            repoSpy.clearSession()
+            verify(mockSession).clear()
+
+            // A fresh token has to be requested again
+            assertEquals("token-1", repoSpy.accessToken())
+            assertEquals(2, authProvider.authorizeCalls)
+        }
     }
 
     // ============================
-    // getSignInOptions() Tests
+    // accessToken() Tests
     // ============================
 
     @Test
-    fun `getSignInOptions builds options without throwing`() {
-        val options = repoSpy.getSignInOptions()
+    fun `accessToken returns null when Drive access is not granted`() {
+        runBlocking {
+            authProvider.authorization = DriveAuthorization.Failed("denied")
 
-        assertNotNull(options)
+            assertNull(repoSpy.accessToken())
+        }
+    }
+
+    @Test
+    fun `accessToken caches a granted token`() {
+        runBlocking {
+            authProvider.authorization = DriveAuthorization.Granted("token-1")
+
+            assertEquals("token-1", repoSpy.accessToken())
+            assertEquals("token-1", repoSpy.accessToken())
+            // Second call is served from the cache
+            assertEquals(1, authProvider.authorizeCalls)
+        }
+    }
+
+    @Test
+    fun `accessToken forceRefresh bypasses the cache`() {
+        runBlocking {
+            authProvider.authorization = DriveAuthorization.Granted("token-1")
+            assertEquals("token-1", repoSpy.accessToken())
+
+            authProvider.authorization = DriveAuthorization.Granted("token-2")
+
+            assertEquals("token-2", repoSpy.accessToken(forceRefresh = true))
+            assertEquals(2, authProvider.authorizeCalls)
+        }
+    }
+
+    @Test
+    fun `accessToken does not request consent by itself`() {
+        runBlocking {
+            authProvider.authorization =
+                DriveAuthorization.ConsentRequired(mock<android.content.IntentSender>())
+
+            assertNull(repoSpy.accessToken())
+        }
     }
 
     // ============================
@@ -180,7 +236,8 @@ class GoogleDriveRepositoryTest {
     @Test
     fun `uploadFile returns null when no account signed in`() {
         runBlocking {
-            // Default: getLastAccount() returns null
+            authProvider.authorization = DriveAuthorization.Failed("not granted")
+
             val result = repoSpy.uploadFile(localTestFile, "HealthConnectExport/test.json")
 
             assertNull(result)
@@ -192,7 +249,6 @@ class GoogleDriveRepositoryTest {
     @Test
     fun `uploadFile returns null when folder creation fails`() {
         runBlocking {
-            doReturn(mockAccount).`when`(repoSpy).getLastAccount()
 
             // No existing folder → try to create → throws
             whenever(mockFiles.list()).thenReturn(mockListRequest)
@@ -212,7 +268,6 @@ class GoogleDriveRepositoryTest {
     @Test
     fun `uploadFile creates new file when no existing file`() {
         runBlocking {
-            doReturn(mockAccount).`when`(repoSpy).getLastAccount()
 
             // First execute (findFolder): returns existing folder
             // Second execute (check existing files): returns empty list
@@ -237,7 +292,6 @@ class GoogleDriveRepositoryTest {
     @Test
     fun `uploadFile deletes existing file then creates new one`() {
         runBlocking {
-            doReturn(mockAccount).`when`(repoSpy).getLastAccount()
 
             // First execute (findFolder): returns existing folder
             // Second execute (check existing files): returns existing file
@@ -265,7 +319,6 @@ class GoogleDriveRepositoryTest {
     @Test
     fun `uploadFile deletes multiple existing files then creates new one`() {
         runBlocking {
-            doReturn(mockAccount).`when`(repoSpy).getLastAccount()
 
             val file1 = mock<com.google.api.services.drive.model.File>()
             whenever(file1.id).thenReturn("file_1_id")
@@ -301,7 +354,6 @@ class GoogleDriveRepositoryTest {
     @Test
     fun `uploadFile returns null on exception`() {
         runBlocking {
-            doReturn(mockAccount).`when`(repoSpy).getLastAccount()
 
             whenever(mockFiles.list()).thenThrow(RuntimeException("Network error"))
 
@@ -318,7 +370,6 @@ class GoogleDriveRepositoryTest {
     @Test
     fun `syncFiles returns list of ids for multiple files`() {
         runBlocking {
-            doReturn(mockAccount).`when`(repoSpy).getLastAccount()
 
             val file1 = File("health_2026-05-24.json")
             val file2 = File("health_2026-05-25.json")
@@ -359,6 +410,8 @@ class GoogleDriveRepositoryTest {
     @Test
     fun `syncFiles with no account returns list of nulls`() {
         runBlocking {
+            authProvider.authorization = DriveAuthorization.Failed("not granted")
+
             val results = repoSpy.syncFiles(listOf(File("test.json"), File("test2.json")))
 
             assertEquals(2, results.size)
@@ -375,6 +428,8 @@ class GoogleDriveRepositoryTest {
     @Test
     fun `listDriveFiles returns empty list when no account`() {
         runBlocking {
+            authProvider.authorization = DriveAuthorization.Failed("not granted")
+
             val result = repoSpy.listDriveFiles()
 
             assertTrue(result.isEmpty())
@@ -385,7 +440,6 @@ class GoogleDriveRepositoryTest {
     @Test
     fun `listDriveFiles returns empty when no folder on drive`() {
         runBlocking {
-            doReturn(mockAccount).`when`(repoSpy).getLastAccount()
 
             whenever(mockFiles.list()).thenReturn(mockListRequest)
             whenever(mockListRequest.execute()).thenReturn(mockEmptyFolderListResponse)
@@ -399,7 +453,6 @@ class GoogleDriveRepositoryTest {
     @Test
     fun `listDriveFiles returns file names when folder exists`() {
         runBlocking {
-            doReturn(mockAccount).`when`(repoSpy).getLastAccount()
 
             val file1 = mock<com.google.api.services.drive.model.File>()
             whenever(file1.name).thenReturn("health_2026-05-24.json")
@@ -427,7 +480,6 @@ class GoogleDriveRepositoryTest {
     @Test
     fun `listDriveFiles returns empty on exception`() {
         runBlocking {
-            doReturn(mockAccount).`when`(repoSpy).getLastAccount()
 
             whenever(mockFiles.list()).thenThrow(RuntimeException("Network error"))
 
@@ -444,7 +496,6 @@ class GoogleDriveRepositoryTest {
     @Test
     fun `uploadFile creates folder when does not exist`() {
         runBlocking {
-            doReturn(mockAccount).`when`(repoSpy).getLastAccount()
 
             // Folder doesn't exist → create folder → then check files
             whenever(mockFiles.list()).thenReturn(mockListRequest)
@@ -473,7 +524,6 @@ class GoogleDriveRepositoryTest {
     @Test
     fun `uploadFile returns null when existing file delete throws`() {
         runBlocking {
-            doReturn(mockAccount).`when`(repoSpy).getLastAccount()
 
             whenever(mockFiles.list()).thenReturn(mockListRequest)
             whenever(mockListRequest.execute()).thenReturn(
@@ -497,7 +547,6 @@ class GoogleDriveRepositoryTest {
     @Test
     fun `listDriveFiles exception after folder found, returns empty`() {
         runBlocking {
-            doReturn(mockAccount).`when`(repoSpy).getLastAccount()
 
             // Folder found but subsequent file list throws
             whenever(mockFiles.list()).thenReturn(mockListRequest)
@@ -519,16 +568,8 @@ class GoogleDriveRepositoryTest {
     }
 
     @Test
-    fun `getSignInOptions requests correct scopes`() {
-        val options = repoSpy.getSignInOptions()
-
-        assertNotNull(options)
-    }
-
-    @Test
     fun `uploadFile with special characters in filename uses escaped query`() {
         runBlocking {
-            doReturn(mockAccount).`when`(repoSpy).getLastAccount()
             val specialFile = File("health_2026-05-24(+1).json")
 
             whenever(mockFiles.list()).thenReturn(mockListRequest)

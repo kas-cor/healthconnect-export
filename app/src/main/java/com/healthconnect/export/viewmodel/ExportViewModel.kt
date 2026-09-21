@@ -1,8 +1,10 @@
 package com.healthconnect.export.viewmodel
 
+import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.content.IntentSender
 import android.util.Log
 import androidx.activity.result.ActivityResult
 import androidx.core.content.FileProvider
@@ -158,11 +160,18 @@ class ExportViewModel(
         loadRetentionDays()
         driveManager.refreshDriveStatus()
         // Keep uiState.driveStatus in sync with DriveManager: the status is
-        // updated asynchronously (e.g. after a silent sign-in at startup or
+        // updated asynchronously (e.g. after the session restore at startup or
         // when the Drive file listing finishes), so it is collected here.
         viewModelScope.launch {
             driveManager.driveState.collect { driveState ->
-                _uiState.update { it.copy(driveStatus = driveState.status) }
+                _uiState.update {
+                    it.copy(
+                        driveStatus = driveState.status,
+                        // Drive outcomes (signed in, consent needed, synced) are
+                        // asynchronous, so surface their messages as they arrive.
+                        message = driveState.message ?: it.message,
+                    )
+                }
             }
         }
         refreshLocalFiles()
@@ -365,13 +374,36 @@ class ExportViewModel(
         saveThemePreference(darkTheme)
     }
 
-    fun handleSignInResult(result: ActivityResult) {
-        driveManager.handleSignInResult(result)
-        // Sync DriveManager's state back to our UI state
-        val driveState = driveManager.driveState.value
-        _uiState.update {
-            it.copy(driveStatus = driveState.status, message = driveState.message)
-        }
+    /**
+     * Starts the Credential Manager sign-in flow (authentication only — the Drive
+     * scope is authorized lazily by the first sync).
+     */
+    fun signInToDrive() {
+        driveManager.signIn()
+    }
+
+    /**
+     * Handles the result of the Google consent screen shown for the Drive scope,
+     * resuming a sync that was waiting for it.
+     */
+    fun onDriveAuthorizationResult(result: ActivityResult) {
+        driveManager.onAuthorizationResult(result)
+    }
+
+    /**
+     * Registers the Activity used by the interactive Google APIs (Credential
+     * Manager and the Drive consent screen).
+     */
+    fun attachDriveActivity(activity: Activity?) {
+        driveManager.attachActivity(activity)
+    }
+
+    /**
+     * Registers the launcher used to show the Drive consent screen from the
+     * Activity's `ActivityResultLauncher`.
+     */
+    fun setDriveAuthorizationLauncher(launcher: ((IntentSender) -> Unit)?) {
+        driveManager.authorizationLauncher = launcher
     }
 
     fun signOut() {
