@@ -4,8 +4,8 @@
 [![Coverage](https://raw.githubusercontent.com/kas-cor/healthconnect-export/main/badges/coverage.svg)](https://github.com/kas-cor/healthconnect-export/actions/workflows/build-apk.yml)
 [![Branches](https://raw.githubusercontent.com/kas-cor/healthconnect-export/main/badges/branches.svg)](https://github.com/kas-cor/healthconnect-export/actions/workflows/build-apk.yml)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Kotlin](https://img.shields.io/badge/kotlin-2.4.10-purple)](https://kotlinlang.org)
-[![Версия](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-1.8-blue)](CHANGELOG.md)
+[![Kotlin](https://img.shields.io/badge/kotlin-2.4.20-purple)](https://kotlinlang.org)
+[![Версия](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-1.9-blue)](CHANGELOG.md)
 [![Release](https://img.shields.io/github/v/release/kas-cor/healthconnect-export)](https://github.com/kas-cor/healthconnect-export/releases)
 [![English](https://img.shields.io/badge/README-English-blue)](README.md)
 
@@ -418,17 +418,18 @@ cp README.md README.fr.md
 
 | Компонент | Версия |
 |---|---|
-| Язык | Kotlin 2.4.10 |
-| UI | Jetpack Compose + Material3 (BOM 2026.08) |
-| Сборка | AGP 9.3.1 / Gradle 9.7.0 |
+| Язык | Kotlin 2.4.20 |
+| UI | Jetpack Compose + Material3 (BOM 2026.09.00) |
+| Сборка | AGP 9.4.0 / Gradle 9.7.1 |
 | Health Connect | `connect-client:1.1.0` |
-| Google Drive | `google-api-services-drive:v3-rev20240123`, `google-http-client-gson:2.2.0` |
+| Google Drive | `google-api-services-drive:v3-rev20240123-2.0.0`, `google-api-client-android:2.9.1`, `google-http-client-gson:2.2.0` |
 | Авторизация | `play-services-auth:22.0.0`, `androidx.credentials:1.6.0`, `googleid:1.2.1` |
 | Фон | WorkManager `work-runtime-ktx:2.11.2` |
 | Сериализация | `kotlinx-serialization-json:1.11.0` |
 | minSdk / targetSdk / compileSdk | 28 / 37 / 37 |
 | JVM | 21 |
-| Тестирование | JUnit 4.13.2, Mockito 5.23.0, mockito-kotlin 6.3.0 |
+| Линтинг | ktlint 14.2.0 |
+| Тестирование | JUnit 4.13.2, Mockito 5.23.0, mockito-kotlin 6.3.0, Robolectric 4.17 |
 | Покрытие | JaCoCo 0.8.12 |
 | CI | GitHub Actions |
 

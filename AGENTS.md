@@ -14,19 +14,19 @@ User selects health data types and a date range, then exports to JSON files (one
 
 | Component | Technology |
 |---|---|
-| Language | Kotlin 2.4.10 |
-| UI | Jetpack Compose + Material3 (BOM 2026.05) |
-| Build | Gradle KTS + AGP 9.3.1 / Gradle 9.6.1 |
+| Language | Kotlin 2.4.20 |
+| UI | Jetpack Compose + Material3 (BOM 2026.09.00) |
+| Build | Gradle KTS + AGP 9.4.0 / Gradle 9.7.1 |
 | Health API | `androidx.health.connect:connect-client:1.1.0` |
-| Google Drive | `google-api-services-drive:v3-rev20240123`, `google-http-client-gson:2.1.0` |
+| Google Drive | `google-api-services-drive:v3-rev20240123-2.0.0`, `google-api-client-android:2.9.1`, `google-http-client-gson:2.2.0` |
 | Auth | `play-services-auth:22.0.0` (AuthorizationClient for the Drive scope) + `androidx.credentials:credentials(-play-services-auth):1.6.0` + `googleid:1.2.1` (Credential Manager sign-in) |
 | Background | WorkManager (`work-runtime-ktx:2.11.2`) |
 | Serialization | `kotlinx-serialization-json:1.11.0` |
-| Testing | JUnit 4.13.2 + Mockito 5.23.0 + mockito-kotlin 6.3.0 |
+| Testing | JUnit 4.13.2 + Mockito 5.23.0 + mockito-kotlin 6.3.0 + Robolectric 4.17 |
 | Linting | ktlint 14.2.0 |
-| Coverage | JaCoCo 0.8.11 (XML + HTML + CSV) |
+| Coverage | JaCoCo 0.8.12 (XML + HTML + CSV) |
 | CI | GitHub Actions |
-| minSdk / targetSdk / compileSdk | 28 / 36 / 36 |
+| minSdk / targetSdk / compileSdk | 28 / 37 / 37 |
 | JVM | 21 |
 
 ---
@@ -355,11 +355,13 @@ Tag push (after build-release):
 ### Release process
 
 ```bash
-git tag v1.8
+git tag v1.9
 
-git push origin v1.8
+git push origin v1.9
 # CI: bump version → build → create GitHub Release
 ```
+
+> **Note:** the CI bump commit touches only `app/build.gradle.kts` (`git add app/build.gradle.kts`) — it sets `versionName` from the tag and increments `versionCode` by 1, then pushes to `main`. The tag itself keeps the pre-bump `versionCode`, same as every previous release.
 
 ### Post-release documentation sync
 
