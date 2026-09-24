@@ -15,6 +15,9 @@ import com.healthconnect.export.repository.HealthConnectRepository
 import com.healthconnect.export.repository.LocalExportRepository
 import com.healthconnect.export.usecase.ExportDataUseCase
 import com.healthconnect.export.usecase.ExportStep
+import com.healthconnect.export.util.BatteryOptimization
+import com.healthconnect.export.util.DeliveryLog
+import com.healthconnect.export.util.ExportSettings
 import com.healthconnect.export.util.LocaleManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -64,6 +67,10 @@ data class ExportUiState(
     val exportFormat: ExportFormat = ExportFormat.JSON,
     val scheduleHour: Int? = null,
     val retentionDays: Int? = null,
+    val lastDeliveryAttemptAt: Long? = null,
+    val lastDeliveryAttemptResult: String? = null,
+    val lastDeliverySuccessAt: Long? = null,
+    val batteryOptimizationIgnored: Boolean = true,
 )
 
 sealed class DriveStatus {
@@ -156,6 +163,9 @@ class ExportViewModel(
         loadExportFormat()
         loadScheduleHour()
         loadRetentionDays()
+        loadFrequency()
+        refreshDeliveryStatus()
+        refreshBatteryOptimizationStatus()
         driveManager.refreshDriveStatus()
         // Keep uiState.driveStatus in sync with DriveManager: the status is
         // updated asynchronously (e.g. after a silent sign-in at startup or
@@ -486,6 +496,52 @@ class ExportViewModel(
         _uiState.update { it.copy(retentionDays = days) }
         saveRetentionDays(days)
         applyRetentionCleanup()
+    }
+
+    // ── Periodic frequency ───────────────────────────────────────────────────
+
+    /**
+     * Restores the saved export frequency. Without this every launch fell back
+     * to Daily, so a "Manual" choice silently re-enabled the periodic export.
+     */
+    private fun loadFrequency() {
+        _uiState.update { it.copy(frequency = ExportSettings.loadFrequency(getApplication())) }
+    }
+
+    // ── Background delivery diagnostics ──────────────────────────────────────
+
+    /** Reloads the persisted delivery state shown in the Schedule tab. */
+    fun refreshDeliveryStatus() {
+        val status = DeliveryLog.status(getApplication())
+        _uiState.update {
+            it.copy(
+                lastDeliveryAttemptAt = status.lastAttemptAt,
+                lastDeliveryAttemptResult = status.lastAttemptResult,
+                lastDeliverySuccessAt = status.lastSuccessAt,
+            )
+        }
+    }
+
+    /** Delivery log entries, newest first. */
+    fun deliveryLog(): List<String> = DeliveryLog.entries(getApplication())
+
+    /** Reloads whether the app is exempt from battery optimization. */
+    fun refreshBatteryOptimizationStatus() {
+        _uiState.update { it.copy(batteryOptimizationIgnored = BatteryOptimization.isIgnored(getApplication())) }
+    }
+
+    /** Opens the system dialog asking to exempt the app from battery optimization. */
+    fun requestBatteryOptimizationExemption() {
+        try {
+            val intent =
+                BatteryOptimization
+                    .requestIntent(getApplication<Application>())
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            getApplication<Application>().startActivity(intent)
+        } catch (e: Exception) {
+            Log.e("ExportViewModel", "Failed to open battery optimization settings", e)
+            _uiState.update { it.copy(message = str(R.string.battery_optimization_unavailable)) }
+        }
     }
 
     /**

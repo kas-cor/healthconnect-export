@@ -18,6 +18,7 @@ import org.junit.Before
 import org.junit.Assert.*
 import androidx.work.*
 import com.healthconnect.export.data.*
+import com.healthconnect.export.testing.FakeSharedPreferences
 import com.healthconnect.export.repository.*
 import org.junit.Test
 import org.mockito.kotlin.*
@@ -56,6 +57,7 @@ class DailyExportWorkerTest {
         whenever(mockApp.filesDir).thenReturn(tempDir)
         whenever(mockApp.getExternalFilesDir(anyOrNull())).thenReturn(tempDir)
         whenever(mockApp.packageName).thenReturn("com.healthconnect.export")
+        whenever(mockApp.getSharedPreferences(any(), any())).thenReturn(FakeSharedPreferences())
 
         // Stubs required for WorkManagerTestInitHelper
         val mockPm = mock<PackageManager>()
@@ -199,7 +201,7 @@ class DailyExportWorkerTest {
     }
 
     @Test
-    fun `security exception returns failure`() {
+    fun `security exception returns retry`() {
         runBlocking {
             val config =
                 ExportConfig(
@@ -215,12 +217,12 @@ class DailyExportWorkerTest {
             val worker = createWorker(config)
             val result = worker.doWork()
 
-            assertEquals(ListenableWorker.Result.failure(), result)
+            assertEquals(ListenableWorker.Result.retry(), result)
         }
     }
 
     @Test
-    fun `illegal state exception returns failure`() {
+    fun `illegal state exception returns retry`() {
         runBlocking {
             val config =
                 ExportConfig(
@@ -236,7 +238,7 @@ class DailyExportWorkerTest {
             val worker = createWorker(config)
             val result = worker.doWork()
 
-            assertEquals(ListenableWorker.Result.failure(), result)
+            assertEquals(ListenableWorker.Result.retry(), result)
         }
     }
 

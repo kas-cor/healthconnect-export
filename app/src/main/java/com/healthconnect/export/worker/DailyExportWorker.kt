@@ -10,6 +10,8 @@ import com.healthconnect.export.repository.GoogleDriveRepository
 import com.healthconnect.export.repository.HealthConnectRepository
 import com.healthconnect.export.repository.LocalExportRepository
 import com.healthconnect.export.repository.WebhookRepository
+import com.healthconnect.export.util.DeliveryLog
+import com.healthconnect.export.util.ExportSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
@@ -31,26 +33,21 @@ class DailyExportWorker(
         const val WORK_NAME = "daily_health_export"
         const val KEY_CONFIG = "export_config"
         private const val TAG = "DailyExportWorker"
+        private const val TRIGGER = "daily"
         private val json = Json { ignoreUnknownKeys = true }
 
         fun schedule(
             context: Context,
             config: ExportConfig,
         ) {
-            if (config.frequency == com.healthconnect.export.data.ExportFrequency.MANUAL) {
-                WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
-                // Also cancel 2-hour webhook if manual is selected
-                Every2HoursWebhookWorker.cancel(context)
-                return
-            }
-            // Schedule 2-hour webhook if enabled
+            // The every-2-hours webhook has its own switch: switching the export
+            // frequency to Manual must not silently disable it.
             scheduleEvery2HoursWebhook(context, config)
 
-            val constraints =
-                Constraints
-                    .Builder()
-                    .setRequiresBatteryNotLow(true)
-                    .build()
+            if (config.frequency == ExportFrequency.MANUAL) {
+                WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+                return
+            }
 
             val inputData =
                 workDataOf(
@@ -61,7 +58,7 @@ class DailyExportWorker(
                 PeriodicWorkRequestBuilder<DailyExportWorker>(
                     config.frequency.hours,
                     TimeUnit.HOURS,
-                ).setConstraints(constraints)
+                )
                     .setInputData(inputData)
                     .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.MINUTES)
 
@@ -79,7 +76,10 @@ class DailyExportWorker(
 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 WORK_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
+                // UPDATE keeps the existing schedule but lets a changed
+                // configuration reach the already enqueued job (KEEP froze the
+                // webhook URL/token of the first enqueue forever).
+                ExistingPeriodicWorkPolicy.UPDATE,
                 request,
             )
         }
@@ -87,6 +87,11 @@ class DailyExportWorker(
         fun cancel(context: Context) {
             WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
             Every2HoursWebhookWorker.cancel(context)
+        }
+
+        /** Cancels only the periodic export, leaving the every-2-hours webhook job alone. */
+        fun cancelDaily(context: Context) {
+            WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
         }
 
         /**
@@ -117,19 +122,8 @@ class DailyExportWorker(
 
     override suspend fun doWork(): Result =
         withContext(Dispatchers.IO) {
+            val config = resolveConfig()
             try {
-                val configJson = inputData.getString(KEY_CONFIG)
-                val config =
-                    if (configJson != null) {
-                        Json.decodeFromString<ExportConfig>(configJson)
-                    } else {
-                        ExportConfig(
-                            enabledTypes = HealthDataType.entries.toSet(),
-                            frequency = com.healthconnect.export.data.ExportFrequency.DAILY,
-                            autoSyncDrive = true,
-                        )
-                    }
-
                 // Export completed days only. This avoids repeatedly sending a partial
                 // current-day record from a periodic worker.
                 val endDate = LocalDate.now().minusDays(1)
@@ -151,6 +145,7 @@ class DailyExportWorker(
 
                 if (records.isEmpty()) {
                     Log.w(TAG, "doWork: no health data returned for period $startDate..$endDate")
+                    DeliveryLog.recordIdle(applicationContext, TRIGGER, "no data $startDate..$endDate")
                     return@withContext Result.success()
                 }
 
@@ -164,15 +159,22 @@ class DailyExportWorker(
                             driveRepo.uploadFile(file, "HealthConnectExport/${file.name}")
                         }
                     if (driveResults.any { it == null }) {
+                        DeliveryLog.recordFailure(applicationContext, TRIGGER, "Drive upload failed")
                         return@withContext Result.retry()
                     }
                 }
 
                 // Send to webhook if enabled
                 if (config.autoSendWebhook && config.webhookUrl.isNotBlank()) {
-                    when (webhookRepo.sendRecords(config.webhookUrl, records, config.webhookAuthToken)) {
-                        is com.healthconnect.export.repository.WebhookResult.Success -> Unit
+                    when (val result = webhookRepo.sendRecords(config.webhookUrl, records, config.webhookAuthToken)) {
+                        is com.healthconnect.export.repository.WebhookResult.Success ->
+                            DeliveryLog.recordSuccess(applicationContext, TRIGGER, records.map { it.date })
                         is com.healthconnect.export.repository.WebhookResult.Error -> {
+                            DeliveryLog.recordFailure(
+                                applicationContext,
+                                TRIGGER,
+                                "HTTP ${result.statusCode}: ${result.message}",
+                            )
                             return@withContext Result.retry()
                         }
                     }
@@ -180,11 +182,44 @@ class DailyExportWorker(
 
                 Result.success()
             } catch (e: SecurityException) {
-                Result.failure()
+                // Retry, never fail: WorkManager terminates a periodic job
+                // permanently when a run reports failure, and the pipeline then
+                // stays dead until the app is opened by hand.
+                DeliveryLog.recordFailure(applicationContext, TRIGGER, "permissions: ${e.message}")
+                Result.retry()
             } catch (e: IllegalStateException) {
-                Result.failure()
+                DeliveryLog.recordFailure(applicationContext, TRIGGER, "health connect: ${e.message}")
+                Result.retry()
             } catch (e: Exception) {
+                DeliveryLog.recordFailure(applicationContext, TRIGGER, e.message ?: e.toString())
                 Result.retry()
             }
         }
+
+    /**
+     * Input data carries the configuration snapshot taken when the job was
+     * enqueued; the webhook settings are refreshed from the persisted values so
+     * a URL/token changed later still applies to that job.
+     */
+    private fun resolveConfig(): ExportConfig {
+        val persisted = ExportSettings.loadConfig(applicationContext)
+        val base =
+            inputData.getString(KEY_CONFIG)?.let { configJson ->
+                runCatching { Json.decodeFromString<ExportConfig>(configJson) }.getOrNull()
+            } ?: ExportConfig(
+                enabledTypes = HealthDataType.entries.toSet(),
+                frequency = ExportFrequency.DAILY,
+                autoSyncDrive = true,
+            )
+        return if (persisted.webhookUrl.isNotBlank()) {
+            base.copy(
+                webhookUrl = persisted.webhookUrl,
+                webhookAuthToken = persisted.webhookAuthToken,
+                autoSendWebhook = persisted.autoSendWebhook,
+                autoSendWebhookEvery2Hours = persisted.autoSendWebhookEvery2Hours,
+            )
+        } else {
+            base
+        }
+    }
 }
