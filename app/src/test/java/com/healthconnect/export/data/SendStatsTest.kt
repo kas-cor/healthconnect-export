@@ -24,7 +24,11 @@ class SendStatsTest {
 
     @Before
     fun clearPrefs() {
-        context.getSharedPreferences("healthconnect_export_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+        context
+            .getSharedPreferences("healthconnect_export_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .clear()
+            .commit()
     }
 
     @Test

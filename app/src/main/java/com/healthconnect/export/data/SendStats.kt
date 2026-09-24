@@ -22,8 +22,10 @@ data class LastSend(
     val failureMessage: String? = null,
 ) {
     /** Whole hours since the last successful send, or null when nothing was ever sent. */
-    fun hoursSinceSuccess(nowMs: Long = System.currentTimeMillis()): Long? =
-        successTimestampMs?.let { (nowMs - it) / 3_600_000L }
+    fun hoursSinceSuccess(nowMs: Long = System.currentTimeMillis()): Long? {
+        val successAt = successTimestampMs ?: return null
+        return (nowMs - successAt) / 3_600_000L
+    }
 
     /**
      * True when a successful send happened and is at least [maxAgeHours] old.
