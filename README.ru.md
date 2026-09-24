@@ -5,7 +5,7 @@
 [![Branches](https://raw.githubusercontent.com/kas-cor/healthconnect-export/main/badges/branches.svg)](https://github.com/kas-cor/healthconnect-export/actions/workflows/build-apk.yml)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Kotlin](https://img.shields.io/badge/kotlin-2.4.10-purple)](https://kotlinlang.org)
-[![Версия](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-1.8-blue)](CHANGELOG.md)
+[![Версия](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-1.9-blue)](CHANGELOG.md)
 [![Release](https://img.shields.io/github/v/release/kas-cor/healthconnect-export)](https://github.com/kas-cor/healthconnect-export/releases)
 [![English](https://img.shields.io/badge/README-English-blue)](README.md)
 
@@ -446,6 +446,7 @@ cp README.md README.fr.md
 
 | Версия | Дата | Что нового |
 |---|---|---|
+| [v1.9](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.9) | 2026-09-25 | Фоновая выгрузка переживает перезагрузки, Doze и агрессивную экономию батареи: будильник-watchdog, ресивер загрузки, догоняющая выгрузка пропущенных дней, журнал |
 | [v1.8](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.8) | 2026-08-10 | Действия с файлами в Истории (поделиться/удалить), экспорт JSON/CSV, автоочистка, час запуска расписания, 341 тест |
 | [v1.7](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.7) | 2026-08-10 | Проверка обновлений + диалог «Что нового», навигация по вкладкам, автовход в Google Drive, улучшения Истории |
 | [v1.6](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.6) | 2026-07-17 | Build-скрипт (`build.sh`), русский README (`README.ru.md`), проверка синхронизации README |

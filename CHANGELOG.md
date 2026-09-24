@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [1.9] — 2026-09-25
 
 ### Fixed
 - **Background delivery stopped silently:** a periodic run that threw `SecurityException`/`IllegalStateException` reported `failure`, and WorkManager terminates a failed periodic job permanently — delivery then stayed dead until the app was opened by hand
@@ -224,6 +224,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[1.9]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.9
 [1.8]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.8
 [1.7]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.7
 [1.6]: https://github.com/kas-cor/healthconnect-export/releases/tag/v1.6

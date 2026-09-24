@@ -5,7 +5,7 @@
 [![Branches](https://raw.githubusercontent.com/kas-cor/healthconnect-export/main/badges/branches.svg)](https://github.com/kas-cor/healthconnect-export/actions/workflows/build-apk.yml)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Kotlin](https://img.shields.io/badge/kotlin-2.4.10-purple)](https://kotlinlang.org)
-[![Version](https://img.shields.io/badge/version-1.8-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.9-blue)](CHANGELOG.md)
 [![Release](https://img.shields.io/github/v/release/kas-cor/healthconnect-export)](https://github.com/kas-cor/healthconnect-export/releases)
 [![Русский](https://img.shields.io/badge/README-%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-blue)](README.ru.md)
 
@@ -450,6 +450,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full release history.
 
 | Version | Date | Highlights |
 |---|---|---|
+| [v1.9](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.9) | 2026-09-25 | Background delivery survives reboots, Doze and OEM battery savers: watchdog alarm, boot receiver, catch-up of missed days, delivery log |
 | [v1.8](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.8) | 2026-08-10 | File actions in History (share/delete), JSON/CSV export format, auto-cleanup retention, schedule hour, 341 tests |
 | [v1.7](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.7) | 2026-08-10 | Update check + "What's new" dialog, tabbed navigation, Google Drive auto sign-in, History improvements |
 | [v1.6](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.6) | 2026-07-17 | Build script (`build.sh`), Russian README (`README.ru.md`), README sync validation |
