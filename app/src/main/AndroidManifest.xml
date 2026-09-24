@@ -39,6 +39,9 @@
     <!-- Foreground service for scheduled work -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Lets the user exempt the app from battery optimization (needed on
+         MIUI/HyperOS and similar ROMs, which otherwise silence periodic work) -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
@@ -72,6 +75,17 @@
         <property
             android:name="android.health.HealthConnectPermissions"
             android:value="@xml/health_connect_permissions" />
+
+        <!-- Re-registers the periodic work after reboot / app update -->
+        <receiver
+            android:name=".worker.BootRescheduleReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- WorkManager initialization -->
         <provider

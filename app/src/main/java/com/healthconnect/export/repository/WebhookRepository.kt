@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.healthconnect.export.R
 import com.healthconnect.export.data.DailyHealthRecord
+import com.healthconnect.export.data.SendStats
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -53,34 +54,75 @@ class WebhookRepository(
     /**
      * Отправляет массив записей на webhook URL через POST с JSON телом
      * с автоматическим retry при временных ошибках (1 повтор через 1 секунду).
+     *
+     * Результат каждой отправки сохраняется в [SendStats], чтобы экран расписания
+     * показывал время и HTTP-код последней доставки. Ручной тест соединения
+     * использует [sendRecordsForTest] — он намеренно не участвует в статистике,
+     * иначе маскировал бы сломанную фоновую отправку.
+     *
      * @return результат отправки
      */
     suspend fun sendRecords(
         webhookUrl: String,
         records: List<DailyHealthRecord>,
         authToken: String? = null,
+    ): WebhookResult = sendRecordsInternal(webhookUrl, records, authToken, recordStats = true)
+
+    /**
+     * Same POST as [sendRecords], but without touching the delivery diagnostics.
+     * Used by the manual "test webhook" button.
+     */
+    suspend fun sendRecordsForTest(
+        webhookUrl: String,
+        records: List<DailyHealthRecord>,
+        authToken: String? = null,
+    ): WebhookResult = sendRecordsInternal(webhookUrl, records, authToken, recordStats = false)
+
+    private suspend fun sendRecordsInternal(
+        webhookUrl: String,
+        records: List<DailyHealthRecord>,
+        authToken: String?,
+        recordStats: Boolean,
     ): WebhookResult =
         withContext(Dispatchers.IO) {
-            val maxAttempts = 2
-            var lastResult: WebhookResult? = null
-            for (attempt in 1..maxAttempts) {
-                lastResult = trySend(webhookUrl, records, authToken)
-                when (lastResult) {
-                    is WebhookResult.Success -> return@withContext lastResult
-                    is WebhookResult.Error -> {
-                        val error = lastResult as WebhookResult.Error
-                        // Retry only on network/timeout/server errors (status 0 = connection error, 5xx = server error)
-                        if (attempt < maxAttempts && (error.statusCode == 0 || error.statusCode in 500..599)) {
-                            Log.w(TAG, "sendRecords attempt $attempt failed (${error.statusCode}), retrying...")
-                            delay(1000)
-                        } else {
-                            return@withContext lastResult
-                        }
+            val result = sendWithRetry(webhookUrl, records, authToken)
+            if (recordStats) {
+                when (result) {
+                    is WebhookResult.Success -> SendStats.recordSuccess(context, result.statusCode, records)
+                    is WebhookResult.Error -> SendStats.recordFailure(context, result.statusCode, result.message)
+                }
+            }
+            result
+        }
+
+    /**
+     * Performs the POST with retry-on-transient-failure semantics.
+     * Retries only on network/timeout/server errors (status 0 = connection error, 5xx).
+     */
+    private suspend fun sendWithRetry(
+        webhookUrl: String,
+        records: List<DailyHealthRecord>,
+        authToken: String?,
+    ): WebhookResult {
+        val maxAttempts = 2
+        var lastResult: WebhookResult? = null
+        for (attempt in 1..maxAttempts) {
+            lastResult = trySend(webhookUrl, records, authToken)
+            when (lastResult) {
+                is WebhookResult.Success -> return lastResult
+                is WebhookResult.Error -> {
+                    val error = lastResult as WebhookResult.Error
+                    if (attempt < maxAttempts && (error.statusCode == 0 || error.statusCode in 500..599)) {
+                        Log.w(TAG, "sendRecords attempt $attempt failed (${error.statusCode}), retrying...")
+                        delay(1000)
+                    } else {
+                        return lastResult
                     }
                 }
             }
-            lastResult ?: WebhookResult.Error(0, "No result from sendRecords")
         }
+        return lastResult ?: WebhookResult.Error(0, "No result from sendRecords")
+    }
 
     private suspend fun trySend(
         webhookUrl: String,

@@ -253,4 +253,17 @@
     <string name="releases_url" translatable="false">https://github.com/kas-cor/healthconnect-export/releases/latest</string>
     <string name="api_releases_url" translatable="false">https://api.github.com/repos/kas-cor/healthconnect-export/releases/latest</string>
     <string name="nav_schedule">План</string>
+
+    <!-- Диагностика отправки на webhook (вкладка «План») -->
+    <string name="last_send_label">Последняя успешная отправка</string>
+    <string name="last_send_never">нет данных</string>
+    <string name="last_send_value">%1$s · HTTP-код %2$d</string>
+    <string name="last_send_stale">Данные не отправлялись %1$d ч — фоновая отправка, скорее всего, блокируется. Разрешите приложению работу в фоне и нажмите «Отправить сейчас».</string>
+    <string name="last_send_error">Последняя ошибка: HTTP %1$d %2$s</string>
+    <string name="send_missing_now">Отправить сейчас</string>
+    <string name="catch_up_started">Отправка пропущенных данных…</string>
+    <string name="battery_optimization_hint">Оптимизация батареи может блокировать отправку по расписанию.</string>
+    <string name="battery_optimization_off">Оптимизация батареи для приложения отключена.</string>
+    <string name="battery_optimization_allow">Разрешить</string>
+    <string name="battery_exemption_unavailable">Не удалось открыть настройки батареи — отключите оптимизацию для приложения вручную.</string>
 </resources>

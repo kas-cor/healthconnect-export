@@ -563,6 +563,11 @@ private fun ScheduleContent(
                 onAutoSendEvery2HoursChange = viewModel::setAutoSendWebhookEvery2Hours,
                 scheduleHour = uiState.scheduleHour,
                 onScheduleHourChange = viewModel::setScheduleHour,
+                lastSend = uiState.lastSend,
+                isIgnoringBatteryOptimizations = uiState.isIgnoringBatteryOptimizations,
+                onRequestBatteryExemption = viewModel::requestBatteryOptimizationExemption,
+                onSendMissingNow = viewModel::sendMissingDataNow,
+                onRefreshDiagnostics = viewModel::refreshSendDiagnostics,
             )
         }
         item { Spacer(modifier = Modifier.size(16.dp)) }

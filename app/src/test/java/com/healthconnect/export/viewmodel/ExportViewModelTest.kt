@@ -488,7 +488,7 @@ class ExportViewModelTest {
             assertNotNull(state.message)
 
             verify(mockHealthRepo).readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())
-            verify(mockWebhookRepo, never()).sendRecords(any(), any(), anyOrNull())
+            verify(mockWebhookRepo, never()).sendRecordsForTest(any(), any(), anyOrNull())
         }
     }
 
@@ -513,7 +513,7 @@ class ExportViewModelTest {
 
             whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
                 .thenReturn(records)
-            whenever(mockWebhookRepo.sendRecords(any(), any(), anyOrNull()))
+            whenever(mockWebhookRepo.sendRecordsForTest(any(), any(), anyOrNull()))
                 .thenReturn(WebhookResult.Success(200, ""))
 
             viewModel.testWebhook()
@@ -525,7 +525,7 @@ class ExportViewModelTest {
             assertNotNull(state.message)
 
             verify(mockHealthRepo).readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())
-            verify(mockWebhookRepo).sendRecords(
+            verify(mockWebhookRepo).sendRecordsForTest(
                 eq("https://example.com/webhook"),
                 eq(records),
                 anyOrNull(),
@@ -554,7 +554,7 @@ class ExportViewModelTest {
 
             whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
                 .thenReturn(records)
-            whenever(mockWebhookRepo.sendRecords(any(), any(), anyOrNull()))
+            whenever(mockWebhookRepo.sendRecordsForTest(any(), any(), anyOrNull()))
                 .thenReturn(WebhookResult.Error(500, "Internal Server Error"))
 
             viewModel.testWebhook()
@@ -566,7 +566,7 @@ class ExportViewModelTest {
             assertNotNull(state.message)
 
             verify(mockHealthRepo).readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())
-            verify(mockWebhookRepo).sendRecords(
+            verify(mockWebhookRepo).sendRecordsForTest(
                 eq("https://example.com/webhook"),
                 eq(records),
                 anyOrNull(),
@@ -629,7 +629,9 @@ class ExportViewModelTest {
         val state = viewModel.uiState.value
         assertEquals("com.test.package", state.selectedSourcePackage)
         verify(mockPrefsEditor).putString("selected_source_package", "com.test.package")
-        verify(mockPrefsEditor).apply()
+        // apply() is also called once at app start to persist the scheduled
+        // config, so only the fact of the commit is asserted here.
+        verify(mockPrefsEditor, atLeastOnce()).apply()
     }
 
     @Test
@@ -639,7 +641,8 @@ class ExportViewModelTest {
         val state = viewModel.uiState.value
         assertNull(state.selectedSourcePackage)
         verify(mockPrefsEditor).putString("selected_source_package", null)
-        verify(mockPrefsEditor).apply()
+        // see the note above: app start persists the scheduled config as well
+        verify(mockPrefsEditor, atLeastOnce()).apply()
     }
 
     @Test

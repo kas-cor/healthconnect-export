@@ -33,7 +33,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.healthconnect.export.R
 import com.healthconnect.export.data.ExportFrequency
+import com.healthconnect.export.data.LastSend
 import com.healthconnect.export.viewmodel.ScheduleStatus
+import com.healthconnect.export.worker.Every2HoursWebhookWorker
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun ScheduleCard(
@@ -47,6 +52,11 @@ fun ScheduleCard(
     onAutoSendEvery2HoursChange: (Boolean) -> Unit = {},
     scheduleHour: Int? = null,
     onScheduleHourChange: (Int?) -> Unit = {},
+    lastSend: LastSend? = null,
+    isIgnoringBatteryOptimizations: Boolean = false,
+    onRequestBatteryExemption: () -> Unit = {},
+    onSendMissingNow: () -> Unit = {},
+    onRefreshDiagnostics: () -> Unit = {},
 ) {
     MaterialCard {
         Column {
@@ -134,9 +144,101 @@ fun ScheduleCard(
                     modifier = Modifier.weight(1f),
                 )
             }
+
+            // ── Delivery diagnostics ────────────────────────────────────────
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = stringResource(R.string.last_send_label),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = lastSendSummary(lastSend),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                TextButton(onClick = onRefreshDiagnostics) {
+                    Text(stringResource(R.string.refresh))
+                }
+            }
+
+            LastSendWarning(lastSend)
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text =
+                        if (isIgnoringBatteryOptimizations) {
+                            stringResource(R.string.battery_optimization_off)
+                        } else {
+                            stringResource(R.string.battery_optimization_hint)
+                        },
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.weight(1f),
+                )
+                if (!isIgnoringBatteryOptimizations) {
+                    TextButton(onClick = onRequestBatteryExemption) {
+                        Text(stringResource(R.string.battery_optimization_allow))
+                    }
+                }
+            }
+
+            TextButton(onClick = onSendMissingNow, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.send_missing_now))
+            }
         }
     }
 }
+
+/**
+ * "dd.MM HH:mm · HTTP 200" for the last delivered payload, or a "never" label.
+ * [LastSend] timestamps are epoch millis; the app always displays local time.
+ */
+@Composable
+private fun lastSendSummary(lastSend: LastSend?): String {
+    val timestampMs = lastSend?.successTimestampMs ?: return stringResource(R.string.last_send_never)
+    val formatted = LAST_SEND_FORMAT.format(Instant.ofEpochMilli(timestampMs))
+    val statusCode = lastSend.successStatusCode
+    return if (statusCode == null) {
+        formatted
+    } else {
+        stringResource(R.string.last_send_value, formatted, statusCode)
+    }
+}
+
+/**
+ * Shows either the stale-data warning (nothing delivered for longer than the
+ * catch-up threshold) or the most recent delivery error, if any.
+ */
+@Composable
+private fun LastSendWarning(lastSend: LastSend?) {
+    if (lastSend == null) return
+    val hours = lastSend.hoursSinceSuccess()
+    val text =
+        when {
+            hours != null && hours >= Every2HoursWebhookWorker.STALE_AFTER_HOURS ->
+                stringResource(R.string.last_send_stale, hours)
+            lastSend.failureMessage != null ->
+                stringResource(R.string.last_send_error, lastSend.failureStatusCode ?: 0, lastSend.failureMessage)
+            else -> null
+        }
+    if (text != null) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+}
+
+private val LAST_SEND_FORMAT: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("dd.MM HH:mm").withZone(ZoneId.systemDefault())
 
 @Composable
 fun exportFrequencyDisplayName(freq: ExportFrequency): String =

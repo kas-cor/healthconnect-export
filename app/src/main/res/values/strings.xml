@@ -253,4 +253,17 @@
     <string name="releases_url" translatable="false">https://github.com/kas-cor/healthconnect-export/releases/latest</string>
     <string name="api_releases_url" translatable="false">https://api.github.com/repos/kas-cor/healthconnect-export/releases/latest</string>
     <string name="nav_schedule">Plan</string>
+
+    <!-- Webhook send diagnostics (Schedule tab) -->
+    <string name="last_send_label">Last successful send</string>
+    <string name="last_send_never">never</string>
+    <string name="last_send_value">%1$s · HTTP %2$d</string>
+    <string name="last_send_stale">No data delivered for %1$d h — background sending is likely blocked. Allow the app to run in the background and tap "Send now".</string>
+    <string name="last_send_error">Last error: HTTP %1$d %2$s</string>
+    <string name="send_missing_now">Send now</string>
+    <string name="catch_up_started">Sending missed data…</string>
+    <string name="battery_optimization_hint">Battery optimization may block scheduled sending.</string>
+    <string name="battery_optimization_off">Battery optimization is disabled for this app.</string>
+    <string name="battery_optimization_allow">Allow</string>
+    <string name="battery_exemption_unavailable">Could not open battery settings — disable optimization for this app manually.</string>
 </resources>

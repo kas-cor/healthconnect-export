@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.healthconnect.export.data.DailyHealthRecord
 import com.healthconnect.export.data.ExportMetadata
+import com.healthconnect.export.data.SendStats
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
@@ -13,6 +14,7 @@ import org.robolectric.annotation.Config
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.ServerSocket
+import java.time.LocalDate
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -578,5 +580,49 @@ class WebhookRepositoryTest {
             assertEquals(500, error.statusCode)
             assertTrue(error.message.isNotBlank())
         }
+    }
+
+    // =============================================
+    // Last-send diagnostics (SendStats)
+    // =============================================
+
+    @Test
+    fun `successful send records the last send diagnostics`() {
+        withServer(responseCode = 200, responseBody = "{}") { url ->
+            val result = runBlocking { repo.sendRecords(url, singleRecord, null) }
+            assertTrue(result is WebhookResult.Success)
+        }
+
+        val last = SendStats.lastSend(context)
+
+        assertEquals(200, last.successStatusCode)
+        assertEquals(LocalDate.parse("2026-05-24"), last.lastSentDate)
+        assertNotNull(last.successTimestampMs)
+    }
+
+    @Test
+    fun `recordStats false leaves the diagnostics untouched`() {
+        withServer(responseCode = 200, responseBody = "{}") { url ->
+            val result = runBlocking { repo.sendRecordsForTest(url, singleRecord, null) }
+            assertTrue(result is WebhookResult.Success)
+        }
+
+        val last = SendStats.lastSend(context)
+
+        assertNull(last.successStatusCode)
+        assertNull(last.successTimestampMs)
+    }
+
+    @Test
+    fun `failed send records the error without a success`() {
+        withServer(responseCode = 400, responseBody = "bad request") { url ->
+            val result = runBlocking { repo.sendRecords(url, singleRecord, null) }
+            assertTrue(result is WebhookResult.Error)
+        }
+
+        val last = SendStats.lastSend(context)
+
+        assertEquals(400, last.failureStatusCode)
+        assertNull(last.successTimestampMs)
     }
 }

@@ -3,6 +3,9 @@ package com.healthconnect.export.viewmodel
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
 import android.util.Log
 import androidx.activity.result.ActivityResult
 import androidx.core.content.FileProvider
@@ -16,6 +19,7 @@ import com.healthconnect.export.repository.LocalExportRepository
 import com.healthconnect.export.usecase.ExportDataUseCase
 import com.healthconnect.export.usecase.ExportStep
 import com.healthconnect.export.util.LocaleManager
+import com.healthconnect.export.worker.Every2HoursWebhookWorker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -64,6 +68,10 @@ data class ExportUiState(
     val exportFormat: ExportFormat = ExportFormat.JSON,
     val scheduleHour: Int? = null,
     val retentionDays: Int? = null,
+    /** Last webhook send outcome — drives the diagnostics row on the Schedule tab. */
+    val lastSend: LastSend? = null,
+    /** Whether the app is already exempt from battery optimization. */
+    val isIgnoringBatteryOptimizations: Boolean = false,
 )
 
 sealed class DriveStatus {
@@ -172,7 +180,101 @@ class ExportViewModel(
         // Re-schedule the periodic export without popping a confirmation
         // snackbar at every app start.
         scheduleManager.scheduleExport(_uiState.value, showMessage = false)
+        // Diagnostics + self-healing: show the last delivery and, when background
+        // sending silently stalled, push the missed days right away.
+        refreshSendDiagnostics()
+        triggerCatchUpIfStale()
         fetchAvailableSources()
+    }
+
+    // ── Webhook send diagnostics / self-healing ─────────────────────────────
+
+    /**
+     * Loads the last webhook send outcome and the battery-optimization state.
+     */
+    fun refreshSendDiagnostics() {
+        _uiState.update {
+            it.copy(
+                lastSend = SendStats.lastSend(getApplication()),
+                isIgnoringBatteryOptimizations = isBatteryOptimizationIgnored(),
+            )
+        }
+    }
+
+    /**
+     * Called at app start: when the last successful send is older than
+     * [Every2HoursWebhookWorker.STALE_AFTER_HOURS], enqueue an immediate
+     * one-time catch-up run so the silence does not become a permanent gap.
+     */
+    fun triggerCatchUpIfStale() {
+        val enqueued =
+            Every2HoursWebhookWorker.scheduleCatchUpIfStale(
+                getApplication(),
+                currentExportConfig(),
+            )
+        if (enqueued) {
+            refreshSendDiagnostics()
+            _uiState.update { it.copy(message = str(R.string.catch_up_started)) }
+        }
+    }
+
+    /**
+     * Manual escape hatch on the Schedule screen: enqueue the catch-up run now,
+     * regardless of how old the last successful send is.
+     */
+    fun sendMissingDataNow() {
+        val app = getApplication<Application>()
+        val config = currentExportConfig()
+        if (config.webhookUrl.isBlank()) {
+            _uiState.update { it.copy(message = str(R.string.enter_url_first)) }
+            return
+        }
+        Every2HoursWebhookWorker.scheduleCatchUp(
+            app,
+            config,
+            Every2HoursWebhookWorker.catchUpFromDate(SendStats.lastSend(app)),
+        )
+        _uiState.update { it.copy(message = str(R.string.catch_up_started)) }
+    }
+
+    private fun isBatteryOptimizationIgnored(): Boolean =
+        try {
+            val app = getApplication<Application>()
+            val powerManager = app.getSystemService(Context.POWER_SERVICE) as? PowerManager
+            powerManager?.isIgnoringBatteryOptimizations(app.packageName) ?: false
+        } catch (e: Exception) {
+            false
+        }
+
+    /**
+     * Opens the system dialog that exempts the app from battery optimization.
+     * Falls back to the app's settings page on devices/ROMs without that dialog.
+     * The Schedule screen shows the result; the user may also flip the switch
+     * manually in system settings.
+     */
+    fun requestBatteryOptimizationExemption() {
+        val app = getApplication<Application>()
+        val candidates =
+            listOf(
+                Intent(
+                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:${app.packageName}"),
+                ),
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:${app.packageName}"),
+                ),
+            )
+        for (intent in candidates) {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            try {
+                app.startActivity(intent)
+                return
+            } catch (e: Exception) {
+                Log.w("ExportViewModel", "Battery exemption intent unavailable", e)
+            }
+        }
+        _uiState.update { it.copy(message = str(R.string.battery_exemption_unavailable)) }
     }
 
     private fun loadSelectedTypes() {

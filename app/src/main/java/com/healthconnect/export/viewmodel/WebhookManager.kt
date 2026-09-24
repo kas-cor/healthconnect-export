@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.healthconnect.export.R
 import com.healthconnect.export.data.DailyHealthRecord
 import com.healthconnect.export.data.ExportConfig
+import com.healthconnect.export.data.SendStats
 import com.healthconnect.export.repository.HealthConnectRepository
 import com.healthconnect.export.repository.WebhookRepository
 import com.healthconnect.export.repository.WebhookResult
@@ -168,7 +169,8 @@ class WebhookManager(
 
     /**
      * Sends exported health records to the configured webhook URL.
-     * Updates UI state with success/error messages.
+     * Updates UI state with success/error messages and refreshes the
+     * "last successful send" diagnostics.
      */
     fun sendToWebhook(
         url: String,
@@ -182,6 +184,7 @@ class WebhookManager(
                     _uiState.update {
                         it.copy(
                             message = application.getString(R.string.vm_webhook_success, result.statusCode),
+                            lastSend = SendStats.lastSend(application),
                         )
                     }
                 }
@@ -189,6 +192,7 @@ class WebhookManager(
                     _uiState.update {
                         it.copy(
                             message = application.getString(R.string.vm_webhook_error, result.statusCode, result.message),
+                            lastSend = SendStats.lastSend(application),
                         )
                     }
                 }
@@ -234,7 +238,7 @@ class WebhookManager(
                         return@launch
                     }
 
-                    when (val result = webhookRepo.sendRecords(state.webhookUrl, records, state.webhookAuthToken)) {
+                    when (val result = webhookRepo.sendRecordsForTest(state.webhookUrl, records, state.webhookAuthToken)) {
                         is WebhookResult.Success -> {
                             _uiState.update {
                                 it.copy(message = application.getString(R.string.vm_webhook_test_success, result.statusCode))

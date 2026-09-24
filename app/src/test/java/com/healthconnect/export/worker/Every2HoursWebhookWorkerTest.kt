@@ -544,4 +544,211 @@ class Every2HoursWebhookWorkerTest {
     fun `key config constant is correct`() {
         assertEquals("webhook_config", Every2HoursWebhookWorker.KEY_CONFIG)
     }
+
+    // =============================================
+    // Catch-up runs (self-healing)
+    // =============================================
+
+    private fun catchUpConfig(
+        webhookUrl: String = "https://hooks.example.com/data",
+        autoSend2h: Boolean = true,
+        autoSend: Boolean = false,
+    ) = ExportConfig(
+        enabledTypes = setOf(HealthDataType.STEPS),
+        frequency = ExportFrequency.MANUAL,
+        autoSyncDrive = false,
+        webhookUrl = webhookUrl,
+        autoSendWebhook = autoSend,
+        autoSendWebhookEvery2Hours = autoSend2h,
+    )
+
+    private fun createCatchUpWorker(
+        config: ExportConfig,
+        fromDate: String,
+    ): Every2HoursWebhookWorker {
+        val worker =
+            TestListenableWorkerBuilder<Every2HoursWebhookWorker>(mockApp)
+                .setInputData(
+                    workDataOf(
+                        Every2HoursWebhookWorker.KEY_CONFIG to json.encodeToString(config),
+                        Every2HoursWebhookWorker.KEY_FROM_DATE to fromDate,
+                    ),
+                )
+                .build()
+        setField(worker, "healthRepo", mockHealthRepo)
+        setField(worker, "webhookRepo", mockWebhookRepo)
+        return worker
+    }
+
+    @Test
+    fun `catch up run reads and sends the whole missed window`() {
+        runBlocking {
+            val from = LocalDate.now().minusDays(3)
+            whenever(
+                mockHealthRepo.readPeriodInBatch(eq(from), eq(LocalDate.now()), any(), anyOrNull(), anyOrNull()),
+            ).thenReturn(listOf(todayRecord))
+            whenever(mockWebhookRepo.sendRecords(any(), any(), anyOrNull()))
+                .thenReturn(WebhookResult.Success(200, "OK"))
+
+            val result = createCatchUpWorker(catchUpConfig(), from.toString()).doWork()
+
+            assertEquals(ListenableWorker.Result.success(), result)
+            verify(mockHealthRepo).readPeriodInBatch(eq(from), eq(LocalDate.now()), any(), anyOrNull(), anyOrNull())
+            verify(mockWebhookRepo).sendRecords(eq(catchUpConfig().webhookUrl), eq(listOf(todayRecord)), anyOrNull())
+        }
+    }
+
+    @Test
+    fun `catch up start date in the future is clamped to today`() {
+        runBlocking {
+            whenever(
+                mockHealthRepo.readPeriodInBatch(eq(LocalDate.now()), eq(LocalDate.now()), any(), anyOrNull(), anyOrNull()),
+            ).thenReturn(listOf(todayRecord))
+            whenever(mockWebhookRepo.sendRecords(any(), any(), anyOrNull()))
+                .thenReturn(WebhookResult.Success(200, "OK"))
+
+            val result =
+                createCatchUpWorker(catchUpConfig(), LocalDate.now().plusDays(5).toString()).doWork()
+
+            assertEquals(ListenableWorker.Result.success(), result)
+            verify(mockHealthRepo).readPeriodInBatch(eq(LocalDate.now()), eq(LocalDate.now()), any(), anyOrNull(), anyOrNull())
+        }
+    }
+
+    @Test
+    fun `malformed catch up start date falls back to today`() {
+        runBlocking {
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
+                .thenReturn(listOf(todayRecord))
+            whenever(mockWebhookRepo.sendRecords(any(), any(), anyOrNull()))
+                .thenReturn(WebhookResult.Success(200, "OK"))
+
+            val result = createCatchUpWorker(catchUpConfig(), "not-a-date").doWork()
+
+            assertEquals(ListenableWorker.Result.success(), result)
+            verify(mockHealthRepo).readPeriodInBatch(eq(LocalDate.now()), eq(LocalDate.now()), any(), anyOrNull(), anyOrNull())
+        }
+    }
+
+    @Test
+    fun `nothing is sent when no health data is available`() {
+        runBlocking {
+            whenever(mockHealthRepo.readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull()))
+                .thenReturn(emptyList())
+
+            val result = createWorker(catchUpConfig()).doWork()
+
+            assertEquals(ListenableWorker.Result.success(), result)
+            verify(mockWebhookRepo, never()).sendRecords(any(), any(), anyOrNull())
+        }
+    }
+
+    @Test
+    fun `scheduleCatchUp enqueues a one-time run`() {
+        Every2HoursWebhookWorker.scheduleCatchUp(mockApp, catchUpConfig(), LocalDate.now().minusDays(2))
+
+        val liveData =
+            WorkManager
+                .getInstance(mockApp)
+                .getWorkInfosForUniqueWorkLiveData(Every2HoursWebhookWorker.WORK_NAME_CATCH_UP)
+        assertNotNull("catch-up work should be registered", liveData)
+    }
+
+    @Test
+    fun `scheduleCatchUp without url does not enqueue anything`() {
+        // Must not throw and must not touch WorkManager with a blank url
+        Every2HoursWebhookWorker.scheduleCatchUp(mockApp, catchUpConfig(webhookUrl = " "), LocalDate.now())
+    }
+
+    @Test
+    fun `catch up if stale is skipped when the webhook features are off`() {
+        val enqueued =
+            Every2HoursWebhookWorker.scheduleCatchUpIfStale(
+                mockApp,
+                catchUpConfig(autoSend2h = false, autoSend = false),
+            )
+
+        assertFalse(enqueued)
+    }
+
+    @Test
+    fun `catch up if stale is skipped when no url is configured`() {
+        val enqueued =
+            Every2HoursWebhookWorker.scheduleCatchUpIfStale(mockApp, catchUpConfig(webhookUrl = ""))
+
+        assertFalse(enqueued)
+    }
+
+    @Test
+    fun `catch up if stale is skipped when nothing was ever sent`() {
+        val enqueued = Every2HoursWebhookWorker.scheduleCatchUpIfStale(mockApp, catchUpConfig())
+
+        assertFalse(enqueued)
+    }
+
+    @Test
+    fun `catch up if stale enqueues when the last success is old`() {
+        val prefs = mock<android.content.SharedPreferences>()
+        whenever(mockApp.getSharedPreferences(any(), any())).thenReturn(prefs)
+        whenever(prefs.getLong(eq("last_webhook_success_ms"), any()))
+            .thenReturn(System.currentTimeMillis() - 30 * 3_600_000L)
+        whenever(prefs.getInt(eq("last_webhook_success_code"), any())).thenReturn(200)
+
+        val enqueued = Every2HoursWebhookWorker.scheduleCatchUpIfStale(mockApp, catchUpConfig())
+
+        assertTrue(enqueued)
+        val liveData =
+            WorkManager
+                .getInstance(mockApp)
+                .getWorkInfosForUniqueWorkLiveData(Every2HoursWebhookWorker.WORK_NAME_CATCH_UP)
+        assertNotNull("catch-up work should be registered", liveData)
+    }
+
+    @Test
+    fun `catch up if stale is skipped when the last success is recent`() {
+        val prefs = mock<android.content.SharedPreferences>()
+        whenever(mockApp.getSharedPreferences(any(), any())).thenReturn(prefs)
+        whenever(prefs.getLong(eq("last_webhook_success_ms"), any()))
+            .thenReturn(System.currentTimeMillis() - 3_600_000L)
+        whenever(prefs.getInt(eq("last_webhook_success_code"), any())).thenReturn(200)
+
+        val enqueued = Every2HoursWebhookWorker.scheduleCatchUpIfStale(mockApp, catchUpConfig())
+
+        assertFalse(enqueued)
+    }
+
+    @Test
+    fun `catch up window resumes the day after the last delivered one`() {
+        val from =
+            Every2HoursWebhookWorker.catchUpFromDate(
+                LastSend(lastSentDate = LocalDate.now().minusDays(2)),
+            )
+
+        assertEquals(LocalDate.now().minusDays(1), from)
+    }
+
+    @Test
+    fun `catch up window is clamped to the maximum lookback`() {
+        val from =
+            Every2HoursWebhookWorker.catchUpFromDate(
+                LastSend(lastSentDate = LocalDate.now().minusDays(90)),
+            )
+
+        assertEquals(LocalDate.now().minusDays(Every2HoursWebhookWorker.MAX_CATCH_UP_DAYS), from)
+    }
+
+    @Test
+    fun `catch up window without history starts today`() {
+        assertEquals(LocalDate.now(), Every2HoursWebhookWorker.catchUpFromDate(LastSend()))
+    }
+
+    @Test
+    fun `catch up work name constant is correct`() {
+        assertEquals("webhook_catch_up", Every2HoursWebhookWorker.WORK_NAME_CATCH_UP)
+    }
+
+    @Test
+    fun `stale threshold constant is six hours`() {
+        assertEquals(6L, Every2HoursWebhookWorker.STALE_AFTER_HOURS)
+    }
 }

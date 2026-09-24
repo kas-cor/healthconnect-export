@@ -6,6 +6,7 @@ import androidx.work.*
 import com.healthconnect.export.data.ExportConfig
 import com.healthconnect.export.data.ExportFrequency
 import com.healthconnect.export.data.HealthDataType
+import com.healthconnect.export.data.ScheduledConfigStore
 import com.healthconnect.export.repository.GoogleDriveRepository
 import com.healthconnect.export.repository.HealthConnectRepository
 import com.healthconnect.export.repository.LocalExportRepository
@@ -41,16 +42,14 @@ class DailyExportWorker(
                 WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
                 // Also cancel 2-hour webhook if manual is selected
                 Every2HoursWebhookWorker.cancel(context)
+                ScheduledConfigStore.clear(context)
                 return
             }
+            // Remember the config so background entry points without UI state
+            // (reboot/app-update receiver) can re-register this schedule.
+            ScheduledConfigStore.save(context, config)
             // Schedule 2-hour webhook if enabled
             scheduleEvery2HoursWebhook(context, config)
-
-            val constraints =
-                Constraints
-                    .Builder()
-                    .setRequiresBatteryNotLow(true)
-                    .build()
 
             val inputData =
                 workDataOf(
@@ -61,8 +60,7 @@ class DailyExportWorker(
                 PeriodicWorkRequestBuilder<DailyExportWorker>(
                     config.frequency.hours,
                     TimeUnit.HOURS,
-                ).setConstraints(constraints)
-                    .setInputData(inputData)
+                ).setInputData(inputData)
                     .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.MINUTES)
 
             // If a time of day is configured, delay the first run until the next
@@ -77,9 +75,12 @@ class DailyExportWorker(
 
             val request = requestBuilder.build()
 
+            // UPDATE, not KEEP: with KEEP the first-ever request (and its stale
+            // webhook URL/token/data-type set in inputData) survived every app
+            // start, so config changes never reached the running work.
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 WORK_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.UPDATE,
                 request,
             )
         }
@@ -87,6 +88,7 @@ class DailyExportWorker(
         fun cancel(context: Context) {
             WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
             Every2HoursWebhookWorker.cancel(context)
+            ScheduledConfigStore.clear(context)
         }
 
         /**

@@ -22,6 +22,9 @@ Android app for exporting Google Health Connect data to JSON format with optiona
 - **Webhook delivery** — POST JSON to a URL (with optional Bearer auth, retry on failure)
 - **Webhook test** — test connectivity with today's data directly from UI
 - **Every-2-hours webhook** — send current day's data to webhook every 2 hours (no Drive sync)
+- **Delivery diagnostics** — the Schedule tab shows the last successful webhook send (local time + HTTP code) and warns when nothing has been delivered for 6+ hours
+- **Catch-up on launch** — when the last successful send is older than 6 hours, the missed days are sent immediately on app start (window capped at 7 days); "Send now" triggers the same run manually
+- **Background reliability** — periodic work is re-registered after a reboot or app update, and the Schedule tab offers a one-tap battery-optimization exemption for ROMs that silence background jobs
 - **20 data types** — steps, heart rate, sleep, calories, exercise, nutrition, speed, and more
 - **Date range selection** — last 7/30 days or custom range with date picker
 - **Data source selection** — pick preferred health data source (Google Fit, Samsung Health, etc.)

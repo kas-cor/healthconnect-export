@@ -4,6 +4,7 @@ import android.app.ActivityManager
 import android.app.Application
 import android.app.job.JobScheduler
 import android.content.Context
+import android.content.SharedPreferences
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.content.res.Resources
@@ -842,5 +843,53 @@ class DailyExportWorkerTest {
             // Webhook is not called because Drive exception interrupted the flow
             verify(mockWebhookRepo, never()).sendRecords(any(), any(), anyOrNull())
         }
+    }
+
+    // =============================================
+    // Schedule persistence (reboot / app-update restore)
+    // =============================================
+
+    private fun prefsWithEditor(): SharedPreferences.Editor {
+        val prefs = mock<SharedPreferences>()
+        val editor = mock<SharedPreferences.Editor>()
+        whenever(prefs.edit()).thenReturn(editor)
+        whenever(editor.putString(any(), any())).thenReturn(editor)
+        whenever(editor.remove(any())).thenReturn(editor)
+        whenever(mockApp.getSharedPreferences(any(), any())).thenReturn(prefs)
+        return editor
+    }
+
+    private fun scheduledConfig(frequency: ExportFrequency = ExportFrequency.DAILY) =
+        ExportConfig(
+            enabledTypes = setOf(HealthDataType.STEPS),
+            frequency = frequency,
+            autoSyncDrive = false,
+        )
+
+    @Test
+    fun `schedule persists the config so it can be restored after a reboot`() {
+        val editor = prefsWithEditor()
+
+        DailyExportWorker.schedule(mockApp, scheduledConfig())
+
+        verify(editor).putString(eq("scheduled_config"), any())
+    }
+
+    @Test
+    fun `manual frequency clears the persisted config`() {
+        val editor = prefsWithEditor()
+
+        DailyExportWorker.schedule(mockApp, scheduledConfig(ExportFrequency.MANUAL))
+
+        verify(editor).remove("scheduled_config")
+    }
+
+    @Test
+    fun `cancel clears the persisted config`() {
+        val editor = prefsWithEditor()
+
+        DailyExportWorker.cancel(mockApp)
+
+        verify(editor).remove("scheduled_config")
     }
 }
