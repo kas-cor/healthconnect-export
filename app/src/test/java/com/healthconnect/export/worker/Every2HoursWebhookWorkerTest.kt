@@ -14,6 +14,7 @@ import androidx.work.testing.WorkManagerTestInitHelper
 import com.healthconnect.export.data.*
 import com.healthconnect.export.repository.HealthConnectRepository
 import com.healthconnect.export.repository.WebhookRepository
+import com.healthconnect.export.testing.FakeSharedPreferences
 import com.healthconnect.export.repository.WebhookResult
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
@@ -60,6 +61,7 @@ class Every2HoursWebhookWorkerTest {
         whenever(mockApp.filesDir).thenReturn(tempDir)
         whenever(mockApp.getExternalFilesDir(anyOrNull())).thenReturn(tempDir)
         whenever(mockApp.packageName).thenReturn("com.healthconnect.export")
+        whenever(mockApp.getSharedPreferences(any(), any())).thenReturn(FakeSharedPreferences())
 
         // Stubs required for WorkManagerTestInitHelper
         val mockPm = mock<PackageManager>()
@@ -235,13 +237,13 @@ class Every2HoursWebhookWorkerTest {
     }
 
     @Test
-    fun `no input data returns failure`() {
+    fun `no input data falls back to saved settings`() {
         runBlocking {
             // No config passed → empty input data
             val worker = createWorker(config = null)
             val result = worker.doWork()
 
-            assertEquals(ListenableWorker.Result.failure(), result)
+            assertEquals(ListenableWorker.Result.success(), result)
 
             verify(mockHealthRepo, never()).readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())
             verify(mockWebhookRepo, never()).sendRecords(any(), any(), anyOrNull())
@@ -249,7 +251,7 @@ class Every2HoursWebhookWorkerTest {
     }
 
     @Test
-    fun `malformed config json returns failure`() {
+    fun `malformed config json falls back to saved settings`() {
         runBlocking {
             val worker =
                 TestListenableWorkerBuilder<Every2HoursWebhookWorker>(mockApp)
@@ -262,7 +264,7 @@ class Every2HoursWebhookWorkerTest {
 
             // Malformed JSON throws SerializationException (extends IllegalArgumentException,
             // which is a RuntimeException) → caught by catch (e: Exception) → retry
-            assertEquals(ListenableWorker.Result.retry(), result)
+            assertEquals(ListenableWorker.Result.success(), result)
 
             verify(mockHealthRepo, never()).readPeriodInBatch(any(), any(), any(), anyOrNull(), anyOrNull())
             verify(mockWebhookRepo, never()).sendRecords(any(), any(), anyOrNull())
@@ -274,7 +276,7 @@ class Every2HoursWebhookWorkerTest {
     // =============================================
 
     @Test
-    fun `security exception returns failure`() {
+    fun `security exception returns retry`() {
         runBlocking {
             val config =
                 ExportConfig(
@@ -291,12 +293,12 @@ class Every2HoursWebhookWorkerTest {
             val worker = createWorker(config)
             val result = worker.doWork()
 
-            assertEquals(ListenableWorker.Result.failure(), result)
+            assertEquals(ListenableWorker.Result.retry(), result)
         }
     }
 
     @Test
-    fun `illegal state exception returns failure`() {
+    fun `illegal state exception returns retry`() {
         runBlocking {
             val config =
                 ExportConfig(
@@ -313,7 +315,7 @@ class Every2HoursWebhookWorkerTest {
             val worker = createWorker(config)
             val result = worker.doWork()
 
-            assertEquals(ListenableWorker.Result.failure(), result)
+            assertEquals(ListenableWorker.Result.retry(), result)
         }
     }
 

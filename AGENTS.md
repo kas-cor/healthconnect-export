@@ -429,8 +429,12 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 - **Daily**: 24h interval via WorkManager `PeriodicWorkRequest`
 - **Weekly**: 168h interval
 - **Every 2 hours**: Optional webhook-only sending of current day's data (checkbox in Schedule section)
-- Default: **Daily** (set at app startup)
-- Policy: `ExistingPeriodicWorkPolicy.KEEP` (main), `UPDATE` (2-hour webhook)
+- Default: **Daily** (persisted in `export_frequency`, restored at app startup)
+- Policy: `ExistingPeriodicWorkPolicy.UPDATE` (both periodic jobs)
+- Constraints: none — a `RequiresBatteryNotLow` constraint silently blocked both workers
+- **Watchdog**: `DeliveryWatchdog` arms an inexact Doze-allowed alarm (every 6h) that re-enqueues both periodic jobs and queues `CatchUpWebhookWorker`; `DeliveryBootReceiver` does the same after `BOOT_COMPLETED` / `MY_PACKAGE_REPLACED` / `QUICKBOOT_POWERON`
+- **Catch-up**: `CatchUpWebhookWorker` sends every day after `DeliveryLog.lastDataDate` (default window 7 days, capped at 30); the periodic and catch-up workers never return `Result.failure()` — WorkManager terminates a failed job permanently
+- **Diagnostics**: `DeliveryLog` keeps the last attempt, the last success and a 100-entry ring buffer in SharedPreferences; the Schedule tab renders them plus the battery-optimization state
 
 ---
 

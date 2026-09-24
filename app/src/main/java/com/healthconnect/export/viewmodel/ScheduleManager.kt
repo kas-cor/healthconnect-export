@@ -4,7 +4,9 @@ import android.app.Application
 import com.healthconnect.export.R
 import com.healthconnect.export.data.ExportConfig
 import com.healthconnect.export.data.ExportFrequency
+import com.healthconnect.export.util.ExportSettings
 import com.healthconnect.export.worker.DailyExportWorker
+import com.healthconnect.export.worker.DeliveryWatchdog
 
 /**
  * Manages schedule-related logic for health data export.
@@ -54,11 +56,18 @@ class ScheduleManager(
 
     /**
      * Updates the export frequency in the UI state.
+     *
+     * The choice is persisted, otherwise every launch silently fell back to
+     * Daily — including the Manual option, which then started exporting again
+     * by itself. Manual only cancels the periodic export: the every-2-hours
+     * webhook has its own switch and must keep running.
      */
     fun setFrequency(freq: ExportFrequency) {
         onStateUpdate { copy(frequency = freq) }
+        ExportSettings.saveFrequency(application, freq)
         if (freq == ExportFrequency.MANUAL) {
-            DailyExportWorker.cancel(application)
+            DailyExportWorker.cancelDaily(application)
+            DailyExportWorker.scheduleEvery2HoursWebhook(application, ExportSettings.loadConfig(application))
         }
     }
 
@@ -76,6 +85,9 @@ class ScheduleManager(
     ) {
         val config = buildConfig(state)
         DailyExportWorker.schedule(application, config)
+        // The watchdog alarm is an independent trigger: it survives Doze and OEM
+        // background restrictions, where the periodic job alone can be starved.
+        DeliveryWatchdog.armAlarm(application)
         onStateUpdate {
             copy(
                 scheduleStatus =
@@ -99,6 +111,7 @@ class ScheduleManager(
      */
     fun cancelSchedule() {
         DailyExportWorker.cancel(application)
+        DeliveryWatchdog.cancelAlarm(application)
         onStateUpdate {
             copy(
                 scheduleStatus = ScheduleStatus.NotScheduled,

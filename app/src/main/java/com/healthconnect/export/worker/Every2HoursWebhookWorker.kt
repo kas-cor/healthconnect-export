@@ -5,6 +5,9 @@ import androidx.work.*
 import com.healthconnect.export.data.ExportConfig
 import com.healthconnect.export.repository.HealthConnectRepository
 import com.healthconnect.export.repository.WebhookRepository
+import com.healthconnect.export.repository.WebhookResult
+import com.healthconnect.export.util.DeliveryLog
+import com.healthconnect.export.util.ExportSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
@@ -23,6 +26,7 @@ class Every2HoursWebhookWorker(
     companion object {
         const val WORK_NAME = "every_2_hours_webhook"
         const val KEY_CONFIG = "webhook_config"
+        private const val TRIGGER = "every-2h"
         private val json = Json { ignoreUnknownKeys = true }
 
         fun schedule(
@@ -34,12 +38,6 @@ class Every2HoursWebhookWorker(
                 return
             }
 
-            val constraints =
-                Constraints
-                    .Builder()
-                    .setRequiresBatteryNotLow(true)
-                    .build()
-
             val inputData =
                 workDataOf(
                     KEY_CONFIG to json.encodeToString(config),
@@ -49,8 +47,7 @@ class Every2HoursWebhookWorker(
                 PeriodicWorkRequestBuilder<Every2HoursWebhookWorker>(
                     2,
                     TimeUnit.HOURS,
-                ).setConstraints(constraints)
-                    .setInputData(inputData)
+                ).setInputData(inputData)
                     .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.MINUTES)
                     .build()
 
@@ -71,16 +68,9 @@ class Every2HoursWebhookWorker(
 
     override suspend fun doWork(): Result =
         withContext(Dispatchers.IO) {
+            val config = resolveConfig()
             try {
-                val configJson = inputData.getString(KEY_CONFIG)
-                val config =
-                    if (configJson != null) {
-                        Json.decodeFromString<ExportConfig>(configJson)
-                    } else {
-                        return@withContext Result.failure()
-                    }
-
-                if (config.webhookUrl.isBlank()) {
+                if (!ExportSettings.hasWebhook(config)) {
                     return@withContext Result.success()
                 }
 
@@ -95,16 +85,53 @@ class Every2HoursWebhookWorker(
                     )
 
                 // Send to webhook (no local save, no Drive sync)
-                when (webhookRepo.sendRecords(config.webhookUrl, records, config.webhookAuthToken)) {
-                    is com.healthconnect.export.repository.WebhookResult.Success -> Result.success()
-                    is com.healthconnect.export.repository.WebhookResult.Error -> Result.retry()
+                when (val result = webhookRepo.sendRecords(config.webhookUrl, records, config.webhookAuthToken)) {
+                    is WebhookResult.Success -> {
+                        DeliveryLog.recordSuccess(applicationContext, TRIGGER, records.map { it.date })
+                        Result.success()
+                    }
+                    is WebhookResult.Error -> {
+                        DeliveryLog.recordFailure(
+                            applicationContext,
+                            TRIGGER,
+                            "HTTP ${result.statusCode}: ${result.message}",
+                        )
+                        Result.retry()
+                    }
                 }
             } catch (e: SecurityException) {
-                Result.failure()
+                // Retry, never fail: a failed periodic run is terminated by
+                // WorkManager for good, which is how the delivery went silent.
+                DeliveryLog.recordFailure(applicationContext, TRIGGER, "permissions: ${e.message}")
+                Result.retry()
             } catch (e: IllegalStateException) {
-                Result.failure()
+                DeliveryLog.recordFailure(applicationContext, TRIGGER, "health connect: ${e.message}")
+                Result.retry()
             } catch (e: Exception) {
+                DeliveryLog.recordFailure(applicationContext, TRIGGER, e.message ?: e.toString())
                 Result.retry()
             }
         }
+
+    /**
+     * Input data carries the configuration snapshot taken when the job was
+     * enqueued; the webhook settings are refreshed from the persisted values so
+     * a URL/token changed later still applies to that job.
+     */
+    private fun resolveConfig(): ExportConfig {
+        val fromInput =
+            inputData.getString(KEY_CONFIG)?.let { configJson ->
+                runCatching { Json.decodeFromString<ExportConfig>(configJson) }.getOrNull()
+            } ?: return ExportSettings.loadConfig(applicationContext)
+
+        val persisted = ExportSettings.loadConfig(applicationContext)
+        return if (persisted.webhookUrl.isNotBlank()) {
+            fromInput.copy(
+                webhookUrl = persisted.webhookUrl,
+                webhookAuthToken = persisted.webhookAuthToken,
+            )
+        } else {
+            fromInput
+        }
+    }
 }

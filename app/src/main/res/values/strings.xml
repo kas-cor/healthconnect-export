@@ -26,6 +26,24 @@
     <string name="schedule_set">Scheduled export set: %s</string>
     <string name="schedule_cancelled">Scheduled export cancelled</string>
 
+    <!-- Background delivery diagnostics -->
+    <string name="delivery_status_title">Background delivery</string>
+    <string name="delivery_last_attempt">Last attempt: %1$s</string>
+    <string name="delivery_last_success">Last success: %1$s</string>
+    <string name="delivery_never">never</string>
+    <string name="delivery_refresh">Refresh</string>
+    <string name="delivery_log_button">Delivery log</string>
+    <string name="delivery_log_title">Delivery log</string>
+    <string name="delivery_log_empty">No entries yet</string>
+    <string name="delivery_close">Close</string>
+
+    <!-- Battery optimization -->
+    <string name="battery_optimization_title">Battery optimization</string>
+    <string name="battery_optimization_exempt">Background work allowed</string>
+    <string name="battery_optimization_restricted">Restricted — the system may delay background delivery</string>
+    <string name="battery_optimization_button">Allow background work</string>
+    <string name="battery_optimization_unavailable">Could not open battery optimization settings</string>
+
     <!-- Data Types -->
     <string name="data_types">Data Types</string>
     <string name="select_all">Select all</string>
