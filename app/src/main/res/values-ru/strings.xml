@@ -26,6 +26,24 @@
     <string name="schedule_set">Экспорт запланирован: %s</string>
     <string name="schedule_cancelled">Экспорт отменён</string>
 
+    <!-- Background delivery diagnostics -->
+    <string name="delivery_status_title">Фоновая выгрузка</string>
+    <string name="delivery_last_attempt">Последняя попытка: %1$s</string>
+    <string name="delivery_last_success">Последняя успешная выгрузка: %1$s</string>
+    <string name="delivery_never">не было</string>
+    <string name="delivery_refresh">Обновить</string>
+    <string name="delivery_log_button">Журнал выгрузок</string>
+    <string name="delivery_log_title">Журнал выгрузок</string>
+    <string name="delivery_log_empty">Записей пока нет</string>
+    <string name="delivery_close">Закрыть</string>
+
+    <!-- Battery optimization -->
+    <string name="battery_optimization_title">Оптимизация батареи</string>
+    <string name="battery_optimization_exempt">Фоновая работа разрешена</string>
+    <string name="battery_optimization_restricted">Ограничена — система может задерживать фоновую выгрузку</string>
+    <string name="battery_optimization_button">Разрешить работу в фоне</string>
+    <string name="battery_optimization_unavailable">Не удалось открыть настройки оптимизации батареи</string>
+
     <!-- Data Types -->
     <string name="data_types">Типы данных</string>
     <string name="select_all">Выбрать все</string>

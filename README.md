@@ -22,6 +22,7 @@ Android app for exporting Google Health Connect data to JSON format with optiona
 - **Webhook delivery** — POST JSON to a URL (with optional Bearer auth, retry on failure)
 - **Webhook test** — test connectivity with today's data directly from UI
 - **Every-2-hours webhook** — send current day's data to webhook every 2 hours (no Drive sync)
+- **Reliable background delivery** — boot receiver, a Doze-proof watchdog alarm and an automatic catch-up of days missed while the app was idle, with a delivery log in the Schedule tab
 - **20 data types** — steps, heart rate, sleep, calories, exercise, nutrition, speed, and more
 - **Date range selection** — last 7/30 days or custom range with date picker
 - **Data source selection** — pick preferred health data source (Google Fit, Samsung Health, etc.)
@@ -53,7 +54,9 @@ MainActivity → ExportScreen (Compose) → ExportViewModel
   ├─ GoogleDriveRepository     — Drive API calls (upload/list/delete)
   ├─ WebhookRepository         — POST with retry
   ├─ DailyExportWorker         — scheduled background export (daily/weekly)
-  └─ Every2HoursWebhookWorker  — periodic webhook-only export (every 2 hours)
+  ├─ Every2HoursWebhookWorker  — periodic webhook-only export (every 2 hours)
+  ├─ CatchUpWebhookWorker      — one-shot delivery of the days missed while idle
+  └─ DeliveryWatchdog          — watchdog alarm + boot receiver for the pipeline
 ```
 
 ## Quick start 🚀
@@ -288,7 +291,12 @@ Each element in the `messages` array is a `DailyHealthRecord` — one per export
 - **Manual**, **Daily** (24h), or **Weekly** (168h)
 - **Every 2 hours** — optional webhook-only sending of current day's data (checkbox in Schedule section)
 - Default: Daily (auto-enabled at startup)
-- Uses WorkManager `PeriodicWorkRequest` with battery-not-low constraint
+- Uses WorkManager `PeriodicWorkRequest` **without** a battery constraint (exports are cheap; the low-battery gate silently blocked them)
+- **Watchdog:** an inexact alarm that is allowed to fire during Doze (`setAndAllowWhileIdle`) re-enqueues the periodic jobs and queues a one-shot catch-up
+- **After reboot / app update:** `DeliveryBootReceiver` re-enqueues the schedule from the saved settings (the `RECEIVE_BOOT_COMPLETED` permission was declared but never used before)
+- **Catch-up:** `CatchUpWebhookWorker` resumes from the newest day that was actually delivered and sends everything after it in one payload (at most 30 days)
+- **Diagnostics:** the Schedule tab shows the last attempt / last success and a delivery log; a failed attempt never reports `failure`, because WorkManager terminates a failed periodic job permanently
+- **Battery exemption:** the Schedule tab offers the optional Doze exemption and shows whether it is granted
 
 ## Localization 🌐
 
@@ -415,6 +423,7 @@ Create a PR on GitHub with your translation files. After merging:
 | `ACCESS_NETWORK_STATE` | Network check |
 | `FOREGROUND_SERVICE` | Scheduled work |
 | `RECEIVE_BOOT_COMPLETED` | Reschedule after reboot |
+| `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | Optional Doze exemption, offered in the Schedule tab |
 | `health.READ_*` | Health Connect data types (20 types) |
 
 ## Tech stack

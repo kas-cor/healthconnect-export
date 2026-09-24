@@ -563,6 +563,21 @@ private fun ScheduleContent(
                 onAutoSendEvery2HoursChange = viewModel::setAutoSendWebhookEvery2Hours,
                 scheduleHour = uiState.scheduleHour,
                 onScheduleHourChange = viewModel::setScheduleHour,
+                lastAttemptAt = uiState.lastDeliveryAttemptAt,
+                lastAttemptResult = uiState.lastDeliveryAttemptResult,
+                lastSuccessAt = uiState.lastDeliverySuccessAt,
+                batteryOptimizationIgnored = uiState.batteryOptimizationIgnored,
+                onRequestBatteryExemption = viewModel::requestBatteryOptimizationExemption,
+                deliveryLogLines =
+                    if (uiState.lastDeliveryAttemptAt != null) {
+                        viewModel.deliveryLog()
+                    } else {
+                        emptyList()
+                    },
+                onRefreshDeliveryStatus = {
+                    viewModel.refreshDeliveryStatus()
+                    viewModel.refreshBatteryOptimizationStatus()
+                },
             )
         }
         item { Spacer(modifier = Modifier.size(16.dp)) }

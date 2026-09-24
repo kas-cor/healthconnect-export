@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
@@ -34,6 +35,9 @@ import androidx.compose.ui.unit.dp
 import com.healthconnect.export.R
 import com.healthconnect.export.data.ExportFrequency
 import com.healthconnect.export.viewmodel.ScheduleStatus
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun ScheduleCard(
@@ -47,7 +51,16 @@ fun ScheduleCard(
     onAutoSendEvery2HoursChange: (Boolean) -> Unit = {},
     scheduleHour: Int? = null,
     onScheduleHourChange: (Int?) -> Unit = {},
+    lastAttemptAt: Long? = null,
+    lastAttemptResult: String? = null,
+    lastSuccessAt: Long? = null,
+    batteryOptimizationIgnored: Boolean = true,
+    onRequestBatteryExemption: () -> Unit = {},
+    deliveryLogLines: List<String> = emptyList(),
+    onRefreshDeliveryStatus: () -> Unit = {},
 ) {
+    var showLog by remember { mutableStateOf(false) }
+
     MaterialCard {
         Column {
             MaterialSectionHeader(
@@ -134,7 +147,95 @@ fun ScheduleCard(
                     modifier = Modifier.weight(1f),
                 )
             }
+
+            // ── Background delivery diagnostics ──────────────────────────────
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+            Text(
+                text = stringResource(R.string.delivery_status_title),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = stringResource(R.string.delivery_last_attempt, formatTimestamp(lastAttemptAt)),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text(
+                text = stringResource(R.string.delivery_last_success, formatTimestamp(lastSuccessAt)),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (!lastAttemptResult.isNullOrBlank()) {
+                Text(
+                    text = lastAttemptResult,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onRefreshDeliveryStatus) {
+                    Text(stringResource(R.string.delivery_refresh))
+                }
+                TextButton(onClick = { showLog = true }) {
+                    Text(stringResource(R.string.delivery_log_button))
+                }
+            }
+
+            // ── Battery optimization state ──────────────────────────────────
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+            Text(
+                text = stringResource(R.string.battery_optimization_title),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text =
+                    if (batteryOptimizationIgnored) {
+                        stringResource(R.string.battery_optimization_exempt)
+                    } else {
+                        stringResource(R.string.battery_optimization_restricted)
+                    },
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (!batteryOptimizationIgnored) {
+                Spacer(modifier = Modifier.height(4.dp))
+                OutlinedButton(onClick = onRequestBatteryExemption, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.battery_optimization_button))
+                }
+            }
         }
+    }
+
+    if (showLog) {
+        AlertDialog(
+            onDismissRequest = { showLog = false },
+            title = { Text(stringResource(R.string.delivery_log_title)) },
+            text = {
+                Text(
+                    text =
+                        if (deliveryLogLines.isEmpty()) {
+                            stringResource(R.string.delivery_log_empty)
+                        } else {
+                            deliveryLogLines.joinToString("\n")
+                        },
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showLog = false }) {
+                    Text(stringResource(R.string.delivery_close))
+                }
+            },
+        )
+    }
+}
+
+/** Formats an epoch-millis timestamp for the diagnostics block. */
+@Composable
+private fun formatTimestamp(millis: Long?): String {
+    if (millis == null) return stringResource(R.string.delivery_never)
+    return remember(millis) {
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(millis))
     }
 }
 

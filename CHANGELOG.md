@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **Background delivery stopped silently:** a periodic run that threw `SecurityException`/`IllegalStateException` reported `failure`, and WorkManager terminates a failed periodic job permanently — delivery then stayed dead until the app was opened by hand
+- **Reboot / app update lost the schedule:** `RECEIVE_BOOT_COMPLETED` was declared in the manifest but no receiver existed; `DeliveryBootReceiver` now re-enqueues the schedule and a catch-up after boot, package replace and MIUI `QUICKBOOT_POWERON`
+- **Low-battery gate:** `setRequiresBatteryNotLow(true)` on both periodic workers silently blocked every run while the phone reported a low battery
+- **Manual frequency cancelled the every-2-hours webhook** and the frequency itself was never persisted, so each launch reset it to Daily
+- **Frozen configuration:** the daily job used `ExistingPeriodicWorkPolicy.KEEP` and kept the webhook URL/token from its first enqueue
+
+### Added
+- **`DeliveryWatchdog`** — inexact Doze-allowed alarm (every 6 h) that re-enqueues both periodic jobs and queues a one-shot catch-up
+- **`CatchUpWebhookWorker`** — resumes from the newest day that was really delivered and sends every missed day in one payload (window 7 days on the first run, capped at 30)
+- **`DeliveryLog`** — last attempt, last success and a 100-entry ring buffer in SharedPreferences
+- **Schedule tab diagnostics** — "Background delivery" block (last attempt/result/success), delivery log dialog, battery-optimization state and an opt-in Doze exemption
+- Tests: `CatchUpWebhookWorkerTest`, `DeliveryWatchdogTest`, `DeliveryLogTest`, `ExportSettingsTest`, `BatteryOptimizationTest`, `DeliveryBootReceiverTest`, `WatchdogAlarmReceiverTest`
+
+### Changed
+- Both periodic workers read the webhook settings from SharedPreferences at run time and return `retry` instead of `failure`
+- Export frequency is persisted and restored; both periodic jobs use `ExistingPeriodicWorkPolicy.UPDATE`
+
 ## [1.8] — 2026-08-10
 
 ### Added
