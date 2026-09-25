@@ -78,7 +78,7 @@ class CatchUpWebhookWorker(
 
                 when (val result = webhookRepo.sendRecords(config.webhookUrl, records, config.webhookAuthToken)) {
                     is WebhookResult.Success -> {
-                        DeliveryLog.recordSuccess(applicationContext, trigger, records.map { it.date })
+                        DeliveryLog.recordSuccess(applicationContext, trigger, records.map { it.date }, statusCode = result.statusCode)
                         Result.success()
                     }
                     is WebhookResult.Error -> {

@@ -87,7 +87,7 @@ class Every2HoursWebhookWorker(
                 // Send to webhook (no local save, no Drive sync)
                 when (val result = webhookRepo.sendRecords(config.webhookUrl, records, config.webhookAuthToken)) {
                     is WebhookResult.Success -> {
-                        DeliveryLog.recordSuccess(applicationContext, TRIGGER, records.map { it.date })
+                        DeliveryLog.recordSuccess(applicationContext, TRIGGER, records.map { it.date }, statusCode = result.statusCode)
                         Result.success()
                     }
                     is WebhookResult.Error -> {
