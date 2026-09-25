@@ -11,6 +11,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.healthconnect.export.receiver.WatchdogAlarmReceiver
+import com.healthconnect.export.util.DeliveryLog
 import com.healthconnect.export.util.ExportSettings
 import java.util.concurrent.TimeUnit
 
@@ -67,6 +68,34 @@ object DeliveryWatchdog {
             ExistingWorkPolicy.REPLACE,
             request,
         )
+    }
+
+    /**
+     * Enqueues a one-shot catch-up run immediately when delivery is stale, i.e.
+     * the last successful send is at least [WATCHDOG_INTERVAL_HOURS] old.
+     *
+     * Called when the app is opened: the alarm alone would make a user who just
+     * launched the app and is looking at the delivery diagnostics wait up to six
+     * hours before the gap is filled.
+     *
+     * Returns true when a catch-up run was enqueued.
+     */
+    fun catchUpIfStale(
+        context: Context,
+        trigger: String,
+        now: Long = System.currentTimeMillis(),
+    ): Boolean {
+        // Nothing configured to send to: enqueueing would only produce empty work.
+        if (ExportSettings.loadConfig(context).webhookUrl.isBlank()) return false
+        // A device that never delivered anything has no known-good resume point;
+        // the periodic jobs cover the first run.
+        val lastSuccessAt = DeliveryLog.status(context).lastSuccessAt ?: return false
+        val ageHours = (now - lastSuccessAt) / TimeUnit.HOURS.toMillis(1)
+        if (ageHours < WATCHDOG_INTERVAL_HOURS) return false
+
+        Log.i(TAG, "last successful delivery was ${ageHours}h ago — catching up (trigger=$trigger)")
+        scheduleCatchUp(context, trigger)
+        return true
     }
 
     /** Arms (or re-arms) the watchdog alarm. */

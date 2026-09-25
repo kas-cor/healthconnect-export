@@ -64,12 +64,16 @@ object DeliveryLog {
     /**
      * Records a successful delivery. [deliveredDates] are the ISO dates present in
      * the payload; the newest one becomes the resume point for the catch-up job.
+     * When [statusCode] is known it becomes part of the recorded text, so the
+     * Schedule tab shows "timestamp + code" for healthy deliveries too, not only
+     * for failures.
      */
     fun recordSuccess(
         context: Context,
         trigger: String,
         deliveredDates: List<String>,
         now: Long = System.currentTimeMillis(),
+        statusCode: Int? = null,
     ) {
         val newest = deliveredDates.maxOrNull()
         val detail =
@@ -78,16 +82,17 @@ object DeliveryLog {
             } else {
                 "${deliveredDates.size} day(s) up to $newest"
             }
+        val result = if (statusCode == null) "ok: $detail" else "HTTP $statusCode: $detail"
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs
             .edit()
             .putLong(KEY_LAST_ATTEMPT_AT, now)
-            .putString(KEY_LAST_ATTEMPT_RESULT, "ok: $detail")
+            .putString(KEY_LAST_ATTEMPT_RESULT, result)
             .putLong(KEY_LAST_SUCCESS_AT, now)
             .apply {
                 if (newest != null) putString(KEY_LAST_DATA_DATE, newest)
             }.apply()
-        append(context, formatLine(now, trigger, "ok: $detail"))
+        append(context, formatLine(now, trigger, result))
     }
 
     /** Records a failed attempt. The resume point is left untouched. */
