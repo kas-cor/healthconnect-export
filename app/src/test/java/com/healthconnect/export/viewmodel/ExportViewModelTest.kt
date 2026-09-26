@@ -13,17 +13,10 @@ import android.content.res.Resources
 import androidx.activity.result.ActivityResult
 import androidx.work.Configuration
 import androidx.work.testing.WorkManagerTestInitHelper
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount
-import com.google.android.gms.auth.api.signin.GoogleSignInClient
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.common.api.ApiException
-import com.google.android.gms.common.api.Status
-import com.google.android.gms.tasks.OnCompleteListener
-import com.google.android.gms.tasks.OnFailureListener
-import com.google.android.gms.tasks.OnSuccessListener
-import com.google.android.gms.tasks.Task
 import com.healthconnect.export.R
+import com.healthconnect.export.auth.DriveAuthorization
+import com.healthconnect.export.auth.GoogleAccountInfo
+import com.healthconnect.export.testutil.FakeGoogleAuthProvider
 import com.healthconnect.export.usecase.ExportDataUseCase
 import com.healthconnect.export.usecase.ExportStep
 import kotlinx.coroutines.CoroutineScope
@@ -44,8 +37,6 @@ import org.junit.Test
 import org.mockito.kotlin.*
 import org.junit.runner.RunWith
 import org.mockito.Mock
-import org.mockito.MockedStatic
-import org.mockito.Mockito
 import org.mockito.junit.MockitoJUnitRunner
 import java.io.BufferedReader
 import java.io.File
@@ -70,8 +61,7 @@ class ExportViewModelTest {
     @Mock
     private lateinit var mockWebhookRepo: WebhookRepository
 
-    @Mock
-    private lateinit var mockGoogleSignInClient: GoogleSignInClient
+    private val authProvider = FakeGoogleAuthProvider()
 
     private lateinit var mockApp: Application
     private lateinit var mockPrefs: SharedPreferences
@@ -79,8 +69,6 @@ class ExportViewModelTest {
     private lateinit var tempDir: File
     private lateinit var viewModel: ExportViewModel
     private val testDispatcher: TestDispatcher = StandardTestDispatcher()
-
-    private var mockedGoogleSignIn: MockedStatic<GoogleSignIn>? = null
 
     @Before
     fun setup() {
@@ -143,23 +131,6 @@ class ExportViewModelTest {
                 .build()
         WorkManagerTestInitHelper.initializeTestWorkManager(mockApp, config)
 
-        // Mock GoogleSignIn static methods
-        mockedGoogleSignIn = Mockito.mockStatic(GoogleSignIn::class.java)
-        mockedGoogleSignIn!!
-            .`when`<GoogleSignInClient> {
-                GoogleSignIn.getClient(any<Context>(), any<GoogleSignInOptions>())
-            }.thenReturn(mockGoogleSignInClient)
-        mockedGoogleSignIn!!
-            .`when`<GoogleSignInAccount?> {
-                GoogleSignIn.getLastSignedInAccount(any<Context>())
-            }.thenReturn(null)
-
-        // Default: silent sign-in and sign-out task mocks — their listeners
-        // never fire, so the init block stays deterministic and keeps
-        // DriveStatus.NotConnected.
-        silentSignInTask()
-        signOutTask()
-
         // Create ViewModel (init block runs here)
         viewModel = ExportViewModel(mockApp)
 
@@ -170,6 +141,7 @@ class ExportViewModelTest {
         setField(viewModel, "healthRepo", mockHealthRepo)
         setField(viewModel, "localRepo", mockLocalRepo)
         setField(viewModel.driveManager, "driveRepo", mockDriveRepo)
+        setField(viewModel.driveManager, "authProvider", authProvider)
         setField(viewModel.webhookManager, "webhookRepo", mockWebhookRepo)
         setField(viewModel.webhookManager, "healthRepo", mockHealthRepo)
 
@@ -192,8 +164,6 @@ class ExportViewModelTest {
 
     @After
     fun tearDown() {
-        mockedGoogleSignIn?.close()
-        mockedGoogleSignIn = null
         Dispatchers.resetMain()
         tempDir.deleteRecursively()
     }
@@ -655,280 +625,151 @@ class ExportViewModelTest {
     }
 
     // =============================================
-    // handleSignInResult() Tests
+    // signInToDrive() Tests (Credential Manager)
     // =============================================
 
     @Test
-    fun `handleSignInResult successful sign-in sets drive connected`() {
-        val mockAccount = mock<GoogleSignInAccount>()
-        whenever(mockAccount.email).thenReturn("test@example.com")
-
-        val mockTask = mock<Task<GoogleSignInAccount>>()
-        whenever(mockTask.getResult(ApiException::class.java)).thenReturn(mockAccount)
-
-        mockedGoogleSignIn!!
-            .`when`<Task<GoogleSignInAccount>> {
-                GoogleSignIn.getSignedInAccountFromIntent(any())
-            }.thenReturn(mockTask)
-
-        // Stub isSignedIn to return true so refreshDriveStatus doesn't override Connected
-        whenever(mockDriveRepo.isSignedIn()).thenReturn(true)
-
-        val intent = mock<Intent>()
-        val result = ActivityResult(Activity.RESULT_OK, intent)
-
-        viewModel.handleSignInResult(result)
-
-        val state = viewModel.uiState.value
-        assertTrue(state.driveStatus is DriveStatus.Connected)
-    }
-
-    @Test
-    fun `handleSignInResult api exception sets drive error`() {
-        val apiException = ApiException(Status(10, "DEVELOPER_ERROR"))
-        val mockTask = mock<Task<GoogleSignInAccount>>()
-        whenever(mockTask.getResult(ApiException::class.java)).thenThrow(apiException)
-
-        mockedGoogleSignIn!!
-            .`when`<Task<GoogleSignInAccount>> {
-                GoogleSignIn.getSignedInAccountFromIntent(any())
-            }.thenReturn(mockTask)
-
-        val intent = mock<Intent>()
-        val result = ActivityResult(Activity.RESULT_OK, intent)
-
-        viewModel.handleSignInResult(result)
-
-        val state = viewModel.uiState.value
-        assertTrue(state.driveStatus is DriveStatus.Error)
-        // The error string comes from mock Application.getString() which returns "test_string"
-        assertEquals("test_string", (state.driveStatus as DriveStatus.Error).error)
-        assertNotNull(state.message)
-    }
-
-    @Test
-    fun `handleSignInResult with null account does not update status`() {
-        val mockTask = mock<Task<GoogleSignInAccount>>()
-        whenever(mockTask.getResult(ApiException::class.java)).thenReturn(null)
-
-        mockedGoogleSignIn!!
-            .`when`<Task<GoogleSignInAccount>> {
-                GoogleSignIn.getSignedInAccountFromIntent(any())
-            }.thenReturn(mockTask)
-
-        val intent = mock<Intent>()
-        val result = ActivityResult(Activity.RESULT_OK, intent)
-
-        viewModel.handleSignInResult(result)
-
-        val state = viewModel.uiState.value
-        assertTrue(state.driveStatus is DriveStatus.NotConnected)
-    }
-
-    // =============================================
-    // silentSignIn() / Drive auto-restore Tests
-    // =============================================
-
-    @Test
-    fun `refreshDriveStatus silently restores session and connects`() {
+    fun `signInToDrive connects the account and remembers the session`() {
         runTest {
-            whenever(mockDriveRepo.isSignedIn()).thenReturn(false)
-            whenever(mockDriveRepo.listDriveFiles()).thenReturn(emptyList())
-            val task = silentSignInTask()
+            authProvider.signInAccount = GoogleAccountInfo("test@example.com")
+            viewModel.attachDriveActivity(mock<Activity>())
 
-            viewModel.refreshDriveStatus()
-
-            // Fire the success listener as Google would after a silent restore
-            argumentCaptor<OnSuccessListener<GoogleSignInAccount>>().apply {
-                verify(task).addOnSuccessListener(capture())
-                firstValue.onSuccess(mock<GoogleSignInAccount>())
-            }
+            viewModel.signInToDrive()
             testDispatcher.scheduler.advanceUntilIdle()
 
-            // Called once in ViewModel init (setup) and once here
-            verify(mockGoogleSignInClient, atLeastOnce()).silentSignIn()
+            assertTrue(viewModel.uiState.value.driveStatus is DriveStatus.Connected)
+            verify(mockDriveRepo).saveSession("test@example.com")
+            assertEquals(1, authProvider.signInCalls)
+        }
+    }
+
+    @Test
+    fun `signInToDrive without an activity reports an error`() {
+        runTest {
+            // No Activity registered — Credential Manager cannot show its UI
+            authProvider.signInAccount = GoogleAccountInfo("test@example.com")
+
+            viewModel.signInToDrive()
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            assertTrue(viewModel.uiState.value.driveStatus is DriveStatus.Error)
+            assertEquals(0, authProvider.signInCalls)
+        }
+    }
+
+    @Test
+    fun `signInToDrive cancelled sign-in sets drive error`() {
+        runTest {
+            authProvider.signInAccount = null
+            viewModel.attachDriveActivity(mock<Activity>())
+
+            viewModel.signInToDrive()
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            assertTrue(viewModel.uiState.value.driveStatus is DriveStatus.Error)
+            verify(mockDriveRepo, never()).saveSession(any())
+        }
+    }
+
+    @Test
+    fun `signInToDrive does not request Drive access yet`() {
+        runTest {
+            authProvider.signInAccount = GoogleAccountInfo("test@example.com")
+            viewModel.attachDriveActivity(mock<Activity>())
+
+            viewModel.signInToDrive()
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            // The Drive scope is authorized lazily, only when a sync needs it
+            assertEquals(0, authProvider.authorizeCalls)
+        }
+    }
+
+    @Test
+    fun `init does not start any interactive Google flow`() {
+        runTest {
+            assertEquals(0, authProvider.signInCalls)
+            assertEquals(0, authProvider.authorizeCalls)
+            assertTrue(viewModel.uiState.value.driveStatus is DriveStatus.NotConnected)
+        }
+    }
+
+    // =============================================
+    // refreshDriveStatus() / session restore Tests
+    // =============================================
+
+    @Test
+    fun `refreshDriveStatus stays not connected without a session`() {
+        runTest {
+            whenever(mockDriveRepo.isSignedIn()).thenReturn(false)
+
+            viewModel.refreshDriveStatus()
+            testDispatcher.scheduler.advanceUntilIdle()
+
             val state = viewModel.uiState.value
-            assertTrue(state.driveStatus is DriveStatus.Synced)
+            assertTrue(state.driveStatus is DriveStatus.NotConnected)
             // The silent restore must not surface any snackbar/message
             assertNull(state.message)
+            // Nothing interactive is started without a stored session
+            assertEquals(0, authProvider.signInCalls)
         }
     }
 
     @Test
-    fun `refreshDriveStatus stays not connected when silent sign-in fails`() {
+    fun `refreshDriveStatus restores a stored session without UI`() {
         runTest {
-            whenever(mockDriveRepo.isSignedIn()).thenReturn(false)
-            val task = silentSignInTask()
-
-            viewModel.refreshDriveStatus()
-
-            // Fire the failure listener (no cached session)
-            argumentCaptor<OnFailureListener>().apply {
-                verify(task).addOnFailureListener(capture())
-                firstValue.onFailure(Exception("no cached session"))
-            }
-            testDispatcher.scheduler.advanceUntilIdle()
-
-            // Called once in ViewModel init (setup) and once here
-            verify(mockGoogleSignInClient, atLeastOnce()).silentSignIn()
-            val state = viewModel.uiState.value
-            assertTrue(state.driveStatus is DriveStatus.NotConnected)
-            // The silent failure must not surface any snackbar/message
-            assertNull(state.message)
-        }
-    }
-
-    @Test
-    fun `silent sign-in failure at launch shows not connected without a message`() {
-        runTest {
-            whenever(mockDriveRepo.isSignedIn()).thenReturn(false)
-            val task = silentSignInTask()
-
-            // Recreate the ViewModel so the init block runs the silent sign-in
-            val vm = ExportViewModel(mockApp)
-            vm.driveManager.scope = CoroutineScope(testDispatcher)
-            setField(vm.driveManager, "driveRepo", mockDriveRepo)
-            setField(vm, "healthRepo", mockHealthRepo)
-            setField(vm, "localRepo", mockLocalRepo)
-            setField(vm.webhookManager, "webhookRepo", mockWebhookRepo)
-            setField(vm.webhookManager, "healthRepo", mockHealthRepo)
-            setField(vm, "exportUseCase", ExportDataUseCase(mockHealthRepo, mockLocalRepo, testDispatcher))
-            vm.exportScope = CoroutineScope(testDispatcher)
-
-            // The silent sign-in started during init fails (no cached session)
-            argumentCaptor<OnFailureListener>().apply {
-                verify(task).addOnFailureListener(capture())
-                firstValue.onFailure(Exception("no cached session"))
-            }
-            testDispatcher.scheduler.advanceUntilIdle()
-
-            val state = vm.uiState.value
-            assertTrue(state.driveStatus is DriveStatus.NotConnected)
-            // No confusing snackbar at startup — just the regular card state
-            assertNull(state.message)
-        }
-    }
-
-    @Test
-    fun `sign out prevents silent sign-in for the rest of the session`() {
-        runTest {
-            whenever(mockDriveRepo.isSignedIn()).thenReturn(false)
-            val signOutTask = signOutTask()
-
-            viewModel.signOut()
-            argumentCaptor<OnCompleteListener<Void>>().apply {
-                verify(signOutTask).addOnCompleteListener(capture())
-                firstValue.onComplete(mock())
-            }
-            testDispatcher.scheduler.advanceUntilIdle()
-
-            // A status refresh after sign-out must NOT trigger a silent sign-in
-            viewModel.refreshDriveStatus()
-            testDispatcher.scheduler.advanceUntilIdle()
-
-            // silentSignIn was called once in setup init — no new call after sign-out
-            verify(mockGoogleSignInClient, times(1)).silentSignIn()
-            val state = viewModel.uiState.value
-            assertTrue(state.driveStatus is DriveStatus.NotConnected)
-        }
-    }
-
-    @Test
-    fun `stale silent sign-in success after sign out does not reconnect`() {
-        runTest {
-            whenever(mockDriveRepo.isSignedIn()).thenReturn(false)
-            whenever(mockDriveRepo.listDriveFiles()).thenReturn(emptyList())
-            val task = silentSignInTask()
-            val signOutTask = signOutTask()
-
-            // A silent sign-in attempt starts (as at app start)
-            viewModel.refreshDriveStatus()
-
-            // The user signs out while the silent attempt is still in flight
-            viewModel.signOut()
-            argumentCaptor<OnCompleteListener<Void>>().apply {
-                verify(signOutTask).addOnCompleteListener(capture())
-                firstValue.onComplete(mock())
-            }
-
-            // The stale silent sign-in completes successfully — must NOT reconnect
-            argumentCaptor<OnSuccessListener<GoogleSignInAccount>>().apply {
-                verify(task).addOnSuccessListener(capture())
-                firstValue.onSuccess(mock<GoogleSignInAccount>())
-            }
-            testDispatcher.scheduler.advanceUntilIdle()
-
-            val state = viewModel.uiState.value
-            assertTrue(state.driveStatus is DriveStatus.NotConnected)
-        }
-    }
-
-    @Test
-    fun `manual sign in after sign out re-enables silent sign-in`() {
-        runTest {
-            val signOutTask = signOutTask()
-
-            viewModel.signOut()
-            argumentCaptor<OnCompleteListener<Void>>().apply {
-                verify(signOutTask).addOnCompleteListener(capture())
-                firstValue.onComplete(mock())
-            }
-
-            // A fresh manual sign-in clears the session signed-out flag
-            val mockAccount = mock<GoogleSignInAccount>()
-            whenever(mockAccount.email).thenReturn("test@example.com")
-            val mockTask = mock<Task<GoogleSignInAccount>>()
-            whenever(mockTask.getResult(ApiException::class.java)).thenReturn(mockAccount)
-            mockedGoogleSignIn!!
-                .`when`<Task<GoogleSignInAccount>> {
-                    GoogleSignIn.getSignedInAccountFromIntent(any())
-                }.thenReturn(mockTask)
             whenever(mockDriveRepo.isSignedIn()).thenReturn(true)
-            whenever(mockDriveRepo.listDriveFiles()).thenReturn(emptyList())
-            viewModel.handleSignInResult(ActivityResult(Activity.RESULT_OK, mock<Intent>()))
-            testDispatcher.scheduler.advanceUntilIdle()
+            whenever(mockDriveRepo.accessToken()).thenReturn(null)
 
-            // After re-signing in, silent sign-in is allowed again
-            whenever(mockDriveRepo.isSignedIn()).thenReturn(false)
-            val task = silentSignInTask()
             viewModel.refreshDriveStatus()
             testDispatcher.scheduler.advanceUntilIdle()
 
-            verify(task).addOnSuccessListener(any<OnSuccessListener<GoogleSignInAccount>>())
+            val state = viewModel.uiState.value
+            assertTrue(state.driveStatus is DriveStatus.Connected)
+            assertNull(state.message)
         }
     }
 
     @Test
-    fun `init silently restores drive session when account is cached`() {
+    fun `refreshDriveStatus lists Drive files when access is already granted`() {
         runTest {
-            // Stub a cached session: silent sign-in succeeds without UI
-            val task = silentSignInTask()
+            whenever(mockDriveRepo.isSignedIn()).thenReturn(true)
+            whenever(mockDriveRepo.accessToken()).thenReturn("test-access-token")
+            whenever(mockDriveRepo.listDriveFiles()).thenReturn(listOf("a.json", "b.json"))
 
-            // Recreate the ViewModel so the init block runs with the stub in place
-            val vm = ExportViewModel(mockApp)
-            vm.driveManager.scope = CoroutineScope(testDispatcher)
-            setField(vm.driveManager, "driveRepo", mockDriveRepo)
-            setField(vm, "healthRepo", mockHealthRepo)
-            setField(vm, "localRepo", mockLocalRepo)
-            setField(vm.webhookManager, "webhookRepo", mockWebhookRepo)
-            setField(vm.webhookManager, "healthRepo", mockHealthRepo)
-            setField(vm, "exportUseCase", ExportDataUseCase(mockHealthRepo, mockLocalRepo, testDispatcher))
-            vm.exportScope = CoroutineScope(testDispatcher)
-            whenever(mockDriveRepo.listDriveFiles()).thenReturn(emptyList())
-
-            // Fire the silent sign-in success listener captured during init
-            argumentCaptor<OnSuccessListener<GoogleSignInAccount>>().apply {
-                verify(task).addOnSuccessListener(capture())
-                firstValue.onSuccess(mock<GoogleSignInAccount>())
-            }
+            viewModel.refreshDriveStatus()
             testDispatcher.scheduler.advanceUntilIdle()
 
-            // Called once in the setup ViewModel init and once in the recreated one
-            verify(mockGoogleSignInClient, atLeastOnce()).silentSignIn()
-            val state = vm.uiState.value
-            assertTrue(
-                state.driveStatus is DriveStatus.Connected || state.driveStatus is DriveStatus.Synced,
-            )
+            val status = viewModel.uiState.value.driveStatus
+            assertTrue(status is DriveStatus.Synced)
+            assertEquals(2, (status as DriveStatus.Synced).filesCount)
+        }
+    }
+
+    @Test
+    fun `signOut clears the session and the credential state`() {
+        runTest {
+            viewModel.signOut()
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            assertTrue(viewModel.uiState.value.driveStatus is DriveStatus.NotConnected)
+            verify(mockDriveRepo).clearSession()
+            assertEquals(1, authProvider.clearCredentialStateCalls)
+        }
+    }
+
+    @Test
+    fun `signOut does not reconnect on the next refresh`() {
+        runTest {
+            whenever(mockDriveRepo.isSignedIn()).thenReturn(false)
+
+            viewModel.signOut()
+            testDispatcher.scheduler.advanceUntilIdle()
+            viewModel.refreshDriveStatus()
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            assertTrue(viewModel.uiState.value.driveStatus is DriveStatus.NotConnected)
+            assertEquals(0, authProvider.signInCalls)
         }
     }
 
@@ -1319,38 +1160,6 @@ class ExportViewModelTest {
         viewModel.shareExportFile(file)
 
         assertEquals("share error", viewModel.uiState.value.message)
-    }
-
-    // =============================================
-    // Helper: silent sign-in task mock
-    // =============================================
-
-    /**
-     * Stubs googleSignInClient.silentSignIn() to return a mock Task whose
-     * listeners can be captured and fired manually. Real Google Tasks require
-     * a Looper, which plain-JVM Mockito tests don't have.
-     */
-    private fun silentSignInTask(): Task<GoogleSignInAccount> {
-        val task = mock<Task<GoogleSignInAccount>>()
-        whenever(task.addOnSuccessListener(any<OnSuccessListener<GoogleSignInAccount>>()))
-            .thenReturn(task)
-        whenever(task.addOnFailureListener(any<OnFailureListener>()))
-            .thenReturn(task)
-        whenever(mockGoogleSignInClient.silentSignIn()).thenReturn(task)
-        return task
-    }
-
-    /**
-     * Stubs googleSignInClient.signOut() to return a mock Task whose completion
-     * listener can be captured and fired manually (real Google Tasks require
-     * a Looper, which plain-JVM Mockito tests don't have).
-     */
-    private fun signOutTask(): Task<Void> {
-        val task = mock<Task<Void>>()
-        whenever(task.addOnCompleteListener(any<OnCompleteListener<Void>>()))
-            .thenReturn(task)
-        whenever(mockGoogleSignInClient.signOut()).thenReturn(task)
-        return task
     }
 
     // =============================================

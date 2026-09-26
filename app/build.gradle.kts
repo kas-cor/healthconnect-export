@@ -287,11 +287,14 @@ dependencies {
     // Health Connect
     implementation("androidx.health.connect:connect-client:1.1.0")
 
-    // Google Sign-In & Drive API
-    // NOTE: keep on 21.6.0 — 22.0.0 removed the legacy GoogleSignIn API
-    // (GoogleSignIn/GoogleSignInClient) used by DriveManager/MainActivity.
-    // Migrate to Credential Manager (androidx.credentials) before bumping.
-    implementation("com.google.android.gms:play-services-auth:21.6.0")
+    // Google Sign-In (Credential Manager) & Drive API
+    // Authentication uses Credential Manager (the legacy GoogleSignIn API was
+    // removed in play-services-auth 22.0.0); the Drive OAuth scope is authorized
+    // separately through AuthorizationClient, which still ships in 22.x.
+    implementation("androidx.credentials:credentials:1.6.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.6.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.2.1")
+    implementation("com.google.android.gms:play-services-auth:22.0.0")
     implementation("com.google.http-client:google-http-client-gson:2.2.0")
     implementation("com.google.api-client:google-api-client-android:2.9.1")
     implementation("com.google.apis:google-api-services-drive:v3-rev20240123-2.0.0")

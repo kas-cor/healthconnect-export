@@ -174,7 +174,9 @@
     <string name="vm_permissions_granted">Разрешения получены. Начинаю экспорт…</string>
     <string name="vm_permissions_missing">Разрешения Health Connect не предоставлены для: %s. Экспорт невозможен. Откройте приложение Health Connect и разрешите доступ к этим типам данных.</string>
     <string name="vm_drive_connected">Google аккаунт подключён: %s</string>
-    <string name="vm_drive_signin_error">Не удалось войти: %d</string>
+    <string name="vm_drive_signin_failed">Не удалось войти в Google</string>
+    <string name="vm_drive_access_required">Для синхронизации нужен доступ к Google Диску</string>
+    <string name="vm_drive_access_denied">Доступ к Google Диску не предоставлен</string>
     <string name="vm_drive_signed_out">Google аккаунт отключён</string>
     <string name="vm_drive_not_connected">Google Drive не подключён</string>
     <string name="vm_drive_synced">Синхронизировано с Drive: %d файлов</string>

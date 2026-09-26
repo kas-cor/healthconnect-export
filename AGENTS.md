@@ -6,7 +6,7 @@
 
 ### Core scenario
 
-User selects health data types and a date range, then exports to JSON files (one per day). Files can be auto-synced to Google Drive and/or sent to a webhook URL. Scheduled daily/weekly exports via WorkManager. The app silently restores a previous Google Drive session at start, checks GitHub Releases for updates (with a badge in the app bar and a "What's new" dialog), and lets the user open any exported file from History. All UI strings use `stringResource()` and support EN/RU locale switching.
+User selects health data types and a date range, then exports to JSON files (one per day). Files can be auto-synced to Google Drive and/or sent to a webhook URL. Scheduled daily/weekly exports via WorkManager. The app restores a previously connected Google account at start (and authorizes the Drive scope lazily on the first sync), checks GitHub Releases for updates (with a badge in the app bar and a "What's new" dialog), and lets the user open any exported file from History. All UI strings use `stringResource()` and support EN/RU locale switching.
 
 ---
 
@@ -14,19 +14,19 @@ User selects health data types and a date range, then exports to JSON files (one
 
 | Component | Technology |
 |---|---|
-| Language | Kotlin 2.4.10 |
-| UI | Jetpack Compose + Material3 (BOM 2026.05) |
-| Build | Gradle KTS + AGP 9.3.1 / Gradle 9.6.1 |
+| Language | Kotlin 2.4.20 |
+| UI | Jetpack Compose + Material3 (BOM 2026.09.00) |
+| Build | Gradle KTS + AGP 9.4.0 / Gradle 9.7.1 |
 | Health API | `androidx.health.connect:connect-client:1.1.0` |
-| Google Drive | `google-api-services-drive:v3-rev20240123`, `google-http-client-gson:2.1.0` |
-| Auth | `play-services-auth:21.6.0` (OAuth 2.0) |
+| Google Drive | `google-api-services-drive:v3-rev20240123-2.0.0`, `google-api-client-android:2.9.1`, `google-http-client-gson:2.2.0` |
+| Auth | `play-services-auth:22.0.0` (AuthorizationClient for the Drive scope) + `androidx.credentials:credentials(-play-services-auth):1.6.0` + `googleid:1.2.1` (Credential Manager sign-in) |
 | Background | WorkManager (`work-runtime-ktx:2.11.2`) |
 | Serialization | `kotlinx-serialization-json:1.11.0` |
-| Testing | JUnit 4.13.2 + Mockito 5.23.0 + mockito-kotlin 6.3.0 |
+| Testing | JUnit 4.13.2 + Mockito 5.23.0 + mockito-kotlin 6.3.0 + Robolectric 4.17 |
 | Linting | ktlint 14.2.0 |
-| Coverage | JaCoCo 0.8.11 (XML + HTML + CSV) |
+| Coverage | JaCoCo 0.8.12 (XML + HTML + CSV) |
 | CI | GitHub Actions |
-| minSdk / targetSdk / compileSdk | 28 / 36 / 36 |
+| minSdk / targetSdk / compileSdk | 28 / 37 / 37 |
 | JVM | 21 |
 
 ---
@@ -39,6 +39,8 @@ MainActivity (ComponentActivity)
        └─ ExportViewModel (AndroidViewModel)
             ├─ ExportDataUseCase          — export workflow (Flow<ExportStep>)
             ├─ DriveManager               — Google Drive sign-in/sync/sign-out
+            ├─ GoogleAuthProvider         — Credential Manager sign-in + Drive scope (AuthorizationClient)
+            ├─ DriveSessionStore          — persists the connected account (SharedPreferences)
             ├─ WebhookManager             — webhook URL/token/send/test
             ├─ ScheduleManager            — schedule/cancel periodic exports
             ├─ HealthConnectRepository    — read Health Connect API (batch via TypeHandler)
@@ -57,8 +59,9 @@ MainActivity (ComponentActivity)
 - **Retention**: `retentionDays` in settings — `cleanupOldExports()` runs at app start and after each export, deleting files older than the cutoff.
 - **Schedule time of day**: `scheduleHour` in ExportConfig; `DailyExportWorker.schedule()` sets an initial delay until the next occurrence of that hour; `ScheduleManager.rescheduleExport()` re-creates the work silently when the hour changes.
 - **File actions**: History rows share via `FileProvider` (`xml/file_paths.xml` mirrors `getExportDirectory()` paths) and delete with a confirmation dialog; `deleteExport()` removes both JSON and CSV variants of a day.
-- **Drive state flow**: `ExportViewModel` collects `driveManager.driveState` into `uiState.driveStatus`, so the connection status is correct immediately at launch (including after an async silent sign-in).
-- **Silent Drive sign-in**: `DriveManager.silentSignIn()` restores the previous Google session at app start without showing UI; a session-only `signedOutThisSession` flag prevents silent reconnection after an explicit sign-out.
+- **Drive state flow**: `ExportViewModel` collects `driveManager.driveState` into `uiState.driveStatus`, so the connection status is correct immediately at launch (including after an async session restore).
+- **Auth split (authentication vs authorization)**: `GoogleAuthProvider` wraps Credential Manager (`GetGoogleIdOption` + `GoogleIdTokenCredential`) for sign-in and AuthorizationClient (`Identity.getAuthorizationClient`) for the Drive scope — the legacy `GoogleSignIn`/`GoogleSignInClient` API was removed in `play-services-auth` 22.0.0. `DriveManager.signIn()` only authenticates; the Drive scope is requested lazily by `syncToDrive()`, which launches the consent `IntentSender` and resumes the pending upload on `onAuthorizationResult()`.
+- **Session restore**: `DriveSessionStore` (SharedPreferences) remembers the connected email, since Credential Manager has no synchronous "last account" query. `DriveManager.refreshDriveStatus()` treats a stored email as connected and silently reuses the cached/authorized token without showing consent UI; `signOut()` clears the stored session synchronously and clears the credential state, so no silent reconnection happens afterwards.
 - **Update check**: HEAD request to the GitHub `releases/latest` URL, version parsed from the redirect `Location` header; release notes fetched from the GitHub API (`releases/latest`) for the "What's new" dialog.
 - **ExportDataUseCase**: Encapsulates the complete export workflow as a `Flow<ExportStep>`, making it testable and separable from ViewModel lifecycle.
 - **Separate UI components**: Each card (DriveStatus, Webhook, Schedule, DataType, DateRange, DataSource, ExportedFiles, ExportSummary) is in its own file under `ui/components/`.
@@ -84,6 +87,9 @@ healthconnect-export/
 │       │   │   └── WebhookRepository.kt        # POST with retry
 │       │   ├── util/
 │       │   │   └── LocaleManager.kt
+│       │   ├── auth/
+│       │   │   ├── GoogleAuthProvider.kt # Credential Manager sign-in + AuthorizationClient (Drive scope)
+│       │   │   └── DriveSessionStore.kt  # Remembers the connected Google account
 │       │   ├── viewmodel/
 │       │   │   ├── ExportViewModel.kt    # UI state orchestration
 │       │   │   ├── DriveManager.kt       # Drive sign-in/sync/sign-out
@@ -112,12 +118,14 @@ healthconnect-export/
 │       │       ├── DailyExportWorker.kt
 │       │       └── Every2HoursWebhookWorker.kt
 │       ├── main/res/
-│       │   ├── values/strings.xml              # English (193 strings)
-│       │   ├── values-ru/strings.xml           # Russian (193 strings, полный перевод)
+│       │   ├── values/strings.xml              # English (197 strings)
+│       │   ├── values-ru/strings.xml           # Russian (197 strings, полный перевод)
 │       │   ├── values/themes.xml
 │       │   ├── drawable/ic_github.xml          # GitHub logo for the About card
 │       │   └── xml/health_connect_permissions.xml
 │       └── test/java/com/healthconnect/export/
+│           ├── testutil/
+│           │   └── FakeGoogleAuthProvider.kt   # In-memory GoogleAuthProvider for tests
 │           ├── data/
 │           │   ├── HumanReadableMapperTest.kt
 │           │   └── DataModelsSerializationTest.kt
@@ -198,18 +206,18 @@ Every2HoursWebhookWorker (every 2h)
 
 ## Unit tests
 
-**Test files (341 tests total):**
+**Test files (344 tests total):**
 
 | File | Tests | Scope |
 |---|---|---|
-| `ExportViewModelTest.kt` | 54 | UI state: loading, export, error, permissions, schedule, data sources, Drive sign-in, silent sign-in/restore, signed-out flag, webhook test, update check, export format, schedule hour, retention, file actions |
+| `ExportViewModelTest.kt` | 54 | UI state: loading, export, error, permissions, schedule, data sources, Drive sign-in/session restore, signed-out flag, Drive scope consent, webhook test, update check, export format, schedule hour, retention, file actions |
 | `WebhookRepositoryTest.kt` | 39 | `sendRecords()` via local HTTP server: success (200/201/204), error (400/403/500), network exception, Bearer auth (token/null/blank/special chars), headers, JSON body, errorstream null. `isValidWebhookUrl()` (19). |
 | `DataModelsSerializationTest.kt` | 39 | Roundtrip serialization: DailyHealthRecord, ExportConfig (incl. ExportFormat/scheduleHour), ExportFrequency, HealthDataType, ExportSummary, SpeedData, SerialName verification, sourceDisplayName |
 | `LocalExportRepositoryTest.kt` | 31 | File operations: getExportDirectory, getFilenameForDate (JSON/CSV), isExported, saveDailyRecord (JSON/CSV, counterpart removal), saveRecords, listExportedFiles (both formats), cleanupOldExports, deleteExport (both variants) |
 | `HighlightJsonSyntaxTest.kt` | 31 | JSON syntax highlighting: strings, numbers (int/float/sci), booleans, null, nested objects, arrays, escaped quotes, adjacent tokens, realistic health record |
 | `DailyExportWorkerTest.kt` | 30 | `doWork()` (success, empty, exceptions, config defaults) / `schedule()` (daily, weekly, manual, cancel, scheduleHour initial delay) / webhook auth test |
 | `HumanReadableMapperTest.kt` | 27 | 8 mapper functions: bodyPositionToString, specimenSourceToString, mealTypeToString, sleepStageToString, measurementLocationToString, menstruationFlowToString, nutritionMealTypeToString, exerciseTypeToString |
-| `GoogleDriveRepositoryTest.kt` | 23 | Google Drive sync: upload (success, delete exception, special chars), download, list (folder found/not found, error after folder), delete, sign in/out, scopes |
+| `GoogleDriveRepositoryTest.kt` | 26 | Google Drive sync: upload (success, delete exception, special chars), download, list (folder found/not found, error after folder), delete, token handling (granted/absent/401 refresh), session store |
 | `Every2HoursWebhookWorkerTest.kt` | 18 | doWork (happy path, blank URL, exceptions), schedule/cancel, constants |
 | `ExportDataUseCaseTest.kt` | 16 | Export steps flow: permissions (granted/denied), health check (available/not available/installed), progress, webhook, Drive sync, complete |
 | `CsvMapperTest.kt` | 13 | CSV flattening: header/row sync, RFC 4180 escaping (commas/quotes/newlines), double formatting, empty cells, metadata, counts |
@@ -347,11 +355,13 @@ Tag push (after build-release):
 ### Release process
 
 ```bash
-git tag v1.8
+git tag v1.9
 
-git push origin v1.8
+git push origin v1.9
 # CI: bump version → build → create GitHub Release
 ```
+
+> **Note:** the CI bump commit touches only `app/build.gradle.kts` (`git add app/build.gradle.kts`) — it sets `versionName` from the tag and increments `versionCode` by 1, then pushes to `main`. The tag itself keeps the pre-bump `versionCode`, same as every previous release.
 
 ### Post-release documentation sync
 
@@ -448,7 +458,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
    - SHA-1: Release `2A:BF:A4:CA:62:59:78:A2:5D:78:FD:74:2D:CB:CA:07:D2:37:42:72`
 2. Создайте **Web Application Client ID**:
    - Тип: **Web application**
-   - Authorized redirect URIs: не нужны (используется для `requestIdToken`)
+   - Authorized redirect URIs: не нужны (используется для `setServerClientId`)
 3. Настройте **OAuth consent screen** (External / Testing)
 4. Включите **Google Drive API**
 5. Включите **Identity Toolkit API**
@@ -456,20 +466,24 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ### 2. Код
 
 ```kotlin
-// GoogleDriveRepository.kt
-fun getSignInOptions(): GoogleSignInOptions {
-    return GoogleSignInOptions.Builder()
-        .requestEmail()
-        .requestIdToken(BuildConfig.GOOGLE_CLIENT_ID)
-        .requestScopes(Scope(DriveScopes.DRIVE_FILE))
-        .build()
-}
+// GoogleAuthProvider.kt — аутентификация (Credential Manager)
+GetGoogleIdOption.Builder()
+    .setServerClientId(BuildConfig.GOOGLE_CLIENT_ID)
+    .setFilterByAuthorizedAccounts(true)   // сначала аккаунты, уже использованные с приложением
+    .setAutoSelectEnabled(true)
+    .build()
+
+// GoogleAuthProvider.kt — авторизация Drive-скоупа (AuthorizationClient)
+AuthorizationRequest.builder()
+    .setRequestedScopes(listOf(Scope(DriveScopes.DRIVE_FILE)))
+    .build()
 ```
 
 **Важно:**
-- `requestIdToken()` использует **Web Client ID** из `BuildConfig.GOOGLE_CLIENT_ID` — это обязательно для Google Sign-In
+- `setServerClientId()` использует **Web Client ID** из `BuildConfig.GOOGLE_CLIENT_ID` — это server client для ID-токена
 - Android Client ID с SHA-1 остаётся в Google Cloud Console для верификации приложения
 - Scope `DRIVE_FILE` даёт доступ к файлам, созданным этим приложением
+- Диалог согласия (`ConsentRequired`) показывает Activity через `IntentSender` (`MainActivity`), а фоновая синхронизация без Activity использует уже выданный токен
 
 ---
 
@@ -519,5 +533,5 @@ Works with both manual and scheduled exports.
 - **Languages**: English (default), Russian
 - **Locale switching**: Via Settings tab → Language → System / English / Russian
 - **Locale persistence**: Saved to SharedPreferences, Activity recreates on change
-- **Coverage**: 193 string resources in each locale, all format placeholders match
+- **Coverage**: 197 string resources in each locale, all format placeholders match
 - **Validation**: `scripts/locale-validator.py` checks for missing translations
