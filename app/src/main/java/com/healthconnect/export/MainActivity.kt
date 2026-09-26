@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
@@ -16,6 +17,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -63,13 +65,30 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Launcher для Google Sign-In — вынесен наружу, чтобы переживал AnimatedContent
-            val signInLauncher =
+            // Launcher для согласия на доступ к Google Drive (AuthorizationClient)
+            val driveAuthorizationLauncher =
                 rememberLauncherForActivityResult(
-                    contract = ActivityResultContracts.StartActivityForResult(),
+                    contract = ActivityResultContracts.StartIntentSenderForResult(),
                 ) { result ->
-                    viewModel.handleSignInResult(result)
+                    viewModel.onDriveAuthorizationResult(result)
                 }
+
+            // Credential Manager и Google Sign-In требуют Activity-контекста,
+            // а Drive-скоуп запрашивается лениво — поэтому лончер и активити
+            // регистрируются в ViewModel/DriveManager.
+            DisposableEffect(driveAuthorizationLauncher) {
+                viewModel.setDriveAuthorizationLauncher { intentSender ->
+                    driveAuthorizationLauncher.launch(
+                        IntentSenderRequest.Builder(intentSender).build(),
+                    )
+                }
+                onDispose { viewModel.setDriveAuthorizationLauncher(null) }
+            }
+
+            DisposableEffect(Unit) {
+                viewModel.attachDriveActivity(this@MainActivity)
+                onDispose { viewModel.attachDriveActivity(null) }
+            }
 
             // Launcher для Health Connect permissions
             val healthPermissionLauncher =
@@ -84,8 +103,7 @@ class MainActivity : ComponentActivity() {
                 }
 
             val onSignInClick: () -> Unit = {
-                val signIntent = viewModel.driveManager.googleSignInClient.signInIntent
-                signInLauncher.launch(signIntent)
+                viewModel.signInToDrive()
             }
 
             val onRequestHealthPermissions: (Set<String>) -> Unit = { permissions ->
