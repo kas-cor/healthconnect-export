@@ -19,6 +19,7 @@ import com.healthconnect.export.util.BatteryOptimization
 import com.healthconnect.export.util.DeliveryLog
 import com.healthconnect.export.util.ExportSettings
 import com.healthconnect.export.util.LocaleManager
+import com.healthconnect.export.worker.DeliveryWatchdog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -165,6 +166,9 @@ class ExportViewModel(
         loadRetentionDays()
         loadFrequency()
         refreshDeliveryStatus()
+        // A stale delivery pipeline must not wait for the next watchdog alarm:
+        // the user is here now, so fill the gap right away.
+        DeliveryWatchdog.catchUpIfStale(getApplication(), "app_start")
         refreshBatteryOptimizationStatus()
         driveManager.refreshDriveStatus()
         // Keep uiState.driveStatus in sync with DriveManager: the status is
