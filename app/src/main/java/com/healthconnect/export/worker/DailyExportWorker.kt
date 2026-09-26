@@ -168,7 +168,7 @@ class DailyExportWorker(
                 if (config.autoSendWebhook && config.webhookUrl.isNotBlank()) {
                     when (val result = webhookRepo.sendRecords(config.webhookUrl, records, config.webhookAuthToken)) {
                         is com.healthconnect.export.repository.WebhookResult.Success ->
-                            DeliveryLog.recordSuccess(applicationContext, TRIGGER, records.map { it.date })
+                            DeliveryLog.recordSuccess(applicationContext, TRIGGER, records.map { it.date }, statusCode = result.statusCode)
                         is com.healthconnect.export.repository.WebhookResult.Error -> {
                             DeliveryLog.recordFailure(
                                 applicationContext,

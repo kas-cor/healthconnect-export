@@ -132,4 +132,26 @@ class DeliveryLogTest {
 
         assertNull(DeliveryLog.status(plainContext).lastAttemptAt)
     }
+
+    @Test
+    fun `success with a status code records the HTTP code in the diagnostics`() {
+        val now = fixedNow(0)
+        DeliveryLog.recordSuccess(
+            context = context,
+            trigger = "daily",
+            deliveredDates = listOf("2026-09-21", "2026-09-22"),
+            now = now,
+            statusCode = 200,
+        )
+
+        assertEquals("HTTP 200: 2 day(s) up to 2026-09-22", DeliveryLog.status(context).lastAttemptResult)
+        assertTrue(DeliveryLog.entries(context).first().contains("HTTP 200"))
+    }
+
+    @Test
+    fun `success without a status code keeps the plain text`() {
+        DeliveryLog.recordSuccess(context, "test", listOf("2026-09-22"), fixedNow(0))
+
+        assertEquals("ok: 1 day(s) up to 2026-09-22", DeliveryLog.status(context).lastAttemptResult)
+    }
 }
