@@ -82,11 +82,14 @@ healthconnect-export/
 │       │   │   └── ExportDataUseCase.kt # Export workflow (Flow<ExportStep>)
 │       │   ├── repository/
 │       │   │   ├── HealthConnectRepository.kt  # TypeHandler-based batch reading
-│       │   │   ├── LocalExportRepository.kt    # JSON file I/O
-│       │   │   ├── GoogleDriveRepository.kt    # Drive API (upload/list/delete)
+│       │   │   ├── LocalExportRepository.kt    # JSON/CSV file I/O
+│       │   │   ├── GoogleDriveRepository.kt    # Drive API (upload/list/download/delete)
 │       │   │   └── WebhookRepository.kt        # POST with retry
 │       │   ├── util/
-│       │   │   └── LocaleManager.kt
+│       │   │   ├── LocaleManager.kt
+│       │   │   ├── BatteryOptimization.kt  # Doze-exemption state + request intent
+│       │   │   ├── DeliveryLog.kt          # Last attempt/success + 100-entry delivery ring buffer
+│       │   │   └── ExportSettings.kt       # Export config read from SharedPreferences by the workers
 │       │   ├── auth/
 │       │   │   ├── GoogleAuthProvider.kt # Credential Manager sign-in + AuthorizationClient (Drive scope)
 │       │   │   └── DriveSessionStore.kt  # Remembers the connected Google account
@@ -114,21 +117,32 @@ healthconnect-export/
 │       │   │       ├── ReleaseNotesDialog.kt
 │       │   │       ├── ScheduleCard.kt
 │       │   │       └── WebhookCard.kt
+│       │   ├── receiver/
+│       │   │   ├── DeliveryBootReceiver.kt    # Re-enqueues the schedule + catch-up after boot / package replace
+│       │   │   └── WatchdogAlarmReceiver.kt   # Re-arms the watchdog alarm and queues the catch-up work
 │       │   └── worker/
-│       │       ├── DailyExportWorker.kt
-│       │       └── Every2HoursWebhookWorker.kt
+│       │       ├── DailyExportWorker.kt             # Scheduled export (daily/weekly)
+│       │       ├── Every2HoursWebhookWorker.kt      # Webhook-only send every 2 hours
+│       │       ├── CatchUpWebhookWorker.kt          # Sends every day missed since the last delivered day
+│       │       └── DeliveryWatchdog.kt              # Inexact Doze-allowed alarm (every 6 h) re-enqueuing both jobs
 │       ├── main/res/
-│       │   ├── values/strings.xml              # English (197 strings)
-│       │   ├── values-ru/strings.xml           # Russian (197 strings, полный перевод)
+│       │   ├── values/strings.xml              # English (211 strings)
+│       │   ├── values-ru/strings.xml           # Russian (211 strings, полный перевод)
 │       │   ├── values/themes.xml
 │       │   ├── drawable/ic_github.xml          # GitHub logo for the About card
 │       │   └── xml/health_connect_permissions.xml
 │       └── test/java/com/healthconnect/export/
+│           ├── testing/
+│           │   └── FakeSharedPreferences.kt    # In-memory SharedPreferences for unit tests
 │           ├── testutil/
 │           │   └── FakeGoogleAuthProvider.kt   # In-memory GoogleAuthProvider for tests
 │           ├── data/
-│           │   ├── HumanReadableMapperTest.kt
-│           │   └── DataModelsSerializationTest.kt
+│           │   ├── CsvMapperTest.kt
+│           │   ├── DataModelsSerializationTest.kt
+│           │   └── HumanReadableMapperTest.kt
+│           ├── receiver/
+│           │   ├── DeliveryBootReceiverTest.kt
+│           │   └── WatchdogAlarmReceiverTest.kt
 │           ├── repository/
 │           │   ├── GoogleDriveRepositoryTest.kt
 │           │   ├── LocalExportRepositoryTest.kt
@@ -141,21 +155,30 @@ healthconnect-export/
 │           ├── usecase/
 │           │   └── ExportDataUseCaseTest.kt
 │           ├── util/
+│           │   ├── BatteryOptimizationTest.kt
+│           │   ├── DeliveryLogTest.kt
+│           │   ├── ExportSettingsTest.kt
 │           │   └── LocaleManagerTest.kt
 │           ├── viewmodel/
 │           │   └── ExportViewModelTest.kt
 │           └── worker/
+│               ├── CatchUpWebhookWorkerTest.kt
 │               ├── DailyExportWorkerTest.kt
+│               ├── DeliveryWatchdogCatchUpTest.kt
+│               ├── DeliveryWatchdogSchedulingTest.kt
+│               ├── DeliveryWatchdogTest.kt
 │               └── Every2HoursWebhookWorkerTest.kt
 ├── badges/                          # Coverage badge SVGs (auto-committed by CI)
-├── build                            # Build script (bash)
+├── build.sh                         # Build script (bash)
+├── CHANGELOG.md
 ├── build.gradle.kts
 ├── settings.gradle.kts
 ├── gradle.properties
 ├── scripts/
-│   └── locale-validator.py          # Validates translation completeness
+│   └── locale-validator.py          # Validates translations + README section parity
 ├── AGENTS.md                        # This file
-└── README.md
+├── README.md
+└── README.ru.md
 ```
 
 ---
@@ -206,24 +229,33 @@ Every2HoursWebhookWorker (every 2h)
 
 ## Unit tests
 
-**Test files (344 tests total):**
+**Test files (397 tests total):**
 
 | File | Tests | Scope |
 |---|---|---|
-| `ExportViewModelTest.kt` | 54 | UI state: loading, export, error, permissions, schedule, data sources, Drive sign-in/session restore, signed-out flag, Drive scope consent, webhook test, update check, export format, schedule hour, retention, file actions |
-| `WebhookRepositoryTest.kt` | 39 | `sendRecords()` via local HTTP server: success (200/201/204), error (400/403/500), network exception, Bearer auth (token/null/blank/special chars), headers, JSON body, errorstream null. `isValidWebhookUrl()` (19). |
-| `DataModelsSerializationTest.kt` | 39 | Roundtrip serialization: DailyHealthRecord, ExportConfig (incl. ExportFormat/scheduleHour), ExportFrequency, HealthDataType, ExportSummary, SpeedData, SerialName verification, sourceDisplayName |
-| `LocalExportRepositoryTest.kt` | 31 | File operations: getExportDirectory, getFilenameForDate (JSON/CSV), isExported, saveDailyRecord (JSON/CSV, counterpart removal), saveRecords, listExportedFiles (both formats), cleanupOldExports, deleteExport (both variants) |
-| `HighlightJsonSyntaxTest.kt` | 31 | JSON syntax highlighting: strings, numbers (int/float/sci), booleans, null, nested objects, arrays, escaped quotes, adjacent tokens, realistic health record |
-| `DailyExportWorkerTest.kt` | 30 | `doWork()` (success, empty, exceptions, config defaults) / `schedule()` (daily, weekly, manual, cancel, scheduleHour initial delay) / webhook auth test |
-| `HumanReadableMapperTest.kt` | 27 | 8 mapper functions: bodyPositionToString, specimenSourceToString, mealTypeToString, sleepStageToString, measurementLocationToString, menstruationFlowToString, nutritionMealTypeToString, exerciseTypeToString |
-| `GoogleDriveRepositoryTest.kt` | 26 | Google Drive sync: upload (success, delete exception, special chars), download, list (folder found/not found, error after folder), delete, token handling (granted/absent/401 refresh), session store |
-| `Every2HoursWebhookWorkerTest.kt` | 18 | doWork (happy path, blank URL, exceptions), schedule/cancel, constants |
-| `ExportDataUseCaseTest.kt` | 16 | Export steps flow: permissions (granted/denied), health check (available/not available/installed), progress, webhook, Drive sync, complete |
-| `CsvMapperTest.kt` | 13 | CSV flattening: header/row sync, RFC 4180 escaping (commas/quotes/newlines), double formatting, empty cells, metadata, counts |
-| `LocaleManagerTest.kt` | 12 | localeDisplayName (all branches + edge cases), saveLocale, getSavedLocale |
-| `ExportedFilesCardTest.kt` | 5 | `visibleExportFiles()` slicing: collapse to newest N, showAll, ≤N files, exactly N, empty list |
-| `DateRangeCardTest.kt` | 3 | DateRangeCard Compose UI tests: presets, custom dates, picker interaction |
+| `ExportViewModelTest` | 54 | ViewModel states: export, webhook, Drive sign-in/session restore, signed-out flag, Drive scope consent, update check, export format, schedule hour, retention, file actions |
+| `WebhookRepositoryTest` | 39 | sendRecords via local HTTP server (success/error/auth/special chars/JSON body) + URL validation |
+| `DataModelsSerializationTest` | 39 | Roundtrip serialization: DailyHealthRecord, ExportConfig (incl. format/hour), enums, SpeedData, sourceDisplayName |
+| `LocalExportRepositoryTest` | 31 | File operations: save (JSON/CSV), list, cleanup, delete both formats, filename format |
+| `HighlightJsonSyntaxTest` | 31 | JSON syntax highlighting: strings, numbers, booleans, null, nested objects, arrays, escaped quotes |
+| `DailyExportWorkerTest` | 30 | doWork() (success/already-exported/empty/exceptions) + schedule() (daily/weekly/manual/cancel, schedule hour) |
+| `HumanReadableMapperTest` | 27 | 8 mapper functions: bodyPosition, specimenSource, sleepStage, exerciseType, etc. |
+| `GoogleDriveRepositoryTest` | 26 | Drive sync: upload, list, download, delete, token handling, special characters |
+| `Every2HoursWebhookWorkerTest` | 18 | doWork (happy path, blank URL, exceptions) + schedule/cancel |
+| `ExportDataUseCaseTest` | 16 | Export workflow: permissions, health check, progress, webhook, Drive sync |
+| `CsvMapperTest` | 13 | CSV flattening: header/row sync, RFC 4180 escaping, double formatting, missing sections |
+| `LocaleManagerTest` | 12 | localeDisplayName all branches, saveLocale/getSavedLocale |
+| `DeliveryLogTest` | 12 | Last attempt/success persistence, ring buffer capping, delivered-date bookkeeping |
+| `CatchUpWebhookWorkerTest` | 11 | Catch-up window (7 days on the first run, capped at 30), resume point, retry on errors/unavailable Health Connect |
+| `DeliveryWatchdogTest` | 6 | Alarm arm/cancel, re-enqueue of both periodic jobs on fire, tolerates a missing AlarmManager |
+| `DeliveryWatchdogSchedulingTest` | 6 | Initial delay and interval of the watchdog schedule |
+| `ExportSettingsTest` | 5 | SharedPreferences-backed export config: defaults and roundtrip |
+| `ExportedFilesCardTest` | 5 | visibleExportFiles slicing: collapse to newest N, showAll, ≤N files, empty list |
+| `DeliveryWatchdogCatchUpTest` | 5 | When the watchdog queues a catch-up, based on the last successful delivery |
+| `DeliveryBootReceiverTest` | 4 | BOOT_COMPLETED / MY_PACKAGE_REPLACED restores the schedule and queues a catch-up |
+| `DateRangeCardTest` | 3 | Compose UI tests: presets, custom dates, picker interaction |
+| `BatteryOptimizationTest` | 3 | Doze exemption state and request intent |
+| `WatchdogAlarmReceiverTest` | 1 | Alarm fire enqueues the catch-up delivery |
 
 **Run tests:**
 
@@ -333,9 +365,7 @@ Tag push (after build-release):
 | Secret | Description |
 |---|---|
 | `KEYSTORE_BASE64` | `healthconnect-release.jks` in base64 |
-| `KEYSTORE_PASSWORD` | Keystore password |
-| `KEY_ALIAS` | Key alias (default: `healthconnect`) |
-| `KEY_PASSWORD` | Key password (falls back to `KEYSTORE_PASSWORD`) |
+| `KEYSTORE_PASSWORD` | Keystore password (also used as the key password; alias defaults to `healthconnect`) |
 
 ### Setup secrets in GitHub
 
@@ -533,5 +563,5 @@ Works with both manual and scheduled exports.
 - **Languages**: English (default), Russian
 - **Locale switching**: Via Settings tab → Language → System / English / Russian
 - **Locale persistence**: Saved to SharedPreferences, Activity recreates on change
-- **Coverage**: 197 string resources in each locale, all format placeholders match
+- **Coverage**: 211 string resources in each locale, all format placeholders match
 - **Validation**: `scripts/locale-validator.py` checks for missing translations
