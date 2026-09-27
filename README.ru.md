@@ -5,7 +5,7 @@
 [![Branches](https://raw.githubusercontent.com/kas-cor/healthconnect-export/main/badges/branches.svg)](https://github.com/kas-cor/healthconnect-export/actions/workflows/build-apk.yml)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Kotlin](https://img.shields.io/badge/kotlin-2.4.20-purple)](https://kotlinlang.org)
-[![Версия](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-1.9-blue)](CHANGELOG.md)
+[![Версия](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-1.10-blue)](CHANGELOG.md)
 [![Release](https://img.shields.io/github/v/release/kas-cor/healthconnect-export)](https://github.com/kas-cor/healthconnect-export/releases)
 [![English](https://img.shields.io/badge/README-English-blue)](README.md)
 
@@ -107,7 +107,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ## Тестирование 🧪
 
 ```bash
-# Запустить все модульные тесты (344 теста)
+# Запустить все модульные тесты (397 тестов)
 ./gradlew testDebugUnitTest
 
 # Отчёт покрытия + проверка порогов
@@ -115,24 +115,33 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 # Открыть: app/build/reports/jacoco/jacocoTestReport/html/index.html
 ```
 
-**Наборы тестов (всего 344):**
+**Наборы тестов (всего 397):**
 
 | Файл | Тестов | Что проверяет |
 |---|---|---|
-| `ExportViewModelTest` | 54 | Состояния ViewModel: экспорт, webhook, вход в Drive/восстановление сессии, флаг sign-out, согласие на Drive-скоуп, проверка обновлений, формат, час расписания, ретенция, действия с файлами |
-| `WebhookRepositoryTest` | 39 | sendRecords через локальный HTTP-сервер (успех/ошибка/авторизация/спецсимволы/JSON) + валидация URL |
-| `DataModelsSerializationTest` | 39 | Обратная сериализация: DailyHealthRecord, ExportConfig (вкл. формат/час), enum'ы, SpeedData, sourceDisplayName |
-| `LocalExportRepositoryTest` | 31 | Файловые операции: сохранение (JSON/CSV), список, очистка, удаление обоих форматов, формат имени файла |
+| `ExportViewModelTest` | 54 | Состояния ViewModel: экспорт, webhook, вход в Drive/восстановление сессии, флаг sign-out, согласие на Drive-скоуп, проверка обновлений, формат, час расписания, retention, действия с файлами |
+| `WebhookRepositoryTest` | 39 | sendRecords через локальный HTTP-сервер (успех/ошибка/авторизация/спецсимволы/JSON body) + валидация URL |
+| `DataModelsSerializationTest` | 39 | Roundtrip-сериализация: DailyHealthRecord, ExportConfig (включая формат/час), enum'ы, SpeedData, sourceDisplayName |
+| `LocalExportRepositoryTest` | 31 | Файловые операции: сохранение (JSON/CSV), список, очистка, удаление обоих форматов, формат имени |
 | `HighlightJsonSyntaxTest` | 31 | Подсветка синтаксиса JSON: строки, числа, boolean, null, вложенные объекты, массивы, экранированные кавычки |
-| `DailyExportWorkerTest` | 30 | `doWork()` (успех/уже экспортировано/пусто/исключения) + `schedule()` (ежедневно/еженедельно/вручную/отмена, час запуска) |
-| `HumanReadableMapperTest` | 27 | 8 функций-мапперов: bodyPosition, specimenSource, sleepStage, exerciseType и т.д. |
+| `DailyExportWorkerTest` | 30 | doWork() (успех/уже экспортировано/пусто/исключения) + schedule() (daily/weekly/manual/cancel, час расписания) |
+| `HumanReadableMapperTest` | 27 | 8 mapper-функций: bodyPosition, specimenSource, sleepStage, exerciseType и др. |
 | `GoogleDriveRepositoryTest` | 26 | Синхронизация Drive: загрузка, список, скачивание, удаление, работа с токеном, спецсимволы |
 | `Every2HoursWebhookWorkerTest` | 18 | doWork (happy path, пустой URL, исключения) + schedule/cancel |
-| `ExportDataUseCaseTest` | 16 | Рабочий процесс экспорта: разрешения, проверка Health Connect, прогресс, webhook, Drive |
-| `CsvMapperTest` | 13 | CSV-уплощение: синхронизация заголовка/строки, RFC 4180 экранирование, форматирование чисел, отсутствующие секции |
-| `LocaleManagerTest` | 12 | localeDisplayName (все ветки), saveLocale/getSavedLocale |
-| `ExportedFilesCardTest` | 5 | Нарезка visibleExportFiles: свернуть до N, showAll, ≤N файлов, пустой список |
+| `ExportDataUseCaseTest` | 16 | Сценарий экспорта: разрешения, проверка Health Connect, прогресс, webhook, Drive |
+| `CsvMapperTest` | 13 | CSV-уплощение: синхронизация заголовка/строки, экранирование RFC 4180, форматирование чисел, отсутствующие секции |
+| `LocaleManagerTest` | 12 | Все ветки localeDisplayName, saveLocale/getSavedLocale |
+| `DeliveryLogTest` | 12 | Сохранение последней попытки/успеха, ограничение кольцевого буфера, учёт доставленных дат |
+| `CatchUpWebhookWorkerTest` | 11 | Окно догона (7 дней при первом запуске, максимум 30), точка возобновления, retry при ошибках и недоступном Health Connect |
+| `DeliveryWatchdogTest` | 6 | Постановка/снятие alarm, повторная постановка обеих периодических задач при срабатывании, устойчивость к отсутствию AlarmManager |
+| `DeliveryWatchdogSchedulingTest` | 6 | Первая задержка и интервал расписания watchdog-а |
+| `ExportSettingsTest` | 5 | Конфигурация экспорта поверх SharedPreferences: значения по умолчанию и roundtrip |
+| `ExportedFilesCardTest` | 5 | Срез visibleExportFiles: свёртка до N новых, showAll, ≤N файлов, пустой список |
+| `DeliveryWatchdogCatchUpTest` | 5 | Условия запуска догона из watchdog-а по времени последней успешной доставки |
+| `DeliveryBootReceiverTest` | 4 | BOOT_COMPLETED / MY_PACKAGE_REPLACED восстанавливает расписание и ставит догон |
 | `DateRangeCardTest` | 3 | Compose UI тесты: пресеты, свои даты, взаимодействие с пикером |
+| `BatteryOptimizationTest` | 3 | Состояние Doze-исключения и intent запроса |
+| `WatchdogAlarmReceiverTest` | 1 | Срабатывание alarm ставит в очередь догон |
 
 ## CI/CD 🚀
 
@@ -187,15 +196,13 @@ Push → Lint + Ktlint → Модульные тесты
 | Secret | Описание |
 |---|---|
 | `KEYSTORE_BASE64` | `healthconnect-release.jks` в base64 |
-| `KEYSTORE_PASSWORD` | Пароль keystore |
-| `KEY_ALIAS` | Псевдоним ключа (по умолч.: `healthconnect`) |
-| `KEY_PASSWORD` | Пароль ключа (если не задан, используется `KEYSTORE_PASSWORD`) |
+| `KEYSTORE_PASSWORD` | Пароль keystore (используется и как пароль ключа; псевдоним по умолчанию — `healthconnect`) |
 
 ### Релиз
 
 ```bash
-git tag v1.1
-git push origin v1.1
+git tag v1.10
+git push origin v1.10
 # CI: увеличить версию → собрать → создать GitHub Release
 ```
 
@@ -303,7 +310,7 @@ apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
 
 - **Языки**: английский (по умолчанию), русский
 - **Переключение языка**: через вкладку «Настройки» → «Язык»
-- **Покрытие**: Все **197 строк** переведены в `values-ru/strings.xml`
+- **Покрытие**: Все **211 строк** переведены в `values-ru/strings.xml`
 - **Безопасность форматов**: все плейсхолдеры `%d`, `%s`, `%.1f` совпадают между языками
 - **Сохранение**: выбранный язык сохраняется в SharedPreferences
 
@@ -325,7 +332,7 @@ apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
 ### Технические детали
 
 - Файл перевода: `app/src/main/res/values-ru/strings.xml`
-- Все **197 строк** переведены — ни одной пропущенной английской строки
+- Все **211 строк** переведены — ни одной пропущенной английской строки
 - Форматные плейсхолдеры (`%d`, `%s`, `%.1f`) полностью совпадают с английской версией — никаких crash'ей при переключении языка
 - Выбор языка сохраняется в `SharedPreferences` и восстанавливается после перезапуска
 - На здоровье не влияет — JSON-данные экспортируются с английскими ключами независимо от языка интерфейса
@@ -448,6 +455,7 @@ cp README.md README.fr.md
 
 | Версия | Дата | Что нового |
 |---|---|---|
+| [v1.10](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.10) | 2026-09-27 | Вход в Google через Credential Manager, ленивый запрос Drive-скоупа, догон недоставленных дней при открытии приложения, 397 тестов |
 | [v1.9](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.9) | 2026-09-25 | Фоновая выгрузка переживает перезагрузки, Doze и агрессивную экономию батареи: будильник-watchdog, ресивер загрузки, догоняющая выгрузка пропущенных дней, журнал || [v1.8](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.8) | 2026-08-10 | Действия с файлами в Истории (поделиться/удалить), экспорт JSON/CSV, автоочистка, час запуска расписания, 341 тест |
 | [v1.7](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.7) | 2026-08-10 | Проверка обновлений + диалог «Что нового», навигация по вкладкам, автовход в Google Drive, улучшения Истории |
 | [v1.6](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.6) | 2026-07-17 | Build-скрипт (`build.sh`), русский README (`README.ru.md`), проверка синхронизации README |

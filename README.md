@@ -5,7 +5,7 @@
 [![Branches](https://raw.githubusercontent.com/kas-cor/healthconnect-export/main/badges/branches.svg)](https://github.com/kas-cor/healthconnect-export/actions/workflows/build-apk.yml)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Kotlin](https://img.shields.io/badge/kotlin-2.4.20-purple)](https://kotlinlang.org)
-[![Version](https://img.shields.io/badge/version-1.9-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.10-blue)](CHANGELOG.md)
 [![Release](https://img.shields.io/github/v/release/kas-cor/healthconnect-export)](https://github.com/kas-cor/healthconnect-export/releases)
 [![Русский](https://img.shields.io/badge/README-%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-blue)](README.ru.md)
 
@@ -107,7 +107,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ## Testing 🧪
 
 ```bash
-# Run all unit tests (344 tests)
+# Run all unit tests (397 tests)
 ./gradlew testDebugUnitTest
 
 # Coverage report + gate check
@@ -115,7 +115,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 # Open: app/build/reports/jacoco/jacocoTestReport/html/index.html
 ```
 
-**Test suites (344 total):**
+**Test suites (397 total):**
 
 | File | Tests | Scope |
 |---|---|---|
@@ -124,15 +124,24 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | `DataModelsSerializationTest` | 39 | Roundtrip serialization: DailyHealthRecord, ExportConfig (incl. format/hour), enums, SpeedData, sourceDisplayName |
 | `LocalExportRepositoryTest` | 31 | File operations: save (JSON/CSV), list, cleanup, delete both formats, filename format |
 | `HighlightJsonSyntaxTest` | 31 | JSON syntax highlighting: strings, numbers, booleans, null, nested objects, arrays, escaped quotes |
-| `DailyExportWorkerTest` | 30 | `doWork()` (success/already-exported/empty/exceptions) + `schedule()` (daily/weekly/manual/cancel, schedule hour) |
+| `DailyExportWorkerTest` | 30 | doWork() (success/already-exported/empty/exceptions) + schedule() (daily/weekly/manual/cancel, schedule hour) |
 | `HumanReadableMapperTest` | 27 | 8 mapper functions: bodyPosition, specimenSource, sleepStage, exerciseType, etc. |
 | `GoogleDriveRepositoryTest` | 26 | Drive sync: upload, list, download, delete, token handling, special characters |
 | `Every2HoursWebhookWorkerTest` | 18 | doWork (happy path, blank URL, exceptions) + schedule/cancel |
 | `ExportDataUseCaseTest` | 16 | Export workflow: permissions, health check, progress, webhook, Drive sync |
 | `CsvMapperTest` | 13 | CSV flattening: header/row sync, RFC 4180 escaping, double formatting, missing sections |
 | `LocaleManagerTest` | 12 | localeDisplayName all branches, saveLocale/getSavedLocale |
+| `DeliveryLogTest` | 12 | Last attempt/success persistence, ring buffer capping, delivered-date bookkeeping |
+| `CatchUpWebhookWorkerTest` | 11 | Catch-up window (7 days on the first run, capped at 30), resume point, retry on errors/unavailable Health Connect |
+| `DeliveryWatchdogTest` | 6 | Alarm arm/cancel, re-enqueue of both periodic jobs on fire, tolerates a missing AlarmManager |
+| `DeliveryWatchdogSchedulingTest` | 6 | Initial delay and interval of the watchdog schedule |
+| `ExportSettingsTest` | 5 | SharedPreferences-backed export config: defaults and roundtrip |
 | `ExportedFilesCardTest` | 5 | visibleExportFiles slicing: collapse to newest N, showAll, ≤N files, empty list |
+| `DeliveryWatchdogCatchUpTest` | 5 | When the watchdog queues a catch-up, based on the last successful delivery |
+| `DeliveryBootReceiverTest` | 4 | BOOT_COMPLETED / MY_PACKAGE_REPLACED restores the schedule and queues a catch-up |
 | `DateRangeCardTest` | 3 | Compose UI tests: presets, custom dates, picker interaction |
+| `BatteryOptimizationTest` | 3 | Doze exemption state and request intent |
+| `WatchdogAlarmReceiverTest` | 1 | Alarm fire enqueues the catch-up delivery |
 
 ## CI/CD 🚀
 
@@ -187,15 +196,13 @@ On push to `main`, a coverage badge is auto-committed to `badges/`.
 | Secret | Description |
 |---|---|
 | `KEYSTORE_BASE64` | `healthconnect-release.jks` in base64 |
-| `KEYSTORE_PASSWORD` | Keystore password |
-| `KEY_ALIAS` | Key alias (default: `healthconnect`) |
-| `KEY_PASSWORD` | Key password (falls back to `KEYSTORE_PASSWORD`) |
+| `KEYSTORE_PASSWORD` | Keystore password (also used as the key password; alias defaults to `healthconnect`) |
 
 ### Release
 
 ```bash
-git tag v1.1
-git push origin v1.1
+git tag v1.10
+git push origin v1.10
 # CI: bump version → build → create GitHub Release
 ```
 
@@ -303,7 +310,7 @@ Each element in the `messages` array is a `DailyHealthRecord` — one per export
 
 - **Languages**: English (default), Russian
 - **Locale switching**: Via Settings tab → Language
-- **Coverage**: All 197 strings translated in `values-ru/strings.xml`
+- **Coverage**: All 211 strings translated in `values-ru/strings.xml`
 - **Format safety**: All `%d`, `%s`, `%.1f` placeholders match between locales
 - **Persistence**: Selected locale saved in SharedPreferences
 
@@ -329,7 +336,7 @@ Each element in the `messages` array is a `DailyHealthRecord` — one per export
 **Технические детали:**
 
 - Файл перевода: `app/src/main/res/values-ru/strings.xml`
-- Все **197 строк** переведены — ни одной пропущенной английской строки
+- Все **211 строк** переведены — ни одной пропущенной английской строки
 - Форматные плейсхолдеры (`%d`, `%s`, `%.1f`) полностью совпадают с английской версией — никаких crash'ей при переключении языка
 - Выбор языка сохраняется в `SharedPreferences` и восстанавливается после перезапуска
 - На здоровье не влияет — JSON-данные экспортируются с английскими ключами независимо от языка интерфейса
@@ -452,7 +459,9 @@ See [CHANGELOG.md](CHANGELOG.md) for full release history.
 
 | Version | Date | Highlights |
 |---|---|---|
-| [v1.9](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.9) | 2026-09-25 | Background delivery survives reboots, Doze and OEM battery savers: watchdog alarm, boot receiver, catch-up of missed days, delivery log || [v1.8](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.8) | 2026-08-10 | File actions in History (share/delete), JSON/CSV export format, auto-cleanup retention, schedule hour, 341 tests |
+| [v1.10](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.10) | 2026-09-27 | Google Sign-In migrated to Credential Manager, Drive scope requested lazily, catch-up of undelivered days on app open, 397 tests |
+| [v1.9](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.9) | 2026-09-25 | Background delivery survives reboots, Doze and OEM battery savers: watchdog alarm, boot receiver, catch-up of missed days, delivery log |
+| [v1.8](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.8) | 2026-08-10 | File actions in History (share/delete), JSON/CSV export format, auto-cleanup retention, schedule hour, 341 tests |
 | [v1.7](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.7) | 2026-08-10 | Update check + "What's new" dialog, tabbed navigation, Google Drive auto sign-in, History improvements |
 | [v1.6](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.6) | 2026-07-17 | Build script (`build.sh`), Russian README (`README.ru.md`), README sync validation |
 | [v1.5](https://github.com/kas-cor/healthconnect-export/releases/tag/v1.5) | 2026-06-08 | Every-2-hours webhook worker, test webhook button, file sorting descending, dependency updates (Kotlin 2.3.21, Gradle 9.5.1) |
