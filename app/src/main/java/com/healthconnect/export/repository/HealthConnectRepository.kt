@@ -643,6 +643,8 @@ class HealthConnectRepository(
         type: HealthDataType,
         daysMap: MutableMap<String, DailyHealthRecord>,
         timeFilter: TimeRangeFilter,
+        startDate: LocalDate,
+        endDate: LocalDate,
         selectedSourcePackage: String?,
         onPageProgress: ((typeName: String, pageNumber: Int) -> Unit)?,
     ) {
@@ -665,20 +667,42 @@ class HealthConnectRepository(
                 ) { _, page -> onPageProgress?.invoke(typeName, page) }
             }
 
-        val byDay =
-            allRecords.groupBy {
-                handler
-                    .timeSelector(it)
-                    .atZone(ZoneId.systemDefault())
-                    .toLocalDate()
-                    .toString()
-            }
+        val byDay = allRecords.groupBy { record -> clampToWindow(handler.timeSelector(record), startDate, endDate).toString() }
         byDay.forEach { (dateStr, records) ->
-            val existing = requireNotNull(daysMap[dateStr]) { "Date $dateStr not pre-populated in daysMap" }
+            // Only reachable if the caller seeded daysMap with a different window.
+            val existing = daysMap[dateStr] ?: return@forEach
             daysMap[dateStr] = handler.updateRecord(existing, handler.extract(records, selectedSourcePackage))
         }
 
         Log.d(TAG, "readPeriodInBatch ${type.name}: total=${allRecords.size}, days=${byDay.size}")
+    }
+
+    /**
+     * Maps an instant onto the day it is attributed to inside the export window.
+     *
+     * Health Connect returns every interval record that merely *overlaps* the
+     * requested range, not only those starting inside it: a sleep session running
+     * 23:00 -> 07:00 comes back for a window that begins at 00:00 of the next day,
+     * even though its start day lies outside the window. The caller pre-seeds its
+     * day map with exactly the requested days, so attributing such a record to its
+     * own start day would abort the whole export.
+     *
+     * Clamping to the nearest window boundary keeps the data and the export alive.
+     * This is the common case rather than an edge case for the background workers,
+     * which read a single day at a time.
+     */
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    internal fun clampToWindow(
+        instant: Instant,
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): LocalDate {
+        val day = instant.atZone(ZoneId.systemDefault()).toLocalDate()
+        return when {
+            day.isBefore(startDate) -> startDate
+            day.isAfter(endDate) -> endDate
+            else -> day
+        }
     }
 
     suspend fun readPeriodInBatch(
@@ -720,7 +744,7 @@ class HealthConnectRepository(
             types.forEach { type ->
                 val handler = typeHandlers[type]
                 if (handler != null) {
-                    processTypeData(handler, type, daysMap, timeFilter, selectedSourcePackage, onPageProgress)
+                    processTypeData(handler, type, daysMap, timeFilter, startDate, endDate, selectedSourcePackage, onPageProgress)
                 } else {
                     Log.w(TAG, "readPeriodInBatch: no handler registered for $type")
                 }
