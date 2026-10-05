@@ -7,6 +7,7 @@ import com.healthconnect.export.repository.HealthConnectRepository
 import com.healthconnect.export.repository.WebhookRepository
 import com.healthconnect.export.repository.WebhookResult
 import com.healthconnect.export.util.DeliveryLog
+import com.healthconnect.export.util.ExportForegroundNotifier
 import com.healthconnect.export.util.ExportSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -73,6 +74,10 @@ class Every2HoursWebhookWorker(
                 if (!ExportSettings.hasWebhook(config)) {
                     return@withContext Result.success()
                 }
+
+                // Health Connect (Android 14+) rejects background reads unless the
+                // app is in the foreground or running as a foreground service.
+                ExportForegroundNotifier.promoteToForeground(this@Every2HoursWebhookWorker)
 
                 // Read today's data
                 val today = LocalDate.now()

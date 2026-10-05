@@ -38,6 +38,15 @@
 
     <!-- Foreground service for scheduled work -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!--
+      Health Connect on Android 14 refuses to read data from the background unless
+      the app either holds READ_HEALTH_DATA_IN_BACKGROUND or runs as a foreground
+      service. DATA_SYNC is granted at install time (normal|instant), while
+      READ_HEALTH_DATA_IN_BACKGROUND is dangerous and must be granted by the user,
+      so the foreground-service route is the one that keeps scheduled exports
+      working without an extra permission prompt.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Optional exemption from Doze/battery optimization (offered in the Schedule tab) -->
@@ -98,6 +107,19 @@
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
         </receiver>
+
+        <!--
+          WorkManager promotes a worker to a foreground service through
+          SystemForegroundService (not SystemJobService). The type must be declared
+          there, otherwise Android rejects the promotion with "foregroundServiceType
+          is not a subset of ... 0x0" and the background read never reaches Health
+          Connect. dataSync is used rather than health, which would additionally
+          require BODY_SENSORS/ACTIVITY_RECOGNITION.
+        -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
 
         <!-- Watchdog alarm that keeps the delivery pipeline alive under Doze -->
         <receiver
