@@ -273,4 +273,8 @@
     <string name="releases_url" translatable="false">https://github.com/kas-cor/healthconnect-export/releases/latest</string>
     <string name="api_releases_url" translatable="false">https://api.github.com/repos/kas-cor/healthconnect-export/releases/latest</string>
     <string name="nav_schedule">План</string>
+    <string name="notification_channel_export">Выгрузка по расписанию</string>
+    <string name="notification_channel_export_desc">Показывается, когда выгрузка по расписанию читает и отправляет данные о здоровье.</string>
+    <string name="notification_export_title">Выгрузка данных о здоровье</string>
+    <string name="notification_export_text">Читаем и отправляем данные о здоровье…</string>
 </resources>

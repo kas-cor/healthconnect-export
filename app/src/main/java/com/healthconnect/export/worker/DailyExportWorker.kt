@@ -11,6 +11,7 @@ import com.healthconnect.export.repository.HealthConnectRepository
 import com.healthconnect.export.repository.LocalExportRepository
 import com.healthconnect.export.repository.WebhookRepository
 import com.healthconnect.export.util.DeliveryLog
+import com.healthconnect.export.util.ExportForegroundNotifier
 import com.healthconnect.export.util.ExportSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -124,6 +125,10 @@ class DailyExportWorker(
         withContext(Dispatchers.IO) {
             val config = resolveConfig()
             try {
+                // Health Connect (Android 14+) rejects background reads unless the
+                // app is in the foreground or running as a foreground service.
+                ExportForegroundNotifier.promoteToForeground(this@DailyExportWorker)
+
                 // Export completed days only. This avoids repeatedly sending a partial
                 // current-day record from a periodic worker.
                 val endDate = LocalDate.now().minusDays(1)
