@@ -688,4 +688,47 @@ class DataModelsSerializationTest {
             assertEquals(preset, restored)
         }
     }
+
+    // =============================================
+    // Individual readings
+    // =============================================
+
+    @Test
+    fun `BloodPressureData keeps individual readings through roundtrip`() {
+        val data =
+            BloodPressureData(
+                systolicMmHg = 124.5,
+                diastolicMmHg = 85.0,
+                recordsCount = 2,
+                readings =
+                    listOf(
+                        BloodPressureReading("2026-09-19T06:22:41-05:00", 141.0, 98.0, "com.omronhealthcare.omronconnect"),
+                        BloodPressureReading("2026-09-19T20:10:00-05:00", 108.0, 72.0, "com.omronhealthcare.omronconnect"),
+                    ),
+            )
+
+        val restored = json.decodeFromString<BloodPressureData>(json.encodeToString(BloodPressureData.serializer(), data))
+
+        assertEquals(2, restored.readings.size)
+        assertEquals(141.0, restored.readings[0].systolicMmHg, 0.001)
+        assertEquals("2026-09-19T06:22:41-05:00", restored.readings[0].time)
+    }
+
+    @Test
+    fun `readings are omitted from compact json when empty`() {
+        val compact = Json { ignoreUnknownKeys = true }
+        val encoded = compact.encodeToString(WeightData.serializer(), WeightData(weightKg = 80.0, recordsCount = 0))
+
+        assertFalse(encoded.contains("readings"))
+        assertEquals(0, compact.decodeFromString<WeightData>(encoded).readings.size)
+    }
+
+    @Test
+    fun `old json without readings still decodes`() {
+        val old = """{"level_mmol_per_l":6.1,"records_count":3}"""
+
+        val restored = json.decodeFromString<BloodGlucoseData>(old)
+
+        assertTrue(restored.readings.isEmpty())
+    }
 }

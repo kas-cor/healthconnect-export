@@ -19,7 +19,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
+import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import kotlin.reflect.KClass
 
@@ -255,6 +257,18 @@ class HealthConnectRepository(
         return StepsData(totalSteps = total, recordsCount = filtered.size)
     }
 
+    /** ISO-8601 local time with offset; falls back to the device's zone when the record has none. */
+    private fun localIso(
+        instant: Instant,
+        offset: ZoneOffset?,
+    ): String =
+        OffsetDateTime
+            .ofInstant(instant, offset ?: ZoneId.systemDefault())
+            .truncatedTo(ChronoUnit.SECONDS)
+            .toString()
+
+    private fun sourceOf(record: Record): String = record.metadata.dataOrigin.packageName
+
     private fun extractHeartRate(records: List<HeartRateRecord>): HeartRateData? {
         if (records.isEmpty()) return null
         val samples = records.flatMap { it.samples }
@@ -265,6 +279,13 @@ class HealthConnectRepository(
             minBpm = beats.min().toInt(),
             maxBpm = beats.max().toInt(),
             recordsCount = records.size,
+            samples =
+                records
+                    .flatMap { r ->
+                        r.samples.map { s ->
+                            HeartRateSample(localIso(s.time, r.startZoneOffset), s.beatsPerMinute, sourceOf(r))
+                        }
+                    }.sortedBy { it.time },
         )
     }
 
@@ -338,13 +359,27 @@ class HealthConnectRepository(
     private fun extractWeight(records: List<WeightRecord>): WeightData? {
         if (records.isEmpty()) return null
         val avg = records.map { it.weight.inKilograms }.average()
-        return WeightData(weightKg = avg, recordsCount = records.size)
+        return WeightData(
+            weightKg = avg,
+            recordsCount = records.size,
+            readings =
+                records
+                    .sortedBy { it.time }
+                    .map { WeightReading(localIso(it.time, it.zoneOffset), it.weight.inKilograms, sourceOf(it)) },
+        )
     }
 
     private fun extractBodyFat(records: List<BodyFatRecord>): BodyFatData? {
         if (records.isEmpty()) return null
         val avg = records.map { it.percentage.value }.average()
-        return BodyFatData(percentage = avg, recordsCount = records.size)
+        return BodyFatData(
+            percentage = avg,
+            recordsCount = records.size,
+            readings =
+                records
+                    .sortedBy { it.time }
+                    .map { BodyFatReading(localIso(it.time, it.zoneOffset), it.percentage.value, sourceOf(it)) },
+        )
     }
 
     private fun extractBloodPressure(records: List<BloodPressureRecord>): BloodPressureData? {
@@ -357,6 +392,15 @@ class HealthConnectRepository(
             diastolicMmHg = diastolicAvg,
             bodyPosition = position,
             recordsCount = records.size,
+            readings =
+                records.sortedBy { it.time }.map {
+                    BloodPressureReading(
+                        time = localIso(it.time, it.zoneOffset),
+                        systolicMmHg = it.systolic.inMillimetersOfMercury,
+                        diastolicMmHg = it.diastolic.inMillimetersOfMercury,
+                        source = sourceOf(it),
+                    )
+                },
         )
     }
 
@@ -370,13 +414,29 @@ class HealthConnectRepository(
             specimenSource = source,
             mealType = mealType,
             recordsCount = records.size,
+            readings =
+                records.sortedBy { it.time }.map {
+                    BloodGlucoseReading(
+                        time = localIso(it.time, it.zoneOffset),
+                        levelMmolPerL = it.level.inMillimolesPerLiter,
+                        levelMgPerDl = it.level.inMilligramsPerDeciliter,
+                        source = sourceOf(it),
+                    )
+                },
         )
     }
 
     private fun extractOxygenSaturation(records: List<OxygenSaturationRecord>): OxygenSaturationData? {
         if (records.isEmpty()) return null
         val avg = records.map { it.percentage.value }.average()
-        return OxygenSaturationData(percentage = avg, recordsCount = records.size)
+        return OxygenSaturationData(
+            percentage = avg,
+            recordsCount = records.size,
+            readings =
+                records
+                    .sortedBy { it.time }
+                    .map { OxygenSaturationReading(localIso(it.time, it.zoneOffset), it.percentage.value, sourceOf(it)) },
+        )
     }
 
     private fun extractBodyTemperature(records: List<BodyTemperatureRecord>): BodyTemperatureData? {

@@ -7,6 +7,56 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+// ===== Individual readings =====
+// Each daily aggregate below also carries the raw readings it was computed
+// from, so consumers that need every measurement (e.g. a report for a doctor)
+// don't lose them to averaging. "time" is ISO-8601 local time with offset,
+// "source" is the package name of the app that wrote the record.
+
+@Serializable
+data class BloodPressureReading(
+    @SerialName("time") val time: String,
+    @SerialName("systolic_mmhg") val systolicMmHg: Double,
+    @SerialName("diastolic_mmhg") val diastolicMmHg: Double,
+    @SerialName("source") val source: String,
+)
+
+@Serializable
+data class BloodGlucoseReading(
+    @SerialName("time") val time: String,
+    @SerialName("level_mmol_per_l") val levelMmolPerL: Double,
+    @SerialName("level_mg_per_dl") val levelMgPerDl: Double,
+    @SerialName("source") val source: String,
+)
+
+@Serializable
+data class OxygenSaturationReading(
+    @SerialName("time") val time: String,
+    @SerialName("percentage") val percentage: Double,
+    @SerialName("source") val source: String,
+)
+
+@Serializable
+data class HeartRateSample(
+    @SerialName("time") val time: String,
+    @SerialName("bpm") val bpm: Long,
+    @SerialName("source") val source: String,
+)
+
+@Serializable
+data class WeightReading(
+    @SerialName("time") val time: String,
+    @SerialName("weight_kg") val weightKg: Double,
+    @SerialName("source") val source: String,
+)
+
+@Serializable
+data class BodyFatReading(
+    @SerialName("time") val time: String,
+    @SerialName("percentage") val percentage: Double,
+    @SerialName("source") val source: String,
+)
+
 // ===== Core data classes for Health Connect =====
 
 @Serializable
@@ -47,6 +97,7 @@ data class HeartRateData(
     @SerialName("min_bpm") val minBpm: Int,
     @SerialName("max_bpm") val maxBpm: Int,
     @SerialName("records_count") val recordsCount: Int,
+    @SerialName("samples") val samples: List<HeartRateSample> = emptyList(),
 )
 
 @Serializable
@@ -84,12 +135,14 @@ data class ActiveCaloriesData(
 data class WeightData(
     @SerialName("weight_kg") val weightKg: Double,
     @SerialName("records_count") val recordsCount: Int,
+    @SerialName("readings") val readings: List<WeightReading> = emptyList(),
 )
 
 @Serializable
 data class BodyFatData(
     @SerialName("percentage") val percentage: Double,
     @SerialName("records_count") val recordsCount: Int,
+    @SerialName("readings") val readings: List<BodyFatReading> = emptyList(),
 )
 
 @Serializable
@@ -98,6 +151,7 @@ data class BloodPressureData(
     @SerialName("diastolic_mmhg") val diastolicMmHg: Double,
     @SerialName("body_position") val bodyPosition: String? = null,
     @SerialName("records_count") val recordsCount: Int,
+    @SerialName("readings") val readings: List<BloodPressureReading> = emptyList(),
 )
 
 @Serializable
@@ -106,12 +160,14 @@ data class BloodGlucoseData(
     @SerialName("specimen_source") val specimenSource: String? = null,
     @SerialName("meal_type") val mealType: String? = null,
     @SerialName("records_count") val recordsCount: Int,
+    @SerialName("readings") val readings: List<BloodGlucoseReading> = emptyList(),
 )
 
 @Serializable
 data class OxygenSaturationData(
     @SerialName("percentage") val percentage: Double,
     @SerialName("records_count") val recordsCount: Int,
+    @SerialName("readings") val readings: List<OxygenSaturationReading> = emptyList(),
 )
 
 @Serializable
