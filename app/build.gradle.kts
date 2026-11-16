@@ -311,7 +311,7 @@ dependencies {
     testImplementation("org.mockito.kotlin:mockito-kotlin:6.4.0")
     testImplementation("androidx.work:work-testing:2.12.0")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.12.0")
-    testImplementation("org.robolectric:robolectric:4.17")
+    testImplementation("org.robolectric:robolectric:4.18")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("androidx.activity:activity-compose:1.13.0")
     testImplementation("androidx.test.ext:junit:1.3.0")
