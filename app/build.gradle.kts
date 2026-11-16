@@ -303,7 +303,7 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.12.0")
 
     // Serialization
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.12.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.13.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")
