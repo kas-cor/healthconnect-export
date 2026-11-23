@@ -154,7 +154,7 @@ class ExportDataUseCaseTest {
 
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(false)
-            whenever(mockHealthRepo.getPermissionsForTypes(any(), any())).thenReturn(requiredPermissions)
+            whenever(mockHealthRepo.getPermissionsForTypes(any(), any(), any())).thenReturn(requiredPermissions)
 
             val steps = useCase.execute(mockContext, defaultConfig, startDate, endDate).toList()
 
@@ -440,7 +440,7 @@ class ExportDataUseCaseTest {
 
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(false)
-            whenever(mockHealthRepo.getPermissionsForTypes(any(), any())).thenReturn(requiredPermissions)
+            whenever(mockHealthRepo.getPermissionsForTypes(any(), any(), any())).thenReturn(requiredPermissions)
 
             val steps = useCase.execute(mockContext, configWithSource, startDate, endDate).toList()
 

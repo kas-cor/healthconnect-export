@@ -41,6 +41,28 @@ class DateRangeCardTest {
     }
 
     @Test
+    fun `dateRangeCard hides the access limit warning when history access is granted`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val warningText = context.getString(R.string.health_connect_access_limit)
+
+        composeTestRule.setContent {
+            DateRangeCard(
+                startDate = LocalDate.now().minusDays(6),
+                endDate = LocalDate.now(),
+                onPresetChange = { },
+                onDateRangeChange = { _, _ -> },
+                onStartDateChange = { },
+                onEndDateChange = { },
+                showAccessLimit = false,
+            )
+        }
+
+        composeTestRule
+            .onNodeWithText(warningText)
+            .assertDoesNotExist()
+    }
+
+    @Test
     fun `dateRangeCard shows date picker buttons`() {
         composeTestRule.setContent {
             DateRangeCard(

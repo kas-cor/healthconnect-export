@@ -58,6 +58,8 @@ data class ExportUiState(
     val webhookUrlError: String? = null,
     val message: String? = null,
     val isDarkTheme: Boolean? = null,
+    /** Whether `READ_HEALTH_DATA_HISTORY` is granted; hides the 30-day warning. */
+    val historyAccessGranted: Boolean = false,
     val locale: String? = null,
     val availableSources: List<String> = emptyList(),
     val selectedSourcePackage: String? = null,
@@ -137,6 +139,12 @@ class ExportViewModel(
     var pendingPermissions: Set<String>? = null
         private set
 
+    /**
+     * Set once the history permission was offered in this session, so declining it
+     * never blocks the export: the next attempt runs with whatever access exists.
+     */
+    private var historyPermissionOffered = false
+
     companion object {
         // Cap response body read to 1 MB to avoid OOM on a misbehaving/gigantic response
         private const val MAX_RESPONSE_BYTES = 1_048_576
@@ -179,6 +187,7 @@ class ExportViewModel(
         loadFrequency()
         loadGoogleClientId()
         refreshDeliveryStatus()
+        refreshHistoryAccess()
         // A stale delivery pipeline must not wait for the next watchdog alarm:
         // the user is here now, so fill the gap right away.
         DeliveryWatchdog.catchUpIfStale(getApplication(), "app_start")
@@ -795,6 +804,21 @@ class ExportViewModel(
                 try {
                     val state = _uiState.value
 
+                    // Users who granted the per-type permissions before the history
+                    // permission existed never see a Health Connect dialog again, so a
+                    // range reaching past the 30-day window offers it here, once.
+                    val offerHistory =
+                        !historyPermissionOffered &&
+                            runCatching { healthRepo.needsHistoryReadPermission(state.startDate) }.getOrDefault(false)
+                    if (offerHistory) {
+                        historyPermissionOffered = true
+                        pendingPermissions = setOf(HealthConnectRepository.HISTORY_READ_PERMISSION)
+                        _uiState.update {
+                            it.copy(isLoading = false, message = str(R.string.vm_history_read_missing))
+                        }
+                        return@launch
+                    }
+
                     exportUseCase
                         .execute(
                             context = getApplication(),
@@ -919,8 +943,17 @@ class ExportViewModel(
         }
     }
 
+    /** Re-reads whether the history permission is granted, for the 30-day warning. */
+    private fun refreshHistoryAccess() {
+        viewModelScope.launch {
+            val granted = runCatching { healthRepo.hasHistoryReadPermission() }.getOrDefault(false)
+            _uiState.update { it.copy(historyAccessGranted = granted) }
+        }
+    }
+
     fun onPermissionsResult(grantedPermissions: Set<String>) {
         pendingPermissions = null
+        refreshHistoryAccess()
         viewModelScope.launch {
             val state = _uiState.value
             Log.d("ExportViewModel", "onPermissionsResult: launcher returned ${grantedPermissions.size}, checking via API...")

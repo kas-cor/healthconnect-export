@@ -164,6 +164,7 @@
     <string name="vm_check_permissions">Checking permissions…</string>
     <string name="vm_permissions_required">Health Connect permissions required. Please confirm in the opened window.</string>
     <string name="vm_background_read_missing">Grant Health Connect background access (READ_HEALTH_DATA_IN_BACKGROUND), otherwise scheduled exports cannot read data while the app is in the background.</string>
+    <string name="vm_history_read_missing">Without access to past data Health Connect hides records older than 30 days before this app was first allowed in. Allow access to past data (READ_HEALTH_DATA_HISTORY) to export older days.</string>
     <string name="vm_reading_data">Reading data…</string>
     <string name="vm_saving_days">Saving %d days…</string>
     <string name="vm_saved_files">Saved %d files</string>
@@ -250,7 +251,8 @@
     <string name="vm_export_cancelled">Export cancelled</string>
 
     <!-- Health Connect access limitation -->
-    <string name="health_connect_access_limit">Health data may be limited to the last 30 days</string>
+    <string name="health_connect_access_limit">Without access to past data, records older than 30 days before the first Health Connect grant are not exported</string>
+    <string name="health_connect_access_full">Access to past data granted: no 30-day limit</string>
 
     <!-- Bottom navigation -->
     <string name="nav_export">Export</string>

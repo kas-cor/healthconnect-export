@@ -354,6 +354,7 @@ private fun ExportHomeContent(
                 onDateRangeChange = viewModel::setDateRange,
                 onStartDateChange = { viewModel.setDateRange(it, uiState.endDate) },
                 onEndDateChange = { viewModel.setDateRange(uiState.startDate, it) },
+                showAccessLimit = !uiState.historyAccessGranted,
             )
         }
         item {
@@ -706,7 +707,14 @@ private fun SettingsContent(
                 )
                 Spacer(modifier = Modifier.size(8.dp))
                 Text(
-                    text = stringResource(R.string.health_connect_access_limit),
+                    text =
+                        stringResource(
+                            if (uiState.historyAccessGranted) {
+                                R.string.health_connect_access_full
+                            } else {
+                                R.string.health_connect_access_limit
+                            },
+                        ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
