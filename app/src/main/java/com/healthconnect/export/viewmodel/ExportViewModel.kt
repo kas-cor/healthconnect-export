@@ -137,6 +137,12 @@ class ExportViewModel(
     var pendingPermissions: Set<String>? = null
         private set
 
+    /**
+     * Set once the history permission was offered in this session, so declining it
+     * never blocks the export: the next attempt runs with whatever access exists.
+     */
+    private var historyPermissionOffered = false
+
     companion object {
         // Cap response body read to 1 MB to avoid OOM on a misbehaving/gigantic response
         private const val MAX_RESPONSE_BYTES = 1_048_576
@@ -794,6 +800,21 @@ class ExportViewModel(
             exportScope.launch {
                 try {
                     val state = _uiState.value
+
+                    // Users who granted the per-type permissions before the history
+                    // permission existed never see a Health Connect dialog again, so a
+                    // range reaching past the 30-day window offers it here, once.
+                    val offerHistory =
+                        !historyPermissionOffered &&
+                            runCatching { healthRepo.needsHistoryReadPermission(state.startDate) }.getOrDefault(false)
+                    if (offerHistory) {
+                        historyPermissionOffered = true
+                        pendingPermissions = setOf(HealthConnectRepository.HISTORY_READ_PERMISSION)
+                        _uiState.update {
+                            it.copy(isLoading = false, message = str(R.string.vm_history_read_missing))
+                        }
+                        return@launch
+                    }
 
                     exportUseCase
                         .execute(

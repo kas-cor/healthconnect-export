@@ -1,6 +1,7 @@
 package com.healthconnect.export.repository
 
 import android.content.Context
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -106,5 +107,34 @@ class HealthConnectRepositoryTest {
             HealthConnectRepository.BACKGROUND_READ_PERMISSION in
                 repo.getPermissionsForTypes(types, includeBackgroundRead = true),
         )
+    }
+
+    @Test
+    fun `history read permission string matches the manifest declaration`() {
+        assertEquals(
+            "android.permission.health.READ_HEALTH_DATA_HISTORY",
+            HealthConnectRepository.HISTORY_READ_PERMISSION,
+        )
+    }
+
+    @Test
+    fun `history read permission is added to the requested permission set on demand`() {
+        val types = setOf(com.healthconnect.export.data.HealthDataType.WEIGHT)
+
+        assertFalse(HealthConnectRepository.HISTORY_READ_PERMISSION in repo.getPermissionsForTypes(types))
+        assertTrue(
+            HealthConnectRepository.HISTORY_READ_PERMISSION in
+                repo.getPermissionsForTypes(types, includeHistoryRead = true),
+        )
+    }
+
+    @Test
+    fun `ranges inside the default window never need the history permission`() {
+        runBlocking {
+            val today = LocalDate.of(2026, 11, 23)
+
+            assertFalse(repo.needsHistoryReadPermission(today.minusDays(30), today))
+            assertFalse(repo.needsHistoryReadPermission(today, today))
+        }
     }
 }

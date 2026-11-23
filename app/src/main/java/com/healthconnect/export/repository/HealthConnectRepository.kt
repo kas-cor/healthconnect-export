@@ -59,6 +59,18 @@ class HealthConnectRepository(
          * activity; without it the scheduled workers fail with `SecurityException`.
          */
         val BACKGROUND_READ_PERMISSION: String = HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND
+
+        /**
+         * Permission that lifts Health Connect's history limit.
+         *
+         * Without it an app can only read records written up to 30 days before it was
+         * first granted a read permission, so a custom range reaching further back
+         * silently comes out empty for the older days.
+         */
+        val HISTORY_READ_PERMISSION: String = HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY
+
+        /** Days before the first grant that Health Connect returns without [HISTORY_READ_PERMISSION]. */
+        const val DEFAULT_HISTORY_DAYS = 30L
     }
 
     private var client: HealthConnectClient? = null
@@ -114,6 +126,7 @@ class HealthConnectRepository(
     fun getPermissionsForTypes(
         types: Set<HealthDataType>,
         includeBackgroundRead: Boolean = false,
+        includeHistoryRead: Boolean = false,
     ): Set<String> {
         val permissions = mutableSetOf<String>()
         types.forEach { type ->
@@ -141,6 +154,7 @@ class HealthConnectRepository(
             }
         }
         if (includeBackgroundRead) permissions.add(BACKGROUND_READ_PERMISSION)
+        if (includeHistoryRead) permissions.add(HISTORY_READ_PERMISSION)
         return permissions
     }
 
@@ -172,6 +186,31 @@ class HealthConnectRepository(
         if (featureStatus == null) return true
         return runCatching {
             c.permissionController.getGrantedPermissions().contains(BACKGROUND_READ_PERMISSION)
+        }.getOrDefault(false)
+    }
+
+    /**
+     * True when an export starting at [startDate] may miss older days because the
+     * app does not hold [HISTORY_READ_PERMISSION].
+     *
+     * Health Connect counts its 30-day window from the first permission grant, which
+     * the app cannot query, so any start older than 30 days before [today] counts as
+     * "may miss data". Returns false when the provider does not support the feature
+     * (nothing to request) or when the permission is already granted.
+     */
+    suspend fun needsHistoryReadPermission(
+        startDate: LocalDate,
+        today: LocalDate = LocalDate.now(),
+    ): Boolean {
+        if (!startDate.isBefore(today.minusDays(DEFAULT_HISTORY_DAYS))) return false
+        val c = client ?: return false
+        val featureStatus =
+            runCatching {
+                c.features.getFeatureStatus(HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_HISTORY)
+            }.getOrNull()
+        if (featureStatus != HealthConnectFeatures.FEATURE_STATUS_AVAILABLE) return false
+        return runCatching {
+            !c.permissionController.getGrantedPermissions().contains(HISTORY_READ_PERMISSION)
         }.getOrDefault(false)
     }
 

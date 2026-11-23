@@ -164,6 +164,7 @@
     <string name="vm_check_permissions">Проверка разрешений…</string>
     <string name="vm_permissions_required">Требуются разрешения Health Connect. Подтвердите в открывшемся окне.</string>
     <string name="vm_background_read_missing">Разрешите Health Connect фоновый доступ (READ_HEALTH_DATA_IN_BACKGROUND), иначе выгрузка по расписанию не сможет читать данные, когда приложение в фоне.</string>
+    <string name="vm_history_read_missing">Без доступа к прошлым данным Health Connect скрывает записи старше 30 дней до первого разрешения этому приложению. Разрешите доступ к прошлым данным (READ_HEALTH_DATA_HISTORY), чтобы выгрузить более ранние дни.</string>
     <string name="vm_reading_data">Чтение данных…</string>
     <string name="vm_saving_days">Сохранение %d дней…</string>
     <string name="vm_saved_files">Сохранено %d файлов</string>

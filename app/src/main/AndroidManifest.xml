@@ -38,6 +38,13 @@
     -->
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
 
+    <!--
+      Without this permission Health Connect only returns records written up to
+      30 days before the app was first granted access, so a custom range reaching
+      further back exported empty days. Optional: export still works without it.
+    -->
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
+
     <!-- Storage for local exports (legacy — scoped storage used on 33+) -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />

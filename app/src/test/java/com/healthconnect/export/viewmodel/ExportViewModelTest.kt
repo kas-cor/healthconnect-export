@@ -251,7 +251,7 @@ class ExportViewModelTest {
         runTest {
             whenever(mockHealthRepo.isHealthConnectAvailable()).thenReturn(true)
             whenever(mockHealthRepo.checkPermissions(any())).thenReturn(false)
-            whenever(mockHealthRepo.getPermissionsForTypes(any(), any())).thenReturn(setOf("perm1", "perm2"))
+            whenever(mockHealthRepo.getPermissionsForTypes(any(), any(), any())).thenReturn(setOf("perm1", "perm2"))
 
             viewModel.exportNow()
 
