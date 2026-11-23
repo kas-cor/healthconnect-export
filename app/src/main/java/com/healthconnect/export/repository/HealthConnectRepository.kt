@@ -189,6 +189,14 @@ class HealthConnectRepository(
         }.getOrDefault(false)
     }
 
+    /** True when the user granted [HISTORY_READ_PERMISSION], i.e. no 30-day read window applies. */
+    suspend fun hasHistoryReadPermission(): Boolean {
+        val c = client ?: return false
+        return runCatching {
+            c.permissionController.getGrantedPermissions().contains(HISTORY_READ_PERMISSION)
+        }.getOrDefault(false)
+    }
+
     /**
      * True when an export starting at [startDate] may miss older days because the
      * app does not hold [HISTORY_READ_PERMISSION].

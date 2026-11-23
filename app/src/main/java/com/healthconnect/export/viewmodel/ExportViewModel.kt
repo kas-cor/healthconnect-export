@@ -58,6 +58,8 @@ data class ExportUiState(
     val webhookUrlError: String? = null,
     val message: String? = null,
     val isDarkTheme: Boolean? = null,
+    /** Whether `READ_HEALTH_DATA_HISTORY` is granted; hides the 30-day warning. */
+    val historyAccessGranted: Boolean = false,
     val locale: String? = null,
     val availableSources: List<String> = emptyList(),
     val selectedSourcePackage: String? = null,
@@ -185,6 +187,7 @@ class ExportViewModel(
         loadFrequency()
         loadGoogleClientId()
         refreshDeliveryStatus()
+        refreshHistoryAccess()
         // A stale delivery pipeline must not wait for the next watchdog alarm:
         // the user is here now, so fill the gap right away.
         DeliveryWatchdog.catchUpIfStale(getApplication(), "app_start")
@@ -940,8 +943,17 @@ class ExportViewModel(
         }
     }
 
+    /** Re-reads whether the history permission is granted, for the 30-day warning. */
+    private fun refreshHistoryAccess() {
+        viewModelScope.launch {
+            val granted = runCatching { healthRepo.hasHistoryReadPermission() }.getOrDefault(false)
+            _uiState.update { it.copy(historyAccessGranted = granted) }
+        }
+    }
+
     fun onPermissionsResult(grantedPermissions: Set<String>) {
         pendingPermissions = null
+        refreshHistoryAccess()
         viewModelScope.launch {
             val state = _uiState.value
             Log.d("ExportViewModel", "onPermissionsResult: launcher returned ${grantedPermissions.size}, checking via API...")

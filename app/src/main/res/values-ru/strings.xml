@@ -251,7 +251,8 @@
     <string name="vm_export_cancelled">Экспорт отменён</string>
 
     <!-- Health Connect access limitation -->
-    <string name="health_connect_access_limit">Данные могут быть ограничены последними 30 днями</string>
+    <string name="health_connect_access_limit">Без доступа к прошлым данным записи старше 30 дней до первого разрешения Health Connect не выгружаются</string>
+    <string name="health_connect_access_full">Доступ к прошлым данным разрешён: ограничения в 30 дней нет</string>
 
     <!-- Нижняя навигация -->
     <string name="nav_export">Экспорт</string>

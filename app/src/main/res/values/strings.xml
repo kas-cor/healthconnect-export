@@ -251,7 +251,8 @@
     <string name="vm_export_cancelled">Export cancelled</string>
 
     <!-- Health Connect access limitation -->
-    <string name="health_connect_access_limit">Health data may be limited to the last 30 days</string>
+    <string name="health_connect_access_limit">Without access to past data, records older than 30 days before the first Health Connect grant are not exported</string>
+    <string name="health_connect_access_full">Access to past data granted: no 30-day limit</string>
 
     <!-- Bottom navigation -->
     <string name="nav_export">Export</string>
